@@ -33,7 +33,7 @@ export default function LandingScreen({ onSearch }: Props) {
     if (e.key === 'Enter') submit();
   };
 
-  const useExample = (ex: string) => {
+  const handleExample = (ex: string) => {
     setValue(ex);
     inputRef.current?.focus();
   };
@@ -85,7 +85,7 @@ export default function LandingScreen({ onSearch }: Props) {
       <motion.div className="landing-examples" variants={item}>
         <span className="landing-examples-label">Try:</span>
         {EXAMPLE_QUERIES.map(ex => (
-          <button key={ex} className="landing-pill" onClick={() => useExample(ex)}>
+          <button key={ex} className="landing-pill" onClick={() => handleExample(ex)}>
             {ex}
           </button>
         ))}

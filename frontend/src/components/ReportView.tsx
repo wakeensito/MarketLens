@@ -226,8 +226,8 @@ function VerdictDeclaration({ score }: { score: number }) {
 }
 
 export default function ReportView({ report }: Props) {
-  const briefRef = useRef(`MS-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 9000) + 1000)}`);
-  const dateStr = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+  const [briefId] = useState(() => `MS-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 9000) + 1000)}`);
+  const [dateStr] = useState(() => new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }));
 
   return (
     <div className="report">
@@ -235,7 +235,7 @@ export default function ReportView({ report }: Props) {
         <motion.div variants={fadeUp}>
           {/* Briefing metadata */}
           <div className="brief-meta">
-            <span className="brief-meta-item brief-meta-item--ref">{briefRef.current}</span>
+            <span className="brief-meta-item brief-meta-item--ref">{briefId}</span>
             <div className="brief-meta-sep" />
             <span className="brief-meta-item">{dateStr}</span>
             <div className="brief-meta-sep" />
@@ -328,7 +328,7 @@ export default function ReportView({ report }: Props) {
       <Reveal>
         <div style={{ paddingTop: 8, paddingBottom: 40 }}>
           <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-            {briefRef.current} · Generated {dateStr} · MarketLens Intelligence Engine
+            {briefId} · Generated {dateStr} · MarketLens Intelligence Engine
           </span>
         </div>
       </Reveal>
