@@ -19,7 +19,7 @@ export default function SaturationGauge({ score, label, animate = true }: Props)
   const color = scoreColor(score);
 
   useEffect(() => {
-    if (!animate) { setDisplayed(score); setBarWidth(score); return; }
+    if (!animate) return;
 
     let start: number | null = null;
     const duration = 1200;
