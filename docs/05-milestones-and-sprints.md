@@ -1,28 +1,27 @@
 # 05 — Milestones & Sprints
 
-> Build plan for MarketLens. Skeleton-first: the foundation is laid once, correctly. Each phase fills it in — nothing gets rebuilt, everything gets extended.
+> Build plan for MarketLens. PoC-first: prove the pipeline works with minimal infra, then layer in enterprise features.
 
-**Status:** v1.0 · **Owner:** Engineering Lead · **Last reviewed:** April 2026
+**Status:** v1.1 · **Owner:** Engineering Lead · **Last reviewed:** April 2026
 **Team:** Solo founder · **Velocity:** 2–4 hrs/day · **Start date:** TBD
 
 ---
 
 ## The Core Principle
 
-> Build the pipes on day one. Fill them in as you grow.
+> Prove the value first. Harden second.
 
-This plan is NOT "MVP now, security later." That always means painful rewrites.
+This plan starts with the simplest possible AWS deployment — Lambda Durable Functions + API Gateway + S3 — to get a working "idea in, report out" loop. The full microservices architecture (ECS, RDS, RBAC, multi-tenancy) comes after the PoC proves the AI pipeline produces reports people actually want.
 
-Instead every service, table, and wire gets created in Phase 1 — just with minimal rules. Later phases don't add new architecture, they add logic to what already exists.
-
-| What gets built ONCE (Phase 1) | What gets filled in (Phase 2+) |
+| PoC (Phase 0) | Full Architecture (Phase 1+) |
 |---|---|
-| RLS on every Postgres table | More orgs, more isolation tested |
-| Permission Engine service exists | More roles, more rules added |
-| Audit Service wired to every service | More event categories logged |
-| Stripe integration live | More tiers, more billing logic |
-| Step Functions pipeline | More stages, better prompts |
-| VPC + subnets + security groups | Same network, more services added |
+| 1 S3 bucket for reports | Multi-bucket with Object Lock, lifecycle policies |
+| 2 Lambdas (durable pipeline + get-report) | 10 microservices on ECS Fargate + Lambda |
+| API Gateway (REST) | API Gateway + WAF + per-tenant throttling |
+| SAM for deployment | SAM (application layer) + Terraform (infrastructure layer) |
+| No auth (hardcoded user) | Cognito + JWT + RBAC + Permission Engine |
+| No database (S3 as store) | RDS Postgres with RLS + DynamoDB + ElastiCache |
+| Python only | Python (AI) + TypeScript (services) + Rust or Go (Permission Engine, Audit) |
 
 ---
 
@@ -30,43 +29,164 @@ Instead every service, table, and wire gets created in Phase 1 — just with min
 
 | Phase | Name | Duration | Cumulative | Goal |
 |---|---|---|---|---|
-| 0 | Foundation | Days 1–3 | Day 3 | AWS skeleton, local dev, CI/CD |
-| 1 | Core Pipeline | Days 4–10 | Day 10 | Idea in → report out (working end-to-end) |
-| 2 | Auth & Users | Days 11–16 | Day 16 | Real accounts, login, org isolation |
-| 3 | UI & Beta | Days 17–23 | Day 23 | Front-end, invite flow, private beta live |
+| 0 | PoC — Prove the Pipeline | Days 1–5 | Day 5 | Idea in → report out, deployed on AWS |
+| 1 | Foundation & Full Pipeline | Days 6–13 | Day 13 | AWS skeleton, data layer, audit chain, CI/CD |
+| 2 | Auth & Users | Days 14–19 | Day 19 | Real accounts, login, org isolation |
+| 3 | Beta Launch | Days 20–23 | Day 23 | Wire UI to backend, invite flow, private beta live |
 | 4 | Billing | Days 24–28 | Day 28 | Stripe, credits, free vs paid |
 | 5 | Hardening Snap-ins | Ongoing post-beta | — | RBAC rules, audit depth, DR, compliance |
 
+**PoC target: Day 5** — working pipeline you can demo.
 **Private beta target: Day 23–28** (roughly 4 weeks at 2–4 hrs/day).
 
 > **Rule:** If a day runs over, protect the next day. Don't compound. One hard day doesn't mean the plan is broken.
 
 ---
 
-## Phase 0 — Foundation (Days 1–3)
+## Phase 0 — PoC: Prove the Pipeline (Days 1–5)
 
-> **Goal:** Nothing runs yet, but everything has a place. No "I'll set that up later."
+> **Goal:** Type an idea, get a real AI-generated market report back. Deployed on AWS. Minimal infra.
 
-This phase feels slow. It pays back every single day after.
+### Architecture
 
-### Day 1 — AWS Skeleton
+```text
+┌──────────────┐     ┌─────────────────┐     ┌──────────────────────────────────┐
+│   Next.js    │────▶│  API Gateway    │────▶│  Lambda: run-pipeline            │
+│   (UI)       │     │  (REST)         │     │  (Python, Durable Function)      │
+└──────────────┘     └────────┬────────┘     │                                  │
+                              │              │  context.step('sanitize')         │
+                              │              │  context.step('parse')     → LLM  │
+                              │              │  context.step('search')    → Web  │
+                              │              │  context.step('analyse')   → LLM  │
+                              │              │  context.step('score')            │
+                              │              │  context.step('summarise') → LLM  │
+                              │              │  context.step('assemble')         │
+                              │              │  → writes result to S3            │
+                              │              └──────────────────────────────────┘
+                              │
+                              │              ┌──────────────────────────────────┐
+                              └─────────────▶│  Lambda: get-report              │
+                                             │  (Python)                        │
+                                             │  → reads from S3                 │
+                                             └──────────────────────────────────┘
 
-**Reference:** [01 — Technical Spec §8 (AWS Infrastructure), §9 (IaC)](./01-technical-spec.md)
+                                             ┌──────────────────────────────────┐
+                                             │  S3: marketlens-reports-dev      │
+                                             │  /{report_id}/status.json        │
+                                             │  /{report_id}/result.json        │
+                                             └──────────────────────────────────┘
+```
 
-- [ ] Create AWS account structure: `dev`, `staging`, `prod` accounts via AWS Organizations
-- [ ] Enable CloudTrail (all regions), GuardDuty, S3 Block Public Access — account level
-- [ ] Create Terraform repo (`marketlens-infra`) with remote state in S3 + DynamoDB lock table
-- [ ] Bootstrap VPC in `dev`: public subnet (ALB), private app subnet (ECS), private data subnet (RDS/DynamoDB)
-- [ ] Security groups: default deny-all; explicit allow rules per service pair only
-- [ ] Create KMS CMKs: one per environment (`dev`, `staging`, `prod`)
-- [ ] Create all S3 buckets (empty): reports, audit-archive, search-cache, iac-state (see [04 §5](./04-data-model.md))
-- [ ] Enable Object Lock on `audit-archive` bucket — do this NOW, cannot be added retroactively
+### IaC: AWS SAM
 
-**Done when:** `terraform apply` runs clean in `dev`. All buckets exist. CloudTrail logging.
+All PoC infrastructure defined in a single `template.yaml`. Deploy with `sam build && sam deploy`.
+
+Terraform is added in Phase 1 for the heavier infrastructure (VPC, RDS, ECS). SAM and Terraform coexist — SAM for the application layer, Terraform for the infrastructure layer.
+
+### Why Lambda Durable Functions (not Step Functions)?
+
+- **Simpler** — entire pipeline is one Lambda with `context.step()` per stage. No state machine JSON to manage.
+- **Built-in checkpointing** — each step's result is persisted automatically. If a step fails, retry picks up where it left off.
+- **Same resilience** — retry logic, state persistence, up to 1 year execution time.
+- **Less infra** — no Step Functions, no SQS queue, no separate Lambda per stage.
+- **Migration path** — can move to Step Functions later if you need the visual debugging or parallel execution features.
+
+### Day 1 — AWS Setup + SAM Skeleton
+
+- [x] Create GitHub repo with monorepo structure
+- [ ] Install AWS SAM CLI, configure AWS credentials
+- [ ] Create SAM `template.yaml`: 1 S3 bucket, 2 Lambdas, 1 API Gateway (REST)
+- [ ] Install Python Durable Execution SDK: `pip install aws-durable-execution-sdk-python`
+- [ ] Stub `run-pipeline` Lambda: durable function with 7 `context.step()` calls returning mock data
+- [ ] Stub `get-report` Lambda: reads `status.json` from S3, returns it
+- [ ] `sam build && sam deploy` — confirm everything deploys clean
+- [ ] Test: `curl POST /reports` → returns `report_id`; `curl GET /reports/{id}` → returns mock result
+
+**Done when:** Both Lambdas deployed. API Gateway returns responses. S3 bucket exists.
 
 ---
 
-### Day 2 — Data Layer
+### Day 2 — Sanitize + Parse (Real LLM)
+
+**Reference:** [03 — AI Pipeline §2 (Sanitize), §3 (Parse)](./03-ai-pipeline.md)
+
+- [ ] Implement `sanitize` step: length check, PII strip, prompt injection pattern match, fingerprint hash
+- [ ] Implement `parse` step: Anthropic API call with `claude-haiku-4-5`, structured JSON output
+- [ ] Store Anthropic API key in AWS Secrets Manager (or SSM Parameter Store for PoC)
+- [ ] Attach `AWSLambdaBasicDurableExecutionRolePolicy` to Lambda execution role
+- [ ] Unit tests: sanitize rejects bad inputs, parse returns valid schema
+- [ ] Test end-to-end: real idea text → sanitized → parsed to structured JSON → checkpointed
+
+**Done when:** First two pipeline steps run with a real LLM call. Durable checkpointing works.
+
+---
+
+### Day 3 — Search + Analyse + Score
+
+**Reference:** [03 — AI Pipeline §4 (Search), §5 (Analyse), §6 (Score)](./03-ai-pipeline.md)
+
+- [ ] Choose search API provider (Brave Search API or Serper — pick one, move on)
+- [ ] Implement `search` step: competitor search, market size search, trends search (sequential for PoC — parallel comes with Step Functions later)
+- [ ] Implement `analyse` step: `claude-sonnet-4-6` call, competitor list extraction, schema validation
+- [ ] Implement `score` step: deterministic Saturation, Difficulty, Opportunity algorithm
+- [ ] Graceful degradation: if search fails, continue with empty data (don't kill the pipeline)
+- [ ] Unit test scoring algorithm: known inputs → expected outputs
+
+**Done when:** Given an idea, returns scored competitor list. Scores are deterministic.
+
+---
+
+### Day 4 — Summarise + Assemble + S3 Storage
+
+**Reference:** [03 — AI Pipeline §7 (Summarise), §8 (Assemble), §9 (Final Report Schema)](./03-ai-pipeline.md)
+
+- [ ] Implement `summarise` step: `claude-sonnet-4-6` call, beginner-friendly prose
+- [ ] Implement `assemble` step: merge all outputs into final `result_json` schema
+- [ ] Write `status.json` to S3 at each step (pending → running → complete/failed)
+- [ ] Write `result.json` to S3 on completion
+- [ ] Update `get-report` Lambda to return real report data
+- [ ] Track token usage per LLM call in the result metadata
+- [ ] Test full pipeline end-to-end: real idea → real report in S3
+
+**Done when:** Full pipeline produces a real report. Read the prose — does it sound like a smart friend explaining a market?
+
+---
+
+### Day 5 — Wire UI + Polish
+
+- [ ] Point Next.js front-end at API Gateway URL (environment variable)
+- [ ] Implement polling: front-end calls `GET /reports/{id}` every 3s until status is `complete`
+- [ ] Error handling: failed pipeline → user sees useful message with retry option
+- [ ] Add CORS configuration to API Gateway for front-end access
+- [ ] Deploy front-end (Vercel for speed, or S3 + CloudFront)
+- [ ] Test the full loop: open browser → type idea → watch it process → read the report
+
+**Done when:** You can demo the product to someone. Idea in, report out, in a browser.
+
+---
+
+## Phase 1 — Foundation & Full Pipeline (Days 6–13)
+
+> **Goal:** Graduate from PoC to production-grade infrastructure. Add the data layer, audit chain, and CI/CD. The PoC Lambda stays — it just gets wired into the real architecture.
+
+### Days 6–7 — AWS Infrastructure (Terraform)
+
+**Reference:** [01 — Technical Spec §8 (AWS Infrastructure), §9 (IaC)](./01-technical-spec.md)
+
+- [ ] Create Terraform repo (`marketlens-infra`) with remote state in S3 + DynamoDB lock table
+- [ ] Create AWS account structure: `dev`, `staging`, `prod` accounts via AWS Organizations
+- [ ] Enable CloudTrail (all regions), GuardDuty, S3 Block Public Access — account level
+- [ ] Bootstrap VPC in `dev`: public subnet (ALB), private app subnet (ECS), private data subnet (RDS/DynamoDB)
+- [ ] Security groups: default deny-all; explicit allow rules per service pair only
+- [ ] Create KMS CMKs: one per environment (`dev`, `staging`, `prod`)
+- [ ] Create remaining S3 buckets: audit-archive, search-cache, iac-state (see [04 §5](./04-data-model.md))
+- [ ] Enable Object Lock on `audit-archive` bucket — do this NOW, cannot be added retroactively
+
+**Done when:** `terraform apply` runs clean in `dev`. VPC, buckets, and security baseline exist.
+
+---
+
+### Days 8–9 — Data Layer
 
 **Reference:** [04 — Data Model §2 (Postgres), §3 (RLS), §4 (DynamoDB)](./04-data-model.md)
 
@@ -77,120 +197,13 @@ This phase feels slow. It pays back every single day after.
 - [ ] Provision ElastiCache Redis cluster (single node for dev)
 - [ ] Seed one org row + one super_admin user row — enough to test with
 - [ ] Write and run migration smoke test: confirm RLS blocks query without `app.current_org_id` set
+- [ ] Migrate pipeline from S3 storage to Postgres `market_reports` table
 
-**Done when:** Postgres accepts queries, RLS is live and tested, DynamoDB tables exist.
-
----
-
-### Day 3 — CI/CD & Local Dev
-
-**Reference:** [01 — Technical Spec §13 (CI/CD)](./01-technical-spec.md)
-
-- [ ] Create app monorepo (`marketlens-app`): `/services`, `/cdk`, `/shared`
-- [ ] GitHub Actions pipeline: lint → test → build → deploy to `dev` on merge to `main`
-- [ ] ECR repositories: one per service
-- [ ] Local dev: `docker-compose.yml` with Postgres, Redis, LocalStack (for SQS/S3/DynamoDB)
-- [ ] Shared packages: `logger` (structured JSON), `errors` (typed error classes), `db` (connection pool + RLS context setter)
-- [ ] `.env.example` with all required env vars documented — no undocumented secrets ever
-
-**Done when:** `docker-compose up` runs locally. A dummy service deploys to `dev` via GitHub Actions.
+**Done when:** Postgres accepts queries, RLS is live and tested, DynamoDB tables exist. Pipeline writes to Postgres instead of S3.
 
 ---
 
-## Phase 1 — Core Pipeline (Days 4–10)
-
-> **Goal:** Type an idea, get a report back. No auth, no UI — just the engine working.
-
-This is the heart of the product. Everything else is wrapper.
-
-### Day 4 — AI Orchestration Skeleton
-
-**Reference:** [02 — Microservices §7 (AI Orchestration)](./02-microservices-design.md), [03 — AI Pipeline §1 (Overview)](./03-ai-pipeline.md)
-
-- [ ] Create Step Functions state machine: all 7 stages stubbed (each stage returns mock data)
-- [ ] Wire SQS queue: `report-jobs-dev` → triggers Step Functions execution
-- [ ] Create `pipeline_executions` DynamoDB writer — log every execution from day one
-- [ ] IAM execution role for Step Functions: least-privilege, scoped to only what it needs
-- [ ] Test: send a message to SQS → Step Functions runs → all stubs complete → execution logged
-
-**Done when:** Full pipeline runs end-to-end with stubs. Logging works.
-
----
-
-### Day 5 — Sanitize + Parse (Stages 1 & 2)
-
-**Reference:** [03 — AI Pipeline §2 (Sanitize), §3 (Parse)](./03-ai-pipeline.md)
-
-- [ ] Implement Stage 1 (Sanitize): length check, PII strip, prompt injection pattern match, fingerprint hash
-- [ ] Implement Stage 2 (Parse): Anthropic API call with `claude-haiku-4-5`, structured JSON output, schema validation
-- [ ] Store prompt template in `prompts/parse/v2.1.txt` — versioned from day one
-- [ ] Unit tests: sanitize rejects bad inputs, parse returns valid schema
-- [ ] Wire Anthropic API key via Secrets Manager (never in env vars or code)
-- [ ] Test end-to-end: real idea text → sanitized → parsed to structured JSON
-
-**Done when:** Stage 1 + 2 run with real LLM call. Output is valid JSON matching schema.
-
----
-
-### Day 6 — Search (Stage 3)
-
-**Reference:** [03 — AI Pipeline §4 (Search)](./03-ai-pipeline.md), [02 — Microservices §8 (Search Service)](./02-microservices-design.md)
-
-- [ ] Choose and integrate search API provider (Brave Search API or Serper — pick one, move on)
-- [ ] Implement Search Service Lambda: `web_search`, `competitor_lookup` functions
-- [ ] Implement 3 parallel search sub-stages in Step Functions `Parallel` state
-- [ ] Wire ElastiCache cache: key pattern `search_cache:{sub_stage}:{query_hash}`, 1hr TTL
-- [ ] Graceful degradation: if search fails, return `unavailable` and continue (don't kill the pipeline)
-- [ ] Test: parallel searches run, cache hit on second identical query
-
-**Done when:** 3 parallel searches run in ~10s. Cache works. Failure doesn't kill pipeline.
-
----
-
-### Day 7 — Analyse + Score (Stages 4 & 5)
-
-**Reference:** [03 — AI Pipeline §5 (Analyse), §6 (Score)](./03-ai-pipeline.md)
-
-- [ ] Implement Stage 4 (Analyse): `claude-sonnet-4-6` call, competitor list extraction, schema validation
-- [ ] Implement Stage 5 (Score): deterministic algorithm — Saturation, Difficulty, Opportunity scores
-- [ ] Unit test scoring algorithm thoroughly: known inputs → expected outputs (this is what users will trust)
-- [ ] Test score breakdown is stored: sub-factors visible, not just the final number
-
-**Done when:** Given search results, returns scored competitor list. Scores are deterministic (same input = same output every time).
-
----
-
-### Day 8 — Summarise + Assemble (Stages 6 & 7)
-
-**Reference:** [03 — AI Pipeline §7 (Summarise), §8 (Assemble)](./03-ai-pipeline.md)
-
-- [ ] Implement Stage 6 (Summarise): `claude-sonnet-4-6` call, beginner-friendly prose output
-- [ ] Implement Stage 7 (Assemble): merge all stage outputs into final `result_json` schema
-- [ ] Write final result to `market_reports` Postgres table (status → `complete`)
-- [ ] Emit `report.completed` event to EventBridge
-- [ ] Wire token usage tracking: count tokens per LLM call, total stored on report row
-- [ ] Test full pipeline end-to-end: real idea → real report in Postgres
-
-**Done when:** Full pipeline produces a real report in the database. Check the prose — does it actually sound like a smart friend explaining a market?
-
----
-
-### Day 9 — Report Service API
-
-**Reference:** [02 — Microservices §6 (Report Service)](./02-microservices-design.md)
-
-- [ ] Build Report Service (ECS Fargate, TypeScript): Express or Fastify
-- [ ] Endpoints: `POST /reports` (submit idea), `GET /reports/:id` (poll status + result)
-- [ ] RLS context: every DB query sets `app.current_org_id` from JWT (hardcode one org for now)
-- [ ] Status polling: `pending` → `running` → `complete` / `failed`
-- [ ] Store `report_progress` in Redis for lightweight polling
-- [ ] Error handling: failed pipeline → status `failed` + error reason stored, user gets useful message
-
-**Done when:** `POST /reports` triggers the pipeline. `GET /reports/:id` returns the result when complete.
-
----
-
-### Day 10 — Audit Service (Skeleton)
+### Days 10–11 — Audit Service (Skeleton)
 
 **Reference:** [02 — Microservices §9 (Audit Service)](./02-microservices-design.md), [01 — Technical Spec §6 (Audit Logging)](./01-technical-spec.md)
 
@@ -198,7 +211,7 @@ This is the heart of the product. Everything else is wrapper.
 - [ ] Implement hash chain: each event gets `checksum` + `prev_checksum` from day one
 - [ ] Write to DynamoDB `audit_events` table
 - [ ] Stream to S3 `audit-archive` via DynamoDB Streams → Lambda
-- [ ] Wire Report Service to emit audit events on: report created, report viewed, pipeline complete
+- [ ] Wire pipeline Lambda to emit audit events on: report created, pipeline complete
 - [ ] Integrity check Lambda: scheduled every 6h, SNS alert on chain break
 
 > **Why now, not later?** The hash chain only works if it starts from record #1. You cannot add it retroactively. This is the one thing that truly cannot be bolted on.
@@ -207,11 +220,26 @@ This is the heart of the product. Everything else is wrapper.
 
 ---
 
-## Phase 2 — Auth & Users (Days 11–16)
+### Days 12–13 — CI/CD & Local Dev
 
-> **Goal:** Real accounts. Real isolation. No more hardcoded org.
+**Reference:** [01 — Technical Spec §13 (CI/CD)](./01-technical-spec.md)
 
-### Days 11–12 — Auth Service
+- [x] Create app monorepo with GitHub repo
+- [ ] GitHub Actions pipeline: lint → test → `sam build && sam deploy` to `dev` on merge to `main`
+- [ ] Local dev: `docker-compose.yml` with Postgres, Redis, LocalStack (for SQS/S3/DynamoDB)
+- [ ] Shared packages: `logger` (structured JSON), `errors` (typed error classes), `db` (connection pool + RLS context setter)
+- [ ] `.env.example` with all required env vars documented — no undocumented secrets ever
+- [ ] Wire ElastiCache cache for search results: key pattern `search_cache:{sub_stage}:{query_hash}`, 1hr TTL
+
+**Done when:** `docker-compose up` runs locally. Push to `main` auto-deploys to `dev`.
+
+---
+
+## Phase 2 — Auth & Users (Days 14–19)
+
+> **Goal:** Real accounts. Real isolation. No more hardcoded user.
+
+### Days 14–15 — Auth Service
 
 **Reference:** [01 — Technical Spec §3 (Access Control)](./01-technical-spec.md), [02 — Microservices §3 (Auth Service)](./02-microservices-design.md)
 
@@ -227,7 +255,7 @@ This is the heart of the product. Everything else is wrapper.
 
 ---
 
-### Days 13–14 — Permission Engine
+### Days 16–17 — Permission Engine
 
 **Reference:** [01 — Technical Spec §4–5 (RBAC)](./01-technical-spec.md), [02 — Microservices §4 (Permission Engine)](./02-microservices-design.md)
 
@@ -244,7 +272,7 @@ This is the heart of the product. Everything else is wrapper.
 
 ---
 
-### Days 15–16 — Org & User Service
+### Days 18–19 — Org & User Service
 
 **Reference:** [02 — Microservices §5 (Org & User Service)](./02-microservices-design.md)
 
@@ -258,31 +286,25 @@ This is the heart of the product. Everything else is wrapper.
 
 ---
 
-## Phase 3 — UI & Private Beta (Days 17–23)
+## Phase 3 — Beta Launch (Days 20–23)
 
-> **Goal:** Something a real human can use without you explaining it.
+> **Goal:** Wire the existing UI to the real backend. Something a real human can use without you explaining it.
 
-### Days 17–19 — Front-End
-
-- [ ] Framework: Next.js (App Router) + Tailwind — fast to build, easy to iterate
-- [ ] Pages: Login, Sign up, Dashboard (report list), New report (idea input), Report view (results)
-- [ ] Report view: scores as visual gauges, competitor cards, summary prose, "Where's the gap?" section
-- [ ] Polling: front-end polls `GET /reports/:id` every 3s while status is `pending`/`running`; show live progress
-- [ ] Deploy: Vercel (fastest path) or CloudFront + S3 (stays in AWS ecosystem)
-
-**Done when:** You can go from signup → submit idea → watch it process → read the report. No console needed.
-
----
-
-### Days 20–21 — API Gateway & Polish
+### Days 20–21 — Wire UI + API Gateway & Polish
 
 **Reference:** [01 — Technical Spec §11 (API Gateway)](./01-technical-spec.md)
 
-- [ ] Wire AWS API Gateway in front of all services (not just for show — this is your WAF entry point)
+- [x] Framework: Next.js (App Router) + Tailwind — fast to build, easy to iterate
+- [x] Pages: Login, Sign up, Dashboard (report list), New report (idea input), Report view (results)
+- [x] Report view: scores as visual gauges, competitor cards, summary prose, "Where's the gap?" section
+- [ ] Wire UI to real backend APIs (auth, reports, billing)
+- [ ] Polling: front-end polls `GET /reports/:id` every 3s while status is `pending`/`running`; show live progress
+- [ ] Wire AWS API Gateway in front of all services (WAF entry point)
 - [ ] Attach WAF: OWASP Core Rule Set, rate limiting per `org_id`
 - [ ] Per-client throttling: free tier = 10 reports/hr, Pro = 100/hr
 - [ ] Error messages: every error the user might see has a human-readable message (not a stack trace)
 - [ ] Loading states: every async action has a spinner and a timeout message
+- [ ] Deploy: Vercel (fastest path) or CloudFront + S3 (stays in AWS ecosystem)
 
 ---
 
@@ -387,17 +409,17 @@ These are not blocked — they're deliberately deferred until beta proves the pr
 Some things genuinely block others. This is the order that matters:
 
 ```text
-Phase 0 (Foundation)
-  └── Phase 1 (Pipeline) — needs DB, S3, SQS from Phase 0
-        └── Phase 2 (Auth) — pipeline needs real org_id
-              └── Phase 3 (UI) — UI needs auth to work
+Phase 0 (PoC) — prove the pipeline works
+  └── Phase 1 (Foundation) — add real infra, data layer, audit chain
+        └── Phase 2 (Auth) — real accounts, org isolation
+              └── Phase 3 (Beta) — wire UI to backend, launch
                     └── Phase 4 (Billing) — billing needs users
                           └── Phase 5 (Hardening) — fills in what's already wired
 
-INDEPENDENT (can be done anytime):
-  - Audit Service depth (Phase 5) — pipe exists from Day 10
-  - Permission Engine role expansion — engine exists from Day 14
-  - DR setup — infra exists from Phase 0
+INDEPENDENT (can be done anytime after Phase 1):
+  - Audit Service depth (Phase 5) — pipe exists from Day 11
+  - Permission Engine role expansion — engine exists from Day 17
+  - DR setup — infra exists from Phase 1
 ```
 
 ---
