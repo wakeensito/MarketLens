@@ -84,7 +84,7 @@ The AI pipeline is a **Lambda Durable Function** that orchestrates 7 stages usin
 
 | Factor | Durable Functions | Step Functions |
 |---|---|---|
-| Max duration | 1 year | 1 year (Standard) |
+| Max duration | 1 year (overall workflow); 15 min per Lambda invocation (900 s in current SAM config) | 1 year (Standard) |
 | Execution model | Code-first (`context.step()`) | JSON state machine |
 | Checkpointing | Automatic per step | Managed by service |
 | Local testing | Built-in test runner | Limited |

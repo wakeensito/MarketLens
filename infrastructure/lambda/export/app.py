@@ -27,6 +27,16 @@ s3 = boto3.client("s3")
 EXPORTS_BUCKET = os.environ["EXPORTS_BUCKET"]
 
 
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _safe_cell(value: object) -> object:
+    """Prefix formula-injection characters so spreadsheets don't execute them."""
+    if isinstance(value, str) and value.startswith(_FORMULA_PREFIXES):
+        return "'" + value
+    return value
+
+
 def generate_csv(report: dict) -> str:
     """Generate a CSV string from report data."""
     output = io.StringIO()
@@ -35,7 +45,7 @@ def generate_csv(report: dict) -> str:
     # Header
     writer.writerow(["MarketLens Report Export"])
     writer.writerow(["Report ID", report.get("report_id", "")])
-    writer.writerow(["Idea", report.get("idea_text", "")])
+    writer.writerow(["Idea", _safe_cell(report.get("idea_text", ""))])
     writer.writerow(["Created", report.get("created_at", "")])
     writer.writerow([])
 
@@ -54,9 +64,9 @@ def generate_csv(report: dict) -> str:
         writer.writerow(["Name", "Description", "URL"])
         for comp in competitors:
             writer.writerow([
-                comp.get("name", ""),
-                comp.get("description", ""),
-                comp.get("url", ""),
+                _safe_cell(comp.get("name", "")),
+                _safe_cell(comp.get("description", "")),
+                _safe_cell(comp.get("url", "")),
             ])
 
     return output.getvalue()
@@ -68,7 +78,9 @@ def export_report(report_id: str):
     """Export a report as CSV and return a presigned download URL."""
     if not _REPORT_ID_RE.match(report_id):
         return {"error": "Invalid report_id"}, 400
-    body = app.current_event.json_body or {}
+    body = app.current_event.json_body
+    if not isinstance(body, dict):
+        body = {}
     export_format = body.get("format", "csv")
 
     # Fetch report

@@ -5,6 +5,7 @@ import os
 import json
 import re
 import boto3
+from botocore.exceptions import ClientError
 from uuid import uuid4
 from datetime import datetime
 
@@ -29,9 +30,11 @@ table = dynamodb.Table(os.environ["REPORTS_TABLE"])
 @tracer.capture_method
 def list_reports():
     """List all reports."""
-    result = table.scan(
-        FilterExpression="begins_with(sk, :prefix)",
-        ExpressionAttributeValues={":prefix": "REPORT#"},
+    result = table.query(
+        IndexName="gsi1",
+        KeyConditionExpression="gsi1pk = :pk",
+        ExpressionAttributeValues={":pk": "REPORTS"},
+        ScanIndexForward=False,
     )
     reports = result.get("Items", [])
     return {"reports": reports}
@@ -41,7 +44,9 @@ def list_reports():
 @tracer.capture_method
 def create_report():
     """Create a new report from a business idea."""
-    body = app.current_event.json_body or {}
+    body = app.current_event.json_body
+    if not isinstance(body, dict):
+        return {"error": "Request body must be a JSON object"}, 400
     idea_text = (body.get("idea_text") or "").strip()
 
     if not idea_text or len(idea_text) < 5:
@@ -91,15 +96,21 @@ def delete_report(report_id: str):
     """Soft-delete a report."""
     if not _REPORT_ID_RE.match(report_id):
         return {"error": "Invalid report_id"}, 400
-    table.update_item(
-        Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
-        UpdateExpression="SET #s = :status, deleted_at = :now",
-        ExpressionAttributeNames={"#s": "status"},
-        ExpressionAttributeValues={
-            ":status": "deleted",
-            ":now": datetime.utcnow().isoformat(),
-        },
-    )
+    try:
+        table.update_item(
+            Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
+            UpdateExpression="SET #s = :status, deleted_at = :now",
+            ConditionExpression="attribute_exists(pk)",
+            ExpressionAttributeNames={"#s": "status"},
+            ExpressionAttributeValues={
+                ":status": "deleted",
+                ":now": datetime.utcnow().isoformat(),
+            },
+        )
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            return {"error": "Report not found"}, 404
+        raise
     return {"message": "Report deleted"}, 200
 
 

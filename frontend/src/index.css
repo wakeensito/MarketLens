@@ -47,7 +47,7 @@
   --danger-light:    oklch(68% 0.22 22 / 0.12);
 
   /* Fonts */
-  --font-display: 'IBM Plex Serif', Georgia, serif;
+  --font-display: 'IBM Plex Serif', georgia, serif;
   --font-body:    'IBM Plex Sans', system-ui, sans-serif;
   --font-mono:    'IBM Plex Mono', 'Courier New', monospace;
 
@@ -283,7 +283,7 @@ html { scroll-behavior: smooth; }
   border-radius: 50%;
   background: currentColor;
   flex-shrink: 0;
-  box-shadow: 0 0 8px currentColor;
+  box-shadow: 0 0 8px currentcolor;
 }
 
 .landing-wordmark {

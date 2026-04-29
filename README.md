@@ -1,4 +1,4 @@
-i wo# MarketLens — AI-Powered Market Intelligence Platform
+# MarketLens — AI-Powered Market Intelligence Platform
 
 > Type a business idea, get the full competitive landscape, saturation analysis, and entry roadmap in minutes.
 
@@ -46,7 +46,7 @@ sam build && sam deploy
 
 ## Project Structure
 
-```
+```text
 ├── template.yaml                  # SAM template (S3, CloudFront, API GW, DynamoDB, Lambdas)
 ├── samconfig.toml                 # SAM deploy config (auto-generated)
 ├── infrastructure/
@@ -98,7 +98,7 @@ sam build && sam deploy
 
 The AI orchestration uses Lambda Durable Functions instead of Step Functions. The entire pipeline runs as a single Lambda with automatic checkpointing per stage:
 
-```
+```text
 sanitize → parse → search → analyse → score → summarise → assemble
 ```
 
@@ -126,7 +126,7 @@ Each stage is a `context.step()` call — if the function is interrupted, it res
 |---|---|
 | `AWS_DEPLOY_ROLE_ARN` | Set to your IAM CD role ARN |
 | `S3_BUCKET_NAME` | Set to your frontend S3 bucket name |
-| `CLOUDFRONT_DISTRIBUTION_ID` | `E2EA4MMQ4LQU2W` |
+| `CLOUDFRONT_DISTRIBUTION_ID` | Set to your deployed CloudFront distribution ID (see `sam deploy` output) |
 
 ### GitHub Repo Secrets Required
 
