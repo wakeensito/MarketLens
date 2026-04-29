@@ -15,12 +15,12 @@ This plan starts with the simplest possible AWS deployment — Lambda Durable Fu
 
 | PoC (Phase 0) | Full Architecture (Phase 1+) |
 |---|---|
-| 1 S3 bucket for reports | Multi-bucket with Object Lock, lifecycle policies |
-| 2 Lambdas (durable pipeline + get-report) | 10 microservices on ECS Fargate + Lambda |
-| API Gateway (REST) | API Gateway + WAF + per-tenant throttling |
-| SAM for deployment | SAM (application layer) + Terraform (infrastructure layer) |
+| 2 S3 buckets (frontend + exports) | Multi-bucket with Object Lock, lifecycle policies |
+| 3 Lambdas (API + durable pipeline + export) | 10 microservices on ECS Fargate + Lambda |
+| API Gateway (REST) + CloudFront | API Gateway + WAF + per-tenant throttling |
+| DynamoDB (reports table) | RDS Postgres with RLS + DynamoDB + ElastiCache |
+| SAM + Terraform (IAM) for deployment | SAM (application layer) + Terraform (infrastructure layer) |
 | No auth (hardcoded user) | Cognito + JWT + RBAC + Permission Engine |
-| No database (S3 as store) | RDS Postgres with RLS + DynamoDB + ElastiCache |
 | Python only | Python (AI) + TypeScript (services) + Rust or Go (Permission Engine, Audit) |
 
 ---
@@ -94,15 +94,16 @@ Terraform is added in Phase 1 for the heavier infrastructure (VPC, RDS, ECS). SA
 ### Day 1 — AWS Setup + SAM Skeleton
 
 - [x] Create GitHub repo with monorepo structure
-- [ ] Install AWS SAM CLI, configure AWS credentials
-- [ ] Create SAM `template.yaml`: 1 S3 bucket, 2 Lambdas, 1 API Gateway (REST)
-- [ ] Install Python Durable Execution SDK: `pip install aws-durable-execution-sdk-python`
-- [ ] Stub `run-pipeline` Lambda: durable function with 7 `context.step()` calls returning mock data
-- [ ] Stub `get-report` Lambda: reads `status.json` from S3, returns it
-- [ ] `sam build && sam deploy` — confirm everything deploys clean
-- [ ] Test: `curl POST /reports` → returns `report_id`; `curl GET /reports/{id}` → returns mock result
+- [x] Install AWS SAM CLI, configure AWS credentials
+- [x] Create SAM `template.yaml`: S3 buckets, 3 Lambdas (API, AI Orchestration, Export), API Gateway (REST), DynamoDB, CloudFront
+- [x] Install Python Durable Execution SDK: `pip install aws-durable-execution-sdk-python`
+- [x] Stub `api` Lambda: REST endpoints for reports CRUD using Powertools
+- [x] Stub `ai-orchestration` Lambda: durable function with 7 `context.step()` calls returning mock data
+- [x] Stub `export` Lambda: CSV generation with presigned S3 download URLs
+- [x] `sam build && sam deploy` — confirmed everything deploys clean
+- [ ] Test: `curl POST /api/reports` → returns `report_id`; `curl GET /api/reports/{id}` → returns mock result
 
-**Done when:** Both Lambdas deployed. API Gateway returns responses. S3 bucket exists.
+**Done when:** All Lambdas deployed. API Gateway returns responses. S3 buckets and DynamoDB table exist.
 
 ---
 
@@ -225,7 +226,10 @@ Terraform is added in Phase 1 for the heavier infrastructure (VPC, RDS, ECS). SA
 **Reference:** [01 — Technical Spec §13 (CI/CD)](./01-technical-spec.md)
 
 - [x] Create app monorepo with GitHub repo
-- [ ] GitHub Actions pipeline: lint → test → `sam build && sam deploy` to `dev` on merge to `main`
+- [x] GitHub Actions CI pipeline: lint, type check, Trivy security scan, Checkov IaC scan, Codecov
+- [x] GitHub Actions CD pipeline: build frontend → S3 sync → CloudFront invalidation (with concurrency control)
+- [x] IAM CD role with GitHub OIDC (Terraform, deployed) — least-privilege policy generated via IAM Policy Autopilot
+- [x] Frontend deployed to S3 + CloudFront
 - [ ] Local dev: `docker-compose.yml` with Postgres, Redis, LocalStack (for SQS/S3/DynamoDB)
 - [ ] Shared packages: `logger` (structured JSON), `errors` (typed error classes), `db` (connection pool + RLS context setter)
 - [ ] `.env.example` with all required env vars documented — no undocumented secrets ever
