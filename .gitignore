@@ -4,5 +4,8 @@
 *.tfstate.backup
 *.tfvars
 
+# SAM
+.aws-sam/
+
 # OS
 .DS_Store

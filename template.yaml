@@ -1,0 +1,341 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: MarketLens - AI-powered market intelligence platform
+
+Parameters:
+  Stage:
+    Type: String
+    Default: prod
+    AllowedValues: [dev, staging, prod]
+    Description: Deployment stage
+
+Globals:
+  Function:
+    MemorySize: 512
+    Runtime: python3.13
+    Timeout: 30
+    Tracing: Active
+    Environment:
+      Variables:
+        STAGE: !Ref Stage
+        REPORTS_TABLE: !Ref ReportsTable
+        POWERTOOLS_SERVICE_NAME: MarketLens
+        POWERTOOLS_METRICS_NAMESPACE: MarketLens
+    Layers:
+      - !Sub arn:aws:lambda:${AWS::Region}:017000801446:layer:AWSLambdaPowertoolsPythonV3-python313-x86_64:18
+  Api:
+    TracingEnabled: true
+
+Resources:
+  # ─── S3: Frontend Hosting ───
+  WebUIBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub marketlens-frontend-${Stage}-${AWS::AccountId}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      VersioningConfiguration:
+        Status: Enabled
+
+  WebUIBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref WebUIBucket
+      PolicyDocument:
+        Statement:
+          - Sid: HttpsOnly
+            Action: "*"
+            Effect: Deny
+            Resource:
+              - !Sub arn:${AWS::Partition}:s3:::${WebUIBucket}
+              - !Sub arn:${AWS::Partition}:s3:::${WebUIBucket}/*
+            Principal: "*"
+            Condition:
+              Bool:
+                "aws:SecureTransport": "false"
+          - Sid: CloudFrontOriginOnly
+            Action: s3:GetObject
+            Effect: Allow
+            Resource: !Sub arn:${AWS::Partition}:s3:::${WebUIBucket}/*
+            Principal:
+              Service: "cloudfront.amazonaws.com"
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}
+
+  # ─── CloudFront ───
+  CloudFrontOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub marketlens-oac-${Stage}
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  ResponseHeadersPolicy:
+    Type: AWS::CloudFront::ResponseHeadersPolicy
+    Properties:
+      ResponseHeadersPolicyConfig:
+        Name: !Sub marketlens-security-headers-${Stage}
+        SecurityHeadersConfig:
+          StrictTransportSecurity:
+            AccessControlMaxAgeSec: 63072000
+            IncludeSubdomains: true
+            Override: true
+            Preload: true
+          ContentTypeOptions:
+            Override: true
+          FrameOptions:
+            FrameOption: DENY
+            Override: true
+          XSSProtection:
+            ModeBlock: true
+            Override: true
+            Protection: true
+          ReferrerPolicy:
+            ReferrerPolicy: strict-origin-when-cross-origin
+            Override: true
+
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Origins:
+          - Id: S3
+            DomainName: !GetAtt WebUIBucket.RegionalDomainName
+            OriginAccessControlId: !Ref CloudFrontOriginAccessControl
+            S3OriginConfig: {}
+          - Id: api
+            DomainName: !Sub "${ApiGatewayApi}.execute-api.${AWS::Region}.amazonaws.com"
+            OriginPath: !Sub "/${Stage}"
+            CustomOriginConfig:
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols:
+                - TLSv1.2
+        DefaultRootObject: index.html
+        PriceClass: PriceClass_100
+        Enabled: true
+        HttpVersion: http2
+        IPV6Enabled: true
+        DefaultCacheBehavior:
+          AllowedMethods: [GET, HEAD, OPTIONS]
+          CachedMethods: [GET, HEAD]
+          Compress: true
+          ForwardedValues:
+            Cookies:
+              Forward: none
+            QueryString: true
+          TargetOriginId: S3
+          ViewerProtocolPolicy: redirect-to-https
+          ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy
+        CacheBehaviors:
+          - AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+            CachedMethods: [HEAD, GET, OPTIONS]
+            Compress: false
+            PathPattern: "/api/*"
+            TargetOriginId: api
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+            ViewerProtocolPolicy: redirect-to-https
+            ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+
+  # ─── API Gateway ───
+  ApiGatewayApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Ref Stage
+      EndpointConfiguration: REGIONAL
+      TracingEnabled: true
+      AccessLogSetting:
+        DestinationArn: !GetAtt ApiGWLogGroup.Arn
+        Format: "$context.identity.sourceIp $context.requestTime $context.httpMethod $context.resourcePath $context.protocol $context.status $context.responseLength $context.requestId"
+      Cors:
+        AllowMethods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,X-Amz-Security-Token,Authorization,X-Api-Key,X-Requested-With,Accept'"
+        AllowOrigin: "'*'"
+
+  ApiGWLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/apigateway/marketlens-${Stage}
+      RetentionInDays: 90
+
+  # ─── DynamoDB: Reports Table ───
+  ReportsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub marketlens-reports-${Stage}
+      BillingMode: PAY_PER_REQUEST
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+        - AttributeName: gsi1pk
+          AttributeType: S
+        - AttributeName: gsi1sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: gsi1
+          KeySchema:
+            - AttributeName: gsi1pk
+              KeyType: HASH
+            - AttributeName: gsi1sk
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  # ─── Lambda: API ───
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub marketlens-api-${Stage}
+      Handler: app.lambda_handler
+      CodeUri: infrastructure/lambda/api/
+      Description: REST API handler for MarketLens
+      Timeout: 15
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ReportsTable
+      Events:
+        AnyPath:
+          Type: Api
+          Properties:
+            Path: /api/{proxy+}
+            Method: ANY
+            RestApiId: !Ref ApiGatewayApi
+
+  ApiFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/marketlens-api-${Stage}
+      RetentionInDays: 90
+
+  # ─── Lambda: AI Orchestration (Durable Function) ───
+  AiOrchestrationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub marketlens-ai-orchestration-${Stage}
+      Handler: app.handler
+      CodeUri: infrastructure/lambda/ai-orchestration/
+      Description: AI analysis pipeline using Lambda Durable Functions
+      MemorySize: 1024
+      Timeout: 900
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ReportsTable
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:marketlens/${Stage}/*
+        - Statement:
+            - Effect: Allow
+              Action:
+                - lambda:CheckpointDurableExecution
+                - lambda:GetDurableExecutionState
+              Resource: !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:marketlens-ai-orchestration-${Stage}
+      Environment:
+        Variables:
+          LLM_SECRET_NAME: !Sub marketlens/${Stage}/llm-api-keys
+
+  AiOrchestrationLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/marketlens-ai-orchestration-${Stage}
+      RetentionInDays: 90
+
+  # ─── Lambda: Export ───
+  ExportFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub marketlens-export-${Stage}
+      Handler: app.lambda_handler
+      CodeUri: infrastructure/lambda/export/
+      Description: PDF and CSV report export
+      MemorySize: 1024
+      Timeout: 120
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ReportsTable
+        - S3CrudPolicy:
+            BucketName: !Ref ExportsBucket
+      Environment:
+        Variables:
+          EXPORTS_BUCKET: !Ref ExportsBucket
+      Events:
+        ExportApi:
+          Type: Api
+          Properties:
+            Path: /api/reports/{report_id}/export
+            Method: POST
+            RestApiId: !Ref ApiGatewayApi
+
+  ExportFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/marketlens-export-${Stage}
+      RetentionInDays: 90
+
+  # ─── S3: Exports Bucket ───
+  ExportsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub marketlens-exports-${Stage}-${AWS::AccountId}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireExports
+            Status: Enabled
+            ExpirationInDays: 7
+
+Outputs:
+  WebUIBucketName:
+    Description: S3 bucket for frontend assets
+    Value: !Ref WebUIBucket
+
+  CloudFrontDistributionId:
+    Description: CloudFront distribution ID
+    Value: !Ref CloudFrontDistribution
+
+  CloudFrontDomainName:
+    Description: CloudFront domain name
+    Value: !GetAtt CloudFrontDistribution.DomainName
+
+  ApiUrl:
+    Description: API Gateway URL
+    Value: !Sub "https://${ApiGatewayApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/api/"
+
+  ReportsTableName:
+    Description: DynamoDB reports table name
+    Value: !Ref ReportsTable

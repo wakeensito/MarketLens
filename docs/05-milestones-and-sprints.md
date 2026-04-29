@@ -88,8 +88,8 @@ Terraform is added in Phase 1 for the heavier infrastructure (VPC, RDS, ECS). SA
 - **Simpler** — entire pipeline is one Lambda with `context.step()` per stage. No state machine JSON to manage.
 - **Built-in checkpointing** — each step's result is persisted automatically. If a step fails, retry picks up where it left off.
 - **Same resilience** — retry logic, state persistence, up to 1 year execution time.
-- **Less infra** — no Step Functions, no SQS queue, no separate Lambda per stage.
-- **Migration path** — can move to Step Functions later if you need the visual debugging or parallel execution features.
+- **Less infra** — no separate state machine, no SQS queue, no separate Lambda per stage.
+- **Migration path** — can move to Step Functions later if you need the visual debugging or complex branching features.
 
 ### Day 1 — AWS Setup + SAM Skeleton
 
@@ -126,7 +126,7 @@ Terraform is added in Phase 1 for the heavier infrastructure (VPC, RDS, ECS). SA
 **Reference:** [03 — AI Pipeline §4 (Search), §5 (Analyse), §6 (Score)](./03-ai-pipeline.md)
 
 - [ ] Choose search API provider (Brave Search API or Serper — pick one, move on)
-- [ ] Implement `search` step: competitor search, market size search, trends search (sequential for PoC — parallel comes with Step Functions later)
+- [ ] Implement `search` step: competitor search, market size search, trends search (sequential for PoC — parallel comes later)
 - [ ] Implement `analyse` step: `claude-sonnet-4-6` call, competitor list extraction, schema validation
 - [ ] Implement `score` step: deterministic Saturation, Difficulty, Opportunity algorithm
 - [ ] Graceful degradation: if search fails, continue with empty data (don't kill the pipeline)

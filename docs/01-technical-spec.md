@@ -66,7 +66,7 @@ Cloud-native, microservices, hosted entirely on AWS. Defence-in-depth: network �
 | Identity & Auth | AWS Cognito + Custom Auth Service | User identity, JWT issuance, MFA, OAuth2 / OIDC |
 | API Gateway | AWS API Gateway (REST + WebSocket) | Request routing, throttling, API key management, auth enforcement |
 | Application Services | ECS Fargate (containerised microservices) | Business logic: market analysis, RBAC, reporting, billing |
-| AI Orchestration | Lambda + Step Functions | LLM prompt chaining, web search, result aggregation |
+| AI Orchestration | Lambda (Durable Functions) | LLM prompt chaining, web search, result aggregation |
 | Data Layer | RDS (Postgres) + DynamoDB + ElastiCache | Structured data, audit logs, sessions, caching |
 | Storage | S3 (multi-bucket, encrypted) | Report artifacts, exports, audit archives |
 | Observability | CloudWatch + OpenSearch + X-Ray | Logging, tracing, metrics, alerting |
@@ -83,7 +83,7 @@ Pool model with logical data isolation enforced at the application and database 
 - **S3** — Separate key prefixes per tenant; IAM conditions enforce prefix boundaries.
 - **ElastiCache** — Tenant-namespaced cache keys; no cross-tenant cache sharing.
 - **Audit Logs** — DynamoDB partition key includes `org_id`; no cross-tenant log access possible.
-- **Step Functions** — Execution context includes `org_id`; AI service calls scoped and logged per tenant.
+- **Lambda Durable Functions** — Execution context includes `org_id`; AI service calls scoped and logged per tenant.
 
 ---
 
@@ -363,8 +363,7 @@ Two-region active-passive: primary `us-east-1` handles live traffic, secondary `
 | Cognito | User identity, auth, MFA | User Pools (humans) + Identity Pools (federated/API); SAML/OIDC SSO support |
 | ECS Fargate | Container orchestration | No EC2 management; auto-scaling per service; task definitions versioned in ECR |
 | ECR | Container image registry | Image scanning on push; lifecycle policies; immutable image tags in prod |
-| Lambda | Serverless compute (AI, async tasks) | Step Functions orchestration; max 15min timeout; X-Ray tracing; DLQ on SQS |
-| Step Functions | AI workflow orchestration | Standard workflows for market analysis pipeline; state machines in IaC |
+| Lambda | Serverless compute (AI, async tasks) | Durable Functions for AI orchestration; max 15min timeout; X-Ray tracing; DLQ on SQS |
 | RDS PostgreSQL | Primary relational database | Multi-AZ; automated backups; Performance Insights; Secrets Manager rotation |
 | DynamoDB | Audit logs, sessions, cache metadata | On-demand capacity; global tables for multi-region; TTL for session records |
 | ElastiCache Redis | Session cache, query result cache | Cluster mode; Multi-AZ; AUTH enabled; TLS in-transit |
@@ -395,7 +394,7 @@ All AWS infrastructure is defined, version-controlled, reviewed, and deployed as
 |---|---|---|
 | **Terraform** | Primary IaC tool | All AWS resource provisioning: VPC, RDS, ECS, IAM, KMS, S3 |
 | **Terragrunt** | Terraform wrapper | DRY config, env promotion (dev→staging→prod), remote state management |
-| **AWS CDK (TypeScript)** | Application-layer IaC | ECS task definitions, Lambda functions, Step Functions state machines, API Gateway APIs |
+| **AWS CDK (TypeScript)** | Application-layer IaC | ECS task definitions, Lambda functions, API Gateway APIs |
 | **AWS SAM** | Serverless application model | Lambda packaging and local testing before CDK deployment |
 | **Packer** | AMI / base image build | Golden AMI for any EC2 bastion hosts (minimal usage); container base images |
 | **Checkov** | IaC static analysis | Security scanning of Terraform + CDK before every PR merge |
@@ -413,7 +412,7 @@ marketlens-infra/
 │   │   └── prod/               # Terragrunt config for prod (PR + 2 approvals)
 │   └── global/                 # Account-level: IAM, SCPs, CloudTrail, Macie
 ├── cdk/
-│   ├── stacks/                 # CDK stacks: ApiGateway, EcsCluster, StepFunctions…
+│   ├── stacks/                 # CDK stacks: ApiGateway, EcsCluster…
 │   └── constructs/             # Reusable L3 constructs
 ├── scripts/
 │   ├── bootstrap.sh            # One-time account bootstrap (state bucket, lock table)
@@ -491,7 +490,7 @@ marketlens-infra/
 | Synchronous request | gRPC over TLS (mTLS) | Service-to-service mTLS with AWS Private CA certs | Permission Engine lookups, user profile fetches, real-time data |
 | Async messaging | SQS FIFO | IAM Task Role + queue policy | Report generation jobs, email notifications, audit log writes |
 | Event streaming | EventBridge | Resource-based policies, IAM | System events: user created, report completed, billing event, security finding |
-| Workflow orchestration | Step Functions | IAM execution role | Multi-step AI analysis pipeline: search → analyse → score → format → store |
+| Workflow orchestration | Lambda Durable Functions | IAM execution role | Multi-step AI analysis pipeline: search → analyse → score → format → store |
 
 ---
 

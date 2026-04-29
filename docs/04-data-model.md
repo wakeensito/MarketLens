@@ -572,7 +572,7 @@ All tables in §2 have RLS enabled with the `tenant_isolation` policy, except:
 |---|---|---|
 | `pk` (partition) | String | `org_id` |
 | `sk` (sort) | String | `<timestamp_ms>#<execution_id>` |
-| `execution_id` | String | Step Functions ARN |
+| `execution_id` | String | Lambda Durable Function execution ID |
 | `report_id` | String | |
 | `pipeline_version` | String | |
 | `stage_results` | Map | per-stage metadata (duration, tokens, errors) |
