@@ -24,6 +24,8 @@ _MAX_IDEA_LEN = 2000
 
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(os.environ["REPORTS_TABLE"])
+lambda_client = boto3.client("lambda")
+AI_FUNCTION_NAME = os.environ.get("AI_FUNCTION_NAME", "")
 
 
 @app.get("/reports")
@@ -71,7 +73,18 @@ def create_report():
 
     logger.info("Report created", extra={"report_id": report_id})
 
-    # TODO: Invoke AI Orchestration Lambda here
+    # Invoke AI Orchestration Lambda asynchronously (durable execution)
+    if AI_FUNCTION_NAME:
+        lambda_client.invoke(
+            FunctionName=AI_FUNCTION_NAME,
+            InvocationType="Event",
+            Payload=json.dumps({
+                "report_id": report_id,
+                "idea_text": idea_text,
+            }),
+        )
+        logger.info("AI pipeline triggered", extra={"report_id": report_id})
+
     return {"report_id": report_id, "status": "pending"}, 201
 
 
