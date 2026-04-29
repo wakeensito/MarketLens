@@ -21,12 +21,12 @@ const stagger: Variants = {
 const VIEWPORT = { once: true, margin: '-60px' } as const;
 
 const AVATAR_COLORS = [
-  'oklch(50% 0.26 278)',
-  'oklch(62% 0.18 60)',
-  'oklch(50% 0.18 155)',
-  'oklch(50% 0.22 22)',
-  'oklch(52% 0.22 305)',
-  'oklch(48% 0.20 240)',
+  'oklch(68% 0.24 268)',
+  'oklch(72% 0.18 60)',
+  'oklch(68% 0.20 155)',
+  'oklch(68% 0.22 22)',
+  'oklch(70% 0.22 305)',
+  'oklch(70% 0.20 215)',
 ];
 
 function Reveal({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
@@ -326,8 +326,8 @@ export default function ReportView({ report }: Props) {
       </Reveal>
 
       <Reveal>
-        <div style={{ paddingTop: 8, paddingBottom: 40 }}>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+        <div className="report-footer">
+          <span className="report-footer-text">
             {briefId} · Generated {dateStr} · MarketLens Intelligence Engine
           </span>
         </div>

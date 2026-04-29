@@ -75,7 +75,7 @@ MarketLens is composed of **10 microservices**. Each runs as an independent ECS 
 | 2 | Permission Engine | ECS Fargate | Go | Security Lead |
 | 3 | Org & User Service | ECS Fargate | TypeScript (Node.js) | Backend Lead |
 | 4 | Report Service | ECS Fargate | TypeScript (Node.js) | Backend Lead |
-| 5 | AI Orchestration | Step Functions + Lambda | Python | AI Lead |
+| 5 | AI Orchestration | Lambda (Durable Functions) | Python | AI Lead |
 | 6 | Search Service | Lambda | Python | AI Lead |
 | 7 | Audit Service | ECS Fargate | Go | Security Lead |
 | 8 | Billing Service | ECS Fargate | TypeScript (Node.js) | Backend Lead |
@@ -331,7 +331,7 @@ INPUT: user_id, org_id, scope, resource_type, action, [team_id], [resource_id]
 
 ### 7.1 Responsibilities
 
-- Orchestrate the multi-step AI pipeline via Step Functions.
+- Orchestrate the multi-step AI pipeline via Lambda Durable Functions.
 - Manage prompt templates (versioned in code).
 - Call the Search Service for web/competitor data.
 - Call LLM APIs (Anthropic / OpenAI / etc.) with retry, fallback, and rate limiting.
@@ -371,12 +371,14 @@ INPUT: user_id, org_id, scope, resource_type, action, [team_id], [resource_id]
 
 > 📖 **Full pipeline details, prompt templates, scoring algorithm, and cost model:** see [03 — AI Pipeline Architecture](./03-ai-pipeline.md).
 
-### 7.3 Why Step Functions?
+### 7.3 Why Lambda Durable Functions?
 
-- **Visibility** — each stage is a distinct state; failures can be inspected per step.
+- **Code-first** — the entire pipeline is one Lambda function with `context.step()` per stage. No state machine JSON to manage.
+- **Built-in checkpointing** — each step's result is persisted automatically. If a step fails, retry picks up where it left off.
+- **Visibility** — each step is named and trackable; failures can be inspected per step.
 - **Retry policy per step** — different stages have different retry semantics (LLM call: 3 retries; Search call: 2 retries).
-- **Parallel execution** — competitor lookup, market sizing, and trend analysis run in parallel.
-- **State persistence** — intermediate results survive Lambda timeouts (up to 1 year for Standard workflows).
+- **State persistence** — intermediate results survive Lambda timeouts (up to 1 year for durable executions).
+- **Less infra** — no separate state machine resource, no SQS queue, no separate Lambda per stage.
 
 ### 7.4 Data Owned
 
@@ -586,7 +588,7 @@ SQS message from Report Service: `{ report_id, format: 'pdf'|'csv'|'pptx', org_i
 | gRPC + mTLS | Sync, low-latency, internal | Permission Engine `Authorize` call |
 | SQS FIFO | Async, ordered work queue | Report job submission to AI Orchestration |
 | EventBridge | Async, broadcast (1→N) | "Report Completed" event |
-| Step Functions | Multi-step workflow | AI Orchestration pipeline |
+| Lambda Durable Functions | Multi-step workflow | AI Orchestration pipeline |
 | DynamoDB Streams | Reactive on data change | Session record TTL → trigger cleanup Lambda |
 
 ### 13.2 Failure Modes & Circuit Breakers

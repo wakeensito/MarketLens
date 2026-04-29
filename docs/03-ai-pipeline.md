@@ -28,7 +28,7 @@
 
 ## 1. Pipeline Overview
 
-The AI pipeline is a **Step Functions Standard Workflow** that orchestrates 7 stages, with parallel execution where independent. Total target latency: **45–90 seconds** end-to-end for the standard tier.
+The AI pipeline is a **Lambda Durable Function** that orchestrates 7 stages using `context.step()` for each stage, with the ability to run steps in parallel where independent. Total target latency: **45–90 seconds** end-to-end for the standard tier.
 
 ```text
 ┌────────────────────────────────────────────────────────────────┐
@@ -80,14 +80,16 @@ The AI pipeline is a **Step Functions Standard Workflow** that orchestrates 7 st
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### Why Step Functions Standard (not Express)?
+### Why Lambda Durable Functions?
 
-| Factor | Standard | Express |
+| Factor | Durable Functions | Step Functions |
 |---|---|---|
-| Max duration | 1 year | 5 minutes |
-| Execution history | Visible per step | Aggregated only |
-| Use case | Long-running workflows with auditability | High-throughput, short workflows |
-| **Our choice** | ✅ — full per-step visibility for debugging and audit | ❌ — we want every step inspectable |
+| Max duration | 1 year (overall workflow); 15 min per Lambda invocation (900 s in current SAM config) | 1 year (Standard) |
+| Execution model | Code-first (`context.step()`) | JSON state machine |
+| Checkpointing | Automatic per step | Managed by service |
+| Local testing | Built-in test runner | Limited |
+| Infra overhead | Single Lambda | State machine + Lambdas |
+| **Our choice** | ✅ — code-first, less infra, built-in checkpointing and retries | ❌ — more complex, requires separate state machine definition |
 
 ---
 
@@ -193,7 +195,7 @@ Idea: "{sanitized_text}"
 
 ### 4.2 Why Parallel?
 
-These three searches are independent. Running them in parallel via Step Functions `Parallel` state cuts latency from ~30s sequential to ~10s.
+These three searches are independent. Running them in parallel via `Promise.all` / `asyncio.gather` within the durable function cuts latency from ~30s sequential to ~10s.
 
 ### 4.3 Caching Strategy
 

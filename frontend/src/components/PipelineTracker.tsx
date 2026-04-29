@@ -87,7 +87,7 @@ function ParallelBlock({ stages }: { stages: PipelineStage[] }) {
               </div>
               <div className="mini-card-desc">{stage.description}</div>
               {sr && (
-                <div className="stage-progress" style={{ marginTop: 7 }}>
+                <div className="stage-progress mini-card-progress">
                   <div className="stage-progress-fill" style={{ width: `${progress}%` }} />
                 </div>
               )}
@@ -125,7 +125,7 @@ export default function PipelineTracker({ stages, query }: Props) {
       <div className="pipeline-header">
         <h2 className="pipeline-title">Generating intelligence report…</h2>
         <div className="pipeline-query-row">
-          Analysing <span className="pipeline-query-text" style={{ marginLeft: 4 }}>"{query}"</span>
+          Analysing <span className="pipeline-query-text pipeline-query-gap">"{query}"</span>
         </div>
       </div>
       <div className="pipeline-stages">{rendered}</div>
