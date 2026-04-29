@@ -1,4 +1,4 @@
-# MarketLens — AI-Powered Market Intelligence Platform
+i wo# MarketLens — AI-Powered Market Intelligence Platform
 
 > Type a business idea, get the full competitive landscape, saturation analysis, and entry roadmap in minutes.
 
@@ -124,8 +124,8 @@ Each stage is a `context.step()` call — if the function is interrupted, it res
 
 | Variable | Description |
 |---|---|
-| `AWS_DEPLOY_ROLE_ARN` | `arn:aws:iam::562559071105:role/marketlens-cd-role` |
-| `S3_BUCKET_NAME` | `marketlens-frontend-prod-562559071105` |
+| `AWS_DEPLOY_ROLE_ARN` | Set to your IAM CD role ARN |
+| `S3_BUCKET_NAME` | Set to your frontend S3 bucket name |
 | `CLOUDFRONT_DISTRIBUTION_ID` | `E2EA4MMQ4LQU2W` |
 
 ### GitHub Repo Secrets Required
@@ -152,8 +152,8 @@ Each stage is a `context.step()` call — if the function is interrupted, it res
 
 | Environment | URL |
 |---|---|
-| Frontend | `https://diu01iy0seywi.cloudfront.net` |
-| API | `https://57a9lx9tmj.execute-api.us-east-1.amazonaws.com/prod/api/` |
+| Frontend | Set after `sam deploy` — see CloudFrontDomainName output |
+| API | Set after `sam deploy` — see ApiUrl output |
 
 ---
 
@@ -162,4 +162,4 @@ Each stage is a `context.step()` call — if the function is interrupted, it res
 - **Version:** 1.0
 - **Last updated:** April 2026
 - **Region:** us-east-1
-- **Account:** 562559071105
+- **Account:** (configured per environment)
