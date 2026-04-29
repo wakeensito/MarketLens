@@ -5,6 +5,7 @@ import os
 import json
 import csv
 import io
+import re
 import boto3
 from datetime import datetime
 
@@ -17,6 +18,8 @@ logger = Logger()
 tracer = Tracer()
 metrics = Metrics()
 app = APIGatewayRestResolver(strip_prefixes=["/api"])
+
+_REPORT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{6,80}$")
 
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(os.environ["REPORTS_TABLE"])
@@ -63,6 +66,8 @@ def generate_csv(report: dict) -> str:
 @tracer.capture_method
 def export_report(report_id: str):
     """Export a report as CSV and return a presigned download URL."""
+    if not _REPORT_ID_RE.match(report_id):
+        return {"error": "Invalid report_id"}, 400
     body = app.current_event.json_body or {}
     export_format = body.get("format", "csv")
 

@@ -3,6 +3,7 @@ MarketLens API Lambda — REST endpoints for reports.
 """
 import os
 import json
+import re
 import boto3
 from uuid import uuid4
 from datetime import datetime
@@ -16,6 +17,9 @@ logger = Logger()
 tracer = Tracer()
 metrics = Metrics()
 app = APIGatewayRestResolver(strip_prefixes=["/api"])
+
+_REPORT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{6,80}$")
+_MAX_IDEA_LEN = 2000
 
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(os.environ["REPORTS_TABLE"])
@@ -37,11 +41,13 @@ def list_reports():
 @tracer.capture_method
 def create_report():
     """Create a new report from a business idea."""
-    body = app.current_event.json_body
-    idea_text = body.get("idea_text", "").strip()
+    body = app.current_event.json_body or {}
+    idea_text = (body.get("idea_text") or "").strip()
 
     if not idea_text or len(idea_text) < 5:
         return {"error": "idea_text must be at least 5 characters"}, 400
+    if len(idea_text) > _MAX_IDEA_LEN:
+        idea_text = idea_text[:_MAX_IDEA_LEN]
 
     report_id = str(uuid4())
     now = datetime.utcnow().isoformat()
@@ -68,6 +74,8 @@ def create_report():
 @tracer.capture_method
 def get_report(report_id: str):
     """Get a single report by ID."""
+    if not _REPORT_ID_RE.match(report_id):
+        return {"error": "Invalid report_id"}, 400
     result = table.get_item(Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"})
     item = result.get("Item")
 
@@ -81,6 +89,8 @@ def get_report(report_id: str):
 @tracer.capture_method
 def delete_report(report_id: str):
     """Soft-delete a report."""
+    if not _REPORT_ID_RE.match(report_id):
+        return {"error": "Invalid report_id"}, 400
     table.update_item(
         Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
         UpdateExpression="SET #s = :status, deleted_at = :now",

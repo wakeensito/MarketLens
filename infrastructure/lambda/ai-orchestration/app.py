@@ -6,6 +6,7 @@ Each stage is a durable step with automatic checkpointing and retry.
 """
 import os
 import json
+import re
 import boto3
 from datetime import datetime
 
@@ -15,20 +16,33 @@ from aws_durable_execution_sdk_python import durable_execution, DurableContext
 logger = Logger()
 tracer = Tracer()
 
-dynamodb = boto3.resource("dynamodb")
-table = dynamodb.Table(os.environ["REPORTS_TABLE"])
+_REPORT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{6,80}$")
+
+
+def _get_table():
+    dynamodb = boto3.resource("dynamodb")
+    table_name = os.environ["REPORTS_TABLE"]
+    return dynamodb.Table(table_name)
 
 
 def get_llm_client():
     """Retrieve LLM API key from Secrets Manager and return a client placeholder."""
+    # For the current MVP (LLM calls are TODO), treat missing secret config as "no keys".
+    # Important: do NOT checkpoint secrets inside durable steps.
+    secret_name = os.environ.get("LLM_SECRET_NAME")
+    if not secret_name:
+        return {}
+
     sm = boto3.client("secretsmanager")
-    secret = sm.get_secret_value(SecretId=os.environ["LLM_SECRET_NAME"])
+    secret = sm.get_secret_value(SecretId=secret_name)
     keys = json.loads(secret["SecretString"])
     return keys
 
 
 def sanitize(idea_text: str) -> dict:
     """Stage 1: Validate and clean input."""
+    if not isinstance(idea_text, str):
+        raise ValueError("Idea text must be a string")
     cleaned = idea_text.strip()
     if len(cleaned) < 5:
         raise ValueError("Idea text too short")
@@ -104,6 +118,25 @@ def assemble(parsed: dict, search_results: dict, analysis: dict, scores: dict, s
     }
 
 
+def _validate_event(event: dict) -> tuple[str, str]:
+    if not isinstance(event, dict):
+        raise ValueError("Event must be an object")
+
+    report_id = event.get("report_id")
+    if not isinstance(report_id, str) or not _REPORT_ID_RE.match(report_id):
+        raise ValueError("Invalid report_id")
+
+    idea_text = event.get("idea_text")
+    if not isinstance(idea_text, str):
+        raise ValueError("idea_text must be a string")
+
+    return report_id, idea_text
+
+
+def _now_iso_utc() -> str:
+    return datetime.utcnow().isoformat()
+
+
 @durable_execution
 def handler(event: dict, context: DurableContext) -> dict:
     """
@@ -111,58 +144,77 @@ def handler(event: dict, context: DurableContext) -> dict:
     Each context.step() is checkpointed — if the function is interrupted,
     it resumes from the last completed step.
     """
-    report_id = event.get("report_id")
-    idea_text = event.get("idea_text")
+    table = _get_table()
 
-    logger.info("Pipeline started", extra={"report_id": report_id})
+    try:
+        report_id, idea_text = _validate_event(event)
+        logger.info("Pipeline started", extra={"report_id": report_id})
 
-    # Update status to running
-    table.update_item(
-        Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
-        UpdateExpression="SET #s = :status",
-        ExpressionAttributeNames={"#s": "status"},
-        ExpressionAttributeValues={":status": "running"},
-    )
+        # Update status to running
+        table.update_item(
+            Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
+            UpdateExpression="SET #s = :status, started_at = :now",
+            ExpressionAttributeNames={"#s": "status"},
+            ExpressionAttributeValues={":status": "running", ":now": _now_iso_utc()},
+        )
 
-    # Get LLM keys (inside a step so it's checkpointed)
-    llm_keys = context.step(lambda _: get_llm_client(), name="get_llm_keys")
+        # IMPORTANT: do NOT checkpoint secrets in durable steps; fetch outside step.
+        llm_keys = get_llm_client()
 
-    # Stage 1: Sanitize
-    sanitized = context.step(lambda _: sanitize(idea_text), name="sanitize")
+        # Stage 1: Sanitize
+        sanitized = context.step(lambda _: sanitize(idea_text), name="sanitize")
 
-    # Stage 2: Parse
-    parsed = context.step(lambda _: parse(sanitized["cleaned_idea"], llm_keys), name="parse")
+        # Stage 2: Parse
+        parsed = context.step(lambda _: parse(sanitized["cleaned_idea"], llm_keys), name="parse")
 
-    # Stage 3: Search
-    search_results = context.step(lambda _: search(parsed), name="search")
+        # Stage 3: Search
+        search_results = context.step(lambda _: search(parsed), name="search")
 
-    # Stage 4: Analyse
-    analysis = context.step(lambda _: analyse(parsed, search_results, llm_keys), name="analyse")
+        # Stage 4: Analyse
+        analysis = context.step(lambda _: analyse(parsed, search_results, llm_keys), name="analyse")
 
-    # Stage 5: Score
-    scores = context.step(lambda _: score(analysis), name="score")
+        # Stage 5: Score
+        scores = context.step(lambda _: score(analysis), name="score")
 
-    # Stage 6: Summarise
-    summary = context.step(lambda _: summarise(analysis, scores, llm_keys), name="summarise")
+        # Stage 6: Summarise
+        summary = context.step(lambda _: summarise(analysis, scores, llm_keys), name="summarise")
 
-    # Stage 7: Assemble
-    result = context.step(
-        lambda _: assemble(parsed, search_results, analysis, scores, summary),
-        name="assemble",
-    )
+        # Stage 7: Assemble
+        result = context.step(
+            lambda _: assemble(parsed, search_results, analysis, scores, summary),
+            name="assemble",
+        )
 
-    # Write final result to DynamoDB
-    now = datetime.utcnow().isoformat()
-    table.update_item(
-        Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
-        UpdateExpression="SET #s = :status, result_json = :result, completed_at = :now",
-        ExpressionAttributeNames={"#s": "status"},
-        ExpressionAttributeValues={
-            ":status": "complete",
-            ":result": result,
-            ":now": now,
-        },
-    )
+        # Write final result to DynamoDB
+        table.update_item(
+            Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
+            UpdateExpression="SET #s = :status, result_json = :result, completed_at = :now",
+            ExpressionAttributeNames={"#s": "status"},
+            ExpressionAttributeValues={
+                ":status": "complete",
+                ":result": result,
+                ":now": _now_iso_utc(),
+            },
+        )
 
-    logger.info("Pipeline completed", extra={"report_id": report_id})
-    return {"report_id": report_id, "status": "complete"}
+        logger.info("Pipeline completed", extra={"report_id": report_id})
+        return {"report_id": report_id, "status": "complete"}
+    except Exception as e:
+        # Best-effort failure marking; never leak secrets in logs or DB.
+        safe_error = f"{type(e).__name__}: {str(e)[:300]}"
+        logger.exception("Pipeline failed", extra={"error": safe_error})
+        report_id = None
+        if isinstance(event, dict):
+            report_id = event.get("report_id")
+        if isinstance(report_id, str) and _REPORT_ID_RE.match(report_id):
+            table.update_item(
+                Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
+                UpdateExpression="SET #s = :status, failed_at = :now, error = :err",
+                ExpressionAttributeNames={"#s": "status"},
+                ExpressionAttributeValues={
+                    ":status": "failed",
+                    ":now": _now_iso_utc(),
+                    ":err": safe_error,
+                },
+            )
+        raise
