@@ -7,7 +7,7 @@ s3_prefix = "marketlens-dev"
 region = "us-east-1"
 confirm_changeset = true
 capabilities = "CAPABILITY_IAM"
-parameter_overrides = "Stage=\"dev\""
+parameter_overrides = "Stage=\"dev\" BedrockModelId=\"anthropic.claude-3-haiku-20240307-v1:0\""
 image_repositories = []
 
 [default.global.parameters]

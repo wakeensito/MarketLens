@@ -24,6 +24,8 @@ _MAX_IDEA_LEN = 2000
 
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(os.environ["REPORTS_TABLE"])
+lambda_client = boto3.client("lambda")
+AI_FUNCTION_NAME = os.environ.get("AI_FUNCTION_NAME", "")
 
 
 @app.get("/reports")
@@ -71,7 +73,34 @@ def create_report():
 
     logger.info("Report created", extra={"report_id": report_id})
 
-    # TODO: Invoke AI Orchestration Lambda here
+    # Invoke AI Orchestration Lambda asynchronously (durable execution)
+    if AI_FUNCTION_NAME:
+        try:
+            lambda_client.invoke(
+                FunctionName=AI_FUNCTION_NAME,
+                InvocationType="Event",
+                Payload=json.dumps({
+                    "report_id": report_id,
+                    "idea_text": idea_text,
+                }),
+            )
+            table.update_item(
+                Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
+                UpdateExpression="SET invoke_status = :s",
+                ExpressionAttributeValues={":s": "invoked"},
+            )
+            logger.info("AI pipeline triggered", extra={"report_id": report_id})
+        except Exception as e:
+            logger.error("AI invoke failed", extra={"report_id": report_id, "error": str(e)})
+            table.update_item(
+                Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
+                UpdateExpression="SET invoke_status = :s, invocation_failure = :m",
+                ExpressionAttributeValues={
+                    ":s": "failed",
+                    ":m": str(e),
+                },
+            )
+
     return {"report_id": report_id, "status": "pending"}, 201
 
 

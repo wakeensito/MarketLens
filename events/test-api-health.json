@@ -1,0 +1,16 @@
+{
+  "httpMethod": "GET",
+  "path": "/api/health",
+  "pathParameters": null,
+  "queryStringParameters": null,
+  "headers": {
+    "Content-Type": "application/json"
+  },
+  "body": null,
+  "resource": "/api/{proxy+}",
+  "requestContext": {
+    "resourcePath": "/api/{proxy+}",
+    "httpMethod": "GET",
+    "stage": "prod"
+  }
+}

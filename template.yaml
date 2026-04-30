@@ -8,6 +8,10 @@ Parameters:
     Default: prod
     AllowedValues: [dev, staging, prod]
     Description: Deployment stage
+  BedrockModelId:
+    Type: String
+    Default: anthropic.claude-3-haiku-20240307-v1:0
+    Description: Bedrock inference profile ID for AI pipeline
 
 Globals:
   Function:
@@ -214,7 +218,6 @@ Resources:
   ApiFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub marketlens-api-${Stage}
       Handler: app.lambda_handler
       CodeUri: infrastructure/lambda/api/
       Description: REST API handler for MarketLens
@@ -222,6 +225,15 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ReportsTable
+        - LambdaInvokePolicy:
+            FunctionName: !Ref AiOrchestrationFunction
+        - Statement:
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !Sub ${AiOrchestrationFunction.Arn}:*
+      Environment:
+        Variables:
+          AI_FUNCTION_NAME: !Sub ${AiOrchestrationFunction.Arn}:live
       Events:
         AnyPath:
           Type: Api
@@ -233,20 +245,24 @@ Resources:
   ApiFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub /aws/lambda/marketlens-api-${Stage}
+      LogGroupName: !Sub /aws/lambda/${ApiFunction}
       RetentionInDays: 90
 
   # ─── Lambda: AI Orchestration (Durable Function) ───
   AiOrchestrationFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub marketlens-ai-orchestration-${Stage}
       Handler: app.handler
       CodeUri: infrastructure/lambda/ai-orchestration/
       Description: AI analysis pipeline using Lambda Durable Functions
       MemorySize: 1024
       Timeout: 900
+      DurableConfig:
+        ExecutionTimeout: 3600
+        RetentionPeriodInDays: 7
+      AutoPublishAlias: live
       Policies:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicDurableExecutionRolePolicy
         - DynamoDBCrudPolicy:
             TableName: !Ref ReportsTable
         - AWSSecretsManagerGetSecretValuePolicy:
@@ -254,24 +270,22 @@ Resources:
         - Statement:
             - Effect: Allow
               Action:
-                - lambda:CheckpointDurableExecution
-                - lambda:GetDurableExecutionState
-              Resource: !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:marketlens-ai-orchestration-${Stage}
+                - bedrock:InvokeModel
+              Resource: !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockModelId}"
       Environment:
         Variables:
-          LLM_SECRET_NAME: !Sub marketlens/${Stage}/llm-api-keys
+          BEDROCK_MODEL_ID: !Ref BedrockModelId
 
   AiOrchestrationLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub /aws/lambda/marketlens-ai-orchestration-${Stage}
+      LogGroupName: !Sub /aws/lambda/${AiOrchestrationFunction}
       RetentionInDays: 90
 
   # ─── Lambda: Export ───
   ExportFunction:
     Type: AWS::Serverless::Function
     Properties:
-      FunctionName: !Sub marketlens-export-${Stage}
       Handler: app.lambda_handler
       CodeUri: infrastructure/lambda/export/
       Description: PDF and CSV report export
@@ -296,7 +310,7 @@ Resources:
   ExportFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Sub /aws/lambda/marketlens-export-${Stage}
+      LogGroupName: !Sub /aws/lambda/${ExportFunction}
       RetentionInDays: 90
 
   # ─── S3: Exports Bucket ───

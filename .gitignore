@@ -7,5 +7,21 @@
 # SAM
 .aws-sam/
 
+# Local test env vars
+events/env.json
+
+# IDE / Editor
+.claude/
+.vscode/
+.idea/
+*.sw?
+
 # OS
 .DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+
+# Build artifacts
+frontend/dist/
