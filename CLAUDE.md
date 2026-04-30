@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Structure
 
-```
+```text
 ├── template.yaml                  # SAM template (S3, CloudFront, API GW, DynamoDB, Lambdas)
 ├── samconfig.toml                 # SAM deploy config
 ├── infrastructure/

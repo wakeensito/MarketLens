@@ -25,11 +25,18 @@ MODEL_ID = os.environ["BEDROCK_MODEL_ID"]
 
 
 def _set_stage(report_id: str, stage: str) -> None:
-    table.update_item(
-        Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
-        UpdateExpression="SET current_stage = :stage",
-        ExpressionAttributeValues={":stage": stage},
-    )
+    try:
+        table.update_item(
+            Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
+            UpdateExpression="SET current_stage = :stage",
+            ExpressionAttributeValues={":stage": stage},
+        )
+    except Exception as e:
+        logger.warning(
+            "Stage persistence failed (best-effort)",
+            extra={"report_id": report_id, "stage": stage, "error": str(e)},
+        )
+        return None
 
 
 def call_llm(prompt: str, max_tokens: int = 1024) -> str:

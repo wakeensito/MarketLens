@@ -74,7 +74,7 @@ export function useAnalysis(): AnalysisState {
   const [reportId,   setReportId]   = useState<string | null>(null);
   const [finalizing, setFinalizing] = useState(false);
 
-  const pollRef            = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollRef            = useRef<ReturnType<typeof setTimeout> | null>(null);
   const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollStartRef       = useRef<number>(0);
   // Incremented on every stopAll — async callbacks compare their captured value
@@ -83,7 +83,7 @@ export function useAnalysis(): AnalysisState {
 
   const stopPolling = useCallback(() => {
     if (pollRef.current !== null) {
-      clearInterval(pollRef.current);
+      clearTimeout(pollRef.current);
       pollRef.current = null;
     }
   }, []);
@@ -116,7 +116,7 @@ export function useAnalysis(): AnalysisState {
     const gen = generationRef.current;
     pollStartRef.current = Date.now();
 
-    pollRef.current = setInterval(async () => {
+    const pollOnce = async () => {
       if (generationRef.current !== gen) return;
 
       if (Date.now() - pollStartRef.current > POLL_TIMEOUT_MS) {
@@ -139,11 +139,15 @@ export function useAnalysis(): AnalysisState {
           setError('Analysis failed. Please try again.');
         } else {
           setStages(prev => deriveStages(prev, data.current_stage, false));
+          pollRef.current = setTimeout(pollOnce, POLL_INTERVAL_MS);
         }
       } catch {
         // transient network error — keep polling
+        pollRef.current = setTimeout(pollOnce, POLL_INTERVAL_MS);
       }
-    }, POLL_INTERVAL_MS);
+    };
+
+    pollRef.current = setTimeout(pollOnce, POLL_INTERVAL_MS);
   }, [stopPolling, stopAll, showReport]);
 
   const startAnalysis = useCallback((q: string) => {
@@ -159,8 +163,9 @@ export function useAnalysis(): AnalysisState {
 
     if (USE_MOCK) {
       const mockId = `mock-${Date.now()}`;
-      setTimeout(() => {
+      transitionTimerRef.current = setTimeout(() => {
         if (generationRef.current !== gen) return;
+        transitionTimerRef.current = null;
         showReport(adaptReport(MOCK_REPORT, q), mockId);
       }, TOTAL_PIPELINE_MS + 1200);
     } else {

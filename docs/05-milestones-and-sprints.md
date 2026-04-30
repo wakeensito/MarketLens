@@ -61,19 +61,20 @@ This plan starts with the simplest possible AWS deployment — Lambda Durable Fu
                               │              │  context.step('score')            │
                               │              │  context.step('summarise') → LLM  │
                               │              │  context.step('assemble')         │
-                              │              │  → writes result to S3            │
+                              │              │  → writes result to DynamoDB      │
                               │              └──────────────────────────────────┘
                               │
                               │              ┌──────────────────────────────────┐
                               └─────────────▶│  Lambda: get-report              │
                                              │  (Python)                        │
-                                             │  → reads from S3                 │
+                                             │  → reads from DynamoDB           │
                                              └──────────────────────────────────┘
 
                                              ┌──────────────────────────────────┐
-                                             │  S3: marketlens-reports-dev      │
-                                             │  /{report_id}/status.json        │
-                                             │  /{report_id}/result.json        │
+                                             │  DynamoDB: ReportsTable          │
+                                             │  PK/SK: REPORT#{report_id}       │
+                                             │  attrs: status, current_stage,   │
+                                             │         result_json, completed_at │
                                              └──────────────────────────────────┘
 ```
 

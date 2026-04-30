@@ -96,7 +96,7 @@ export default function App() {
 
           <motion.p
             className="lnd-sub"
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0, transition: { duration: 0.38, ease: 'easeOut' as const } }}
           >
             Drop in a business idea. Get a competitive landscape,
