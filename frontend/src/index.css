@@ -79,8 +79,8 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--border-mid); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--border-strong); }
 
-button { font-family: var(--font-body); cursor: pointer; border: none; background: none; outline: none; }
-input  { font-family: var(--font-body); outline: none; border: none; background: none; color: var(--text); }
+button { font-family: var(--font-body); cursor: pointer; border: none; background: none; outline: none; touch-action: manipulation; }
+input  { font-family: var(--font-body); outline: none; border: none; background: none; color: var(--text); touch-action: manipulation; }
 
 html { scroll-behavior: smooth; }
 
@@ -93,14 +93,16 @@ html { scroll-behavior: smooth; }
   background: var(--bg);
 }
 
-/* Landing: flex column centered */
+/* Landing: flex column centered, scrollable on small screens */
 .shell--landing {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  min-height: 100svh;
   padding: 60px 24px;
   text-align: center;
+  overflow-y: auto;
 }
 
 /* All landing children above orbs */
@@ -278,6 +280,11 @@ html { scroll-behavior: smooth; }
   0%, 100% { transform: translate(0, 0) scale(1); }
   30%       { transform: translate(4%, -5%) scale(1.05); }
   65%       { transform: translate(-3%, 4%) scale(0.96); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orb        { animation: none; }
+  .spin       { animation: none; }
 }
 
 /* Cursor glow */
@@ -1324,6 +1331,15 @@ html { scroll-behavior: smooth; }
   .lnd-wm-inner       { font-size: clamp(56px, 14vw, 90px); }
   .ws-bottom-bar      { padding: 8px 12px max(16px, calc(env(safe-area-inset-bottom, 0px) + 8px)); }
   .stats-grid         { grid-template-columns: 1fr 1fr; }
+  /* Competitor cards */
+  .comp-table-desktop { display: none; }
+  .comp-cards         { display: flex; }
+  /* Landing */
+  .shell--landing     { padding: 48px 20px; }
+  .lnd-input-wrap     { max-width: 100%; }
+  .landing-pill       { height: 36px; }
+  /* Touch targets */
+  .header-btn-ghost   { min-height: 40px; }
 }
 
 /* Narrow phones — hide decorative header chrome, preserve core actions */
@@ -1331,10 +1347,11 @@ html { scroll-behavior: smooth; }
   .nav-badge          { display: none; }
   .ws-query-label     { display: none; }
   .stats-grid         { grid-template-columns: 1fr; }
-}
-
-/* ── Competitor layout toggle ─────────────────────────── */
-@media (max-width: 680px) {
-  .comp-table-desktop { display: none; }
-  .comp-cards         { display: flex; }
+  /* Wordmark scales down further on very small screens */
+  .lnd-wm-inner       { font-size: clamp(44px, 13vw, 68px); letter-spacing: -0.035em; }
+  .lnd-sub            { font-size: 15px; margin-bottom: 32px; }
+  .shell--landing     { padding: 40px 16px; }
+  /* Gap score doesn't need a separate column on very narrow screens */
+  .gap-row            { grid-template-columns: 1fr; }
+  .gap-score          { flex-direction: row; gap: 6px; align-items: center; padding-top: 0; margin-top: 4px; }
 }

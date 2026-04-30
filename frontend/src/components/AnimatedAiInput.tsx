@@ -65,11 +65,13 @@ export interface AnimatedAiInputProps {
   minChars?: number;
   /** Compact mode: thinner bar for the workspace bottom rail. */
   compact?: boolean;
+  /** Override auto-focus behaviour. Defaults to true when not compact. */
+  autoFocus?: boolean;
 }
 
 const AnimatedAiInput = forwardRef<HTMLTextAreaElement, AnimatedAiInputProps>(
   function AnimatedAiInput(
-    { value, onChange, onSubmit, placeholder, minChars = 4, compact = false },
+    { value, onChange, onSubmit, placeholder, minChars = 4, compact = false, autoFocus: autoFocusProp },
     forwardedRef,
   ) {
     const MIN_H = compact ? 44 : 72;
@@ -128,7 +130,7 @@ const AnimatedAiInput = forwardRef<HTMLTextAreaElement, AnimatedAiInputProps>(
               adjustHeight();
             }}
             onKeyDown={onKeyDown}
-            autoFocus={!compact}
+            autoFocus={autoFocusProp ?? !compact}
             spellCheck
           />
         </div>
