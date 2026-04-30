@@ -24,6 +24,21 @@ bedrock = boto3.client("bedrock-runtime")
 MODEL_ID = os.environ["BEDROCK_MODEL_ID"]
 
 
+def _set_stage(report_id: str, stage: str) -> None:
+    try:
+        table.update_item(
+            Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
+            UpdateExpression="SET current_stage = :stage",
+            ExpressionAttributeValues={":stage": stage},
+        )
+    except Exception as e:
+        logger.warning(
+            "Stage persistence failed (best-effort)",
+            extra={"report_id": report_id, "stage": stage, "error": str(e)},
+        )
+        return None
+
+
 def call_llm(prompt: str, max_tokens: int = 1024) -> str:
     """Call Bedrock Claude and return the text response."""
     max_attempts = int(os.environ.get("LLM_MAX_ATTEMPTS", "3"))
@@ -267,27 +282,34 @@ def handler(event: dict, context: DurableContext) -> dict:
 
         # Stage 1: Sanitize
         sanitized = context.step(lambda _: sanitize(idea_text), name="sanitize")
+        _set_stage(report_id, "sanitize")
 
         # Stage 2: Parse
         parsed = context.step(lambda _: parse(sanitized["cleaned_idea"]), name="parse")
+        _set_stage(report_id, "parse")
 
         # Stage 3: Search
         search_results = context.step(lambda _: search(parsed), name="search")
+        _set_stage(report_id, "search")
 
         # Stage 4: Analyse
         analysis = context.step(lambda _: analyse(parsed, search_results), name="analyse")
+        _set_stage(report_id, "analyse")
 
         # Stage 5: Score
         scores = context.step(lambda _: score(analysis, search_results), name="score")
+        _set_stage(report_id, "score")
 
         # Stage 6: Summarise
         summary = context.step(lambda _: summarise(analysis, scores, parsed), name="summarise")
+        _set_stage(report_id, "summarise")
 
         # Stage 7: Assemble
         result = context.step(
             lambda _: assemble(parsed, search_results, analysis, scores, summary),
             name="assemble",
         )
+        _set_stage(report_id, "assemble")
 
         # Write final result to DynamoDB
         now = datetime.utcnow().isoformat()

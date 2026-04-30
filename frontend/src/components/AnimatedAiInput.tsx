@@ -63,16 +63,17 @@ export interface AnimatedAiInputProps {
   placeholder: string;
   /** Submit enabled when trimmed length is greater than this (default 4 → need 5+ chars). */
   minChars?: number;
+  /** Compact mode: thinner bar for the workspace bottom rail. */
+  compact?: boolean;
 }
-
-const MIN_H = 72;
-const MAX_H = 280;
 
 const AnimatedAiInput = forwardRef<HTMLTextAreaElement, AnimatedAiInputProps>(
   function AnimatedAiInput(
-    { value, onChange, onSubmit, placeholder, minChars = 4 },
+    { value, onChange, onSubmit, placeholder, minChars = 4, compact = false },
     forwardedRef,
   ) {
+    const MIN_H = compact ? 44 : 72;
+    const MAX_H = compact ? 180 : 280;
     const { textareaRef, adjustHeight } = useAutoResizeTextarea(MIN_H, MAX_H);
     const [selectedId, setSelectedId] = useState<ModelId>(AI_MODELS[0].id);
     const detailsRef = useRef<HTMLDetailsElement>(null);
@@ -113,7 +114,7 @@ const AnimatedAiInput = forwardRef<HTMLTextAreaElement, AnimatedAiInputProps>(
     };
 
     return (
-      <div className="ai-input">
+      <div className={`ai-input${compact ? ' ai-input--compact' : ''}`}>
         <div className="ai-input__body">
           <textarea
             ref={setRefs}
@@ -121,13 +122,13 @@ const AnimatedAiInput = forwardRef<HTMLTextAreaElement, AnimatedAiInputProps>(
             className="ai-input__textarea"
             value={value}
             placeholder={placeholder}
-            rows={2}
+            rows={compact ? 1 : 2}
             onChange={e => {
               onChange(e.target.value);
               adjustHeight();
             }}
             onKeyDown={onKeyDown}
-            autoFocus
+            autoFocus={!compact}
             spellCheck
           />
         </div>
@@ -189,11 +190,11 @@ const AnimatedAiInput = forwardRef<HTMLTextAreaElement, AnimatedAiInputProps>(
           <button
             type="button"
             className="ai-input__send"
-            aria-label="Analyze"
+            aria-label={compact ? 'Send' : 'Analyze'}
             disabled={!canSubmit}
             onClick={fireSubmit}
           >
-            <span className="ai-input__send-label">Analyze</span>
+            {!compact && <span className="ai-input__send-label">Analyze</span>}
             <ArrowRight className="ai-input__send-arrow" aria-hidden />
           </button>
         </div>

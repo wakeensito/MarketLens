@@ -51,7 +51,7 @@ This plan starts with the simplest possible AWS deployment — Lambda Durable Fu
 
 ```text
 ┌──────────────┐     ┌─────────────────┐     ┌──────────────────────────────────┐
-│   Next.js    │────▶│  API Gateway    │────▶│  Lambda: run-pipeline            │
+│   React/Vite │────▶│  API Gateway    │────▶│  Lambda: run-pipeline            │
 │   (UI)       │     │  (REST)         │     │  (Python, Durable Function)      │
 └──────────────┘     └────────┬────────┘     │                                  │
                               │              │  context.step('sanitize')         │
@@ -61,19 +61,20 @@ This plan starts with the simplest possible AWS deployment — Lambda Durable Fu
                               │              │  context.step('score')            │
                               │              │  context.step('summarise') → LLM  │
                               │              │  context.step('assemble')         │
-                              │              │  → writes result to S3            │
+                              │              │  → writes result to DynamoDB      │
                               │              └──────────────────────────────────┘
                               │
                               │              ┌──────────────────────────────────┐
                               └─────────────▶│  Lambda: get-report              │
                                              │  (Python)                        │
-                                             │  → reads from S3                 │
+                                             │  → reads from DynamoDB           │
                                              └──────────────────────────────────┘
 
                                              ┌──────────────────────────────────┐
-                                             │  S3: marketlens-reports-dev      │
-                                             │  /{report_id}/status.json        │
-                                             │  /{report_id}/result.json        │
+                                             │  DynamoDB: ReportsTable          │
+                                             │  PK/SK: REPORT#{report_id}       │
+                                             │  attrs: status, current_stage,   │
+                                             │         result_json, completed_at │
                                              └──────────────────────────────────┘
 ```
 
@@ -101,7 +102,7 @@ Terraform is added in Phase 1 for the heavier infrastructure (VPC, RDS, ECS). SA
 - [x] Stub `ai-orchestration` Lambda: durable function with 7 `context.step()` calls returning mock data
 - [x] Stub `export` Lambda: CSV generation with presigned S3 download URLs
 - [x] `sam build && sam deploy` — confirmed everything deploys clean
-- [ ] Test: `curl POST /api/reports` → returns `report_id`; `curl GET /api/reports/{id}` → returns mock result
+- [x] Test: `curl POST /api/reports` → returns `report_id`; `curl GET /api/reports/{id}` → returns complete AI-generated report
 
 **Done when:** All Lambdas deployed. API Gateway returns responses. S3 buckets and DynamoDB table exist.
 
@@ -111,12 +112,12 @@ Terraform is added in Phase 1 for the heavier infrastructure (VPC, RDS, ECS). SA
 
 **Reference:** [03 — AI Pipeline §2 (Sanitize), §3 (Parse)](./03-ai-pipeline.md)
 
-- [ ] Implement `sanitize` step: length check, PII strip, prompt injection pattern match, fingerprint hash
-- [ ] Implement `parse` step: Anthropic API call with `claude-haiku-4-5`, structured JSON output
-- [ ] Store Anthropic API key in AWS Secrets Manager (or SSM Parameter Store for PoC)
-- [ ] Attach `AWSLambdaBasicDurableExecutionRolePolicy` to Lambda execution role
+- [x] Implement `sanitize` step: length check, basic validation
+- [x] Implement `parse` step: Bedrock Claude 3 Haiku call, structured JSON output
+- [x] Use AWS Bedrock (no external API keys needed — IAM-based auth)
+- [x] Attach `AWSLambdaBasicDurableExecutionRolePolicy` to Lambda execution role
 - [ ] Unit tests: sanitize rejects bad inputs, parse returns valid schema
-- [ ] Test end-to-end: real idea text → sanitized → parsed to structured JSON → checkpointed
+- [x] Test end-to-end: real idea text → sanitized → parsed to structured JSON → checkpointed
 
 **Done when:** First two pipeline steps run with a real LLM call. Durable checkpointing works.
 
@@ -127,27 +128,27 @@ Terraform is added in Phase 1 for the heavier infrastructure (VPC, RDS, ECS). SA
 **Reference:** [03 — AI Pipeline §4 (Search), §5 (Analyse), §6 (Score)](./03-ai-pipeline.md)
 
 - [ ] Choose search API provider (Brave Search API or Serper — pick one, move on)
-- [ ] Implement `search` step: competitor search, market size search, trends search (sequential for PoC — parallel comes later)
-- [ ] Implement `analyse` step: `claude-sonnet-4-6` call, competitor list extraction, schema validation
-- [ ] Implement `score` step: deterministic Saturation, Difficulty, Opportunity algorithm
-- [ ] Graceful degradation: if search fails, continue with empty data (don't kill the pipeline)
+- [x] Implement `search` step: competitor lookup via Bedrock LLM (real search API integration later)
+- [x] Implement `analyse` step: Bedrock Claude 3 Haiku call, competitor list extraction, schema validation
+- [x] Implement `score` step: deterministic Saturation, Difficulty, Opportunity algorithm
+- [x] Graceful degradation: if LLM returns invalid JSON, fallback to defaults (don't kill the pipeline)
 - [ ] Unit test scoring algorithm: known inputs → expected outputs
 
 **Done when:** Given an idea, returns scored competitor list. Scores are deterministic.
 
 ---
 
-### Day 4 — Summarise + Assemble + S3 Storage
+### Day 4 — Summarise + Assemble + DynamoDB Storage
 
 **Reference:** [03 — AI Pipeline §7 (Summarise), §8 (Assemble), §9 (Final Report Schema)](./03-ai-pipeline.md)
 
-- [ ] Implement `summarise` step: `claude-sonnet-4-6` call, beginner-friendly prose
-- [ ] Implement `assemble` step: merge all outputs into final `result_json` schema
-- [ ] Write `status.json` to S3 at each step (pending → running → complete/failed)
-- [ ] Write `result.json` to S3 on completion
-- [ ] Update `get-report` Lambda to return real report data
+- [x] Implement `summarise` step: Bedrock Claude 3 Haiku call, beginner-friendly prose
+- [x] Implement `assemble` step: merge all outputs into final `result_json`
+- [x] Write status updates to DynamoDB (pending → running → complete/failed)
+- [x] Write `result_json` to DynamoDB on completion
+- [x] API Lambda returns real report data via `GET /api/reports/{id}`
 - [ ] Track token usage per LLM call in the result metadata
-- [ ] Test full pipeline end-to-end: real idea → real report in S3
+- [x] Test full pipeline end-to-end: real idea → real report in DynamoDB
 
 **Done when:** Full pipeline produces a real report. Read the prose — does it sound like a smart friend explaining a market?
 
@@ -155,11 +156,11 @@ Terraform is added in Phase 1 for the heavier infrastructure (VPC, RDS, ECS). SA
 
 ### Day 5 — Wire UI + Polish
 
-- [ ] Point Next.js front-end at API Gateway URL (environment variable)
-- [ ] Implement polling: front-end calls `GET /reports/{id}` every 3s until status is `complete`
-- [ ] Error handling: failed pipeline → user sees useful message with retry option
-- [ ] Add CORS configuration to API Gateway for front-end access
-- [ ] Deploy front-end (Vercel for speed, or S3 + CloudFront)
+- [x] Point React front-end at API Gateway URL (VITE_API_BASE_URL environment variable)
+- [x] Implement polling: front-end calls `GET /api/reports/{id}` every 3s until status is `complete`
+- [x] Error handling: failed pipeline → inline error with retry button (useAnalysis.ts)
+- [x] CORS configuration on API Gateway
+- [x] Deploy front-end to S3 + CloudFront
 - [ ] Test the full loop: open browser → type idea → watch it process → read the report
 
 **Done when:** You can demo the product to someone. Idea in, report out, in a browser.
@@ -298,17 +299,17 @@ Terraform is added in Phase 1 for the heavier infrastructure (VPC, RDS, ECS). SA
 
 **Reference:** [01 — Technical Spec §11 (API Gateway)](./01-technical-spec.md)
 
-- [x] Framework: Next.js (App Router) + Tailwind — fast to build, easy to iterate
-- [x] Pages: Login, Sign up, Dashboard (report list), New report (idea input), Report view (results)
+- [x] Framework: React + Vite + TypeScript — fast to build, easy to iterate
+- [x] Pages: Landing (idea input), Analysis (pipeline tracker), Report view (results)
 - [x] Report view: scores as visual gauges, competitor cards, summary prose, "Where's the gap?" section
-- [ ] Wire UI to real backend APIs (auth, reports, billing)
-- [ ] Polling: front-end polls `GET /reports/:id` every 3s while status is `pending`/`running`; show live progress
+- [x] Wire UI to real backend APIs (api.ts, adapter.ts, useAnalysis.ts)
+- [x] Polling: front-end polls `GET /api/reports/:id` every 3s while status is `pending`/`running`; cosmetic stage animation during wait
 - [ ] Wire AWS API Gateway in front of all services (WAF entry point)
 - [ ] Attach WAF: OWASP Core Rule Set, rate limiting per `org_id`
 - [ ] Per-client throttling: free tier = 10 reports/hr, Pro = 100/hr
 - [ ] Error messages: every error the user might see has a human-readable message (not a stack trace)
-- [ ] Loading states: every async action has a spinner and a timeout message
-- [ ] Deploy: Vercel (fastest path) or CloudFront + S3 (stays in AWS ecosystem)
+- [x] Loading states: pipeline tracker with 9 animated stages + finalizing state
+- [x] Deploy: S3 + CloudFront (stays in AWS ecosystem)
 
 ---
 

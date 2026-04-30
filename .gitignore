@@ -9,6 +9,7 @@
 
 # Local test env vars
 events/env.json
+frontend/.env
 
 # IDE / Editor
 .claude/

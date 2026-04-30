@@ -1,63 +1,45 @@
 const ENV_BASE = (import.meta.env.VITE_API_BASE_URL ?? '').trim();
-const BASE =
-  (ENV_BASE ? ENV_BASE.replace(/\/$/, '') : '') ||
-  (typeof window !== 'undefined' ? `${window.location.origin}/dev` : '/dev');
+const BASE = ENV_BASE ? ENV_BASE.replace(/\/$/, '') : '';
 
 export interface BackendCompetitor {
   name: string;
-  url: string;
-  one_line_description: string;
-  target_segment: 'enterprise' | 'mid_market' | 'smb' | 'prosumer' | 'consumer' | 'unknown';
-  pricing_tier: 'free' | 'low' | 'mid' | 'high' | 'enterprise' | 'unknown';
-  stage: 'bootstrapped' | 'seed' | 'series_a_b' | 'series_c_plus' | 'public' | 'acquired' | 'unknown';
-  notable_strengths: string[];
-  notable_weaknesses: string[];
+  strength: string;
+  weakness: string;
+  market_position: string;
+}
+
+export interface BackendGap {
+  title: string;
+  description: string;
+}
+
+export interface BackendRoadmapPhase {
+  phase: string;
+  title: string;
+  description: string;
+}
+
+export interface BackendKeyStat {
+  label: string;
+  value: string;
 }
 
 export interface ResultJson {
-  schema_version: string;
-  input: { idea_text: string; fingerprint: string };
-  parsed: {
-    industry: string;
-    sub_industry: string;
-    business_model: string;
-    target_customer: string;
-    geography: string;
-    keywords: string[];
-    estimated_complexity: 'low' | 'medium' | 'high';
-  };
-  competitors: {
-    direct: BackendCompetitor[];
-    adjacent: BackendCompetitor[];
-  };
-  market_size: {
-    tam_usd: number | null;
-    growth_rate_pct: number | null;
-    data_quality: 'high' | 'medium' | 'low' | 'unavailable';
-    source_notes: string;
-  };
-  scores: {
-    saturation:  { value: number; band: string; breakdown?: Record<string, unknown> };
-    difficulty:  { value: number; band: string; breakdown?: Record<string, unknown> };
-    opportunity: { value: number; band: string; breakdown?: Record<string, unknown> };
-  };
-  summary: {
-    executive_summary: string;
-    where_is_the_gap: string;
-    what_would_it_take: {
-      capital_estimate: string;
-      timeline_to_first_revenue: string;
-      key_differentiator_required: string;
-      biggest_risk: string;
-    };
-  };
-  metadata: {
-    model_versions_used: Record<string, string>;
-    total_tokens: { input: number; output: number };
-    duration_ms: number;
-    warnings: string[];
-    degraded: boolean;
-  };
+  vertical: string;
+  oneliner: string;
+  saturation_score: number | string;
+  saturation_label: string;
+  difficulty_score: number | string;
+  opportunity_score: number | string;
+  market_size: string;
+  geography: string;
+  business_model: string;
+  trend_signal: string;
+  recommendation: string;
+  competitors: BackendCompetitor[];
+  gaps: BackendGap[];
+  roadmap: BackendRoadmapPhase[];
+  key_stats: BackendKeyStat[];
 }
 
 export interface ApiReport {
@@ -67,6 +49,7 @@ export interface ApiReport {
   created_at: string;
   completed_at?: string;
   result_json?: ResultJson;
+  current_stage?: string;
   pk?: string;
   sk?: string;
   gsi1pk?: string;
