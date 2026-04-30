@@ -22,12 +22,10 @@ export interface MarketStat {
 
 export interface Competitor {
   name: string;
-  tagline: string;
-  funding: string;
-  founded: number;
-  userBase: string;
   strength: 'dominant' | 'strong' | 'moderate' | 'niche';
-  category: string;
+  strengthText: string;
+  weaknessText: string;
+  marketPosition: string;
 }
 
 export interface MarketGap {

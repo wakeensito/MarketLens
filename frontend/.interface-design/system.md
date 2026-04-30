@@ -113,6 +113,70 @@ Never mix speeds within a single element's transition. Slower feels heavier; fas
 
 ---
 
+## Radius Scale
+
+```
+--radius-sm    3px      table header corners, category tags, gap/accent tags
+--radius-md    4px      ghost/export/retry buttons, stat cards, mini pipeline cards
+--radius-lg    6px      score card, error strip, bottom tinted cards
+--radius-full  9999px   nav badge, landing pills, scrollbar thumb
+```
+
+**Input system uses intentionally larger values** — do not apply to other UI:
+```
+16px   main AI input container
+12px   compact AI input
+10px   send/submit button
+8px    model selector trigger, dropdown menu items, attach button
+```
+
+---
+
+## Button Patterns
+
+```
+Primary (send/CTA)
+  height 36px  |  padding 0 16px 0 18px  |  radius 10px
+  bg --accent  |  color --text-inverse  |  font-body 12px/700 uppercase 0.08em
+  hover: --accent-hover + box-shadow 0 0 28px --accent/0.35
+  disabled: opacity 0.32
+
+Ghost (header actions, "New analysis")
+  height 32px  |  padding 0 12px  |  radius --radius-md
+  border 1px --border  |  color --text-secondary  |  font-body 12px/500
+  hover: --border-mid border, --text color, --surface-alt bg
+
+Action (export, retry, secondary)
+  height 32px  |  padding 0 14px  |  radius --radius-md
+  uses surface or accent-light bg depending on context  |  font 12px/500–600
+
+Landing pill (example suggestions)
+  height 30px  |  padding 0 12px  |  radius --radius-full
+  border 1px --border-mid  |  bg --surface  |  color --text-secondary
+  hover: accent-border + accent color + accent-light bg
+
+Badge (nav, metadata labels)
+  padding 4px 8px  |  radius --radius-full  |  font-mono 10px/500 uppercase
+  uses accent color on accent-light bg
+```
+
+---
+
+## Status Encoding
+
+Used consistently across pipeline stages, strength indicators, score states, and semantic feedback:
+
+```
+done / success / low saturation (≤40)    --success   cyan-teal
+running / active / focus                 --accent    electric blue
+warning / moderate saturation (41–65)    --warning   amber
+error / failed / high saturation (>65)   --danger    coral-red
+pending / neutral / disabled             --text-muted + --border-mid
+special signal / gap score / brief ID    --signal    violet
+```
+
+---
+
 ## Depth Strategy: Borders-only + Glow
 
 - No box-shadows on cards or surfaces
@@ -211,3 +275,20 @@ Running stage: `border-left: 2px solid --accent`, sky blue bg wash `oklch(76% 0.
 ### Score Card
 `score-card--low/mid/high`: 3px top border in success/warning/danger.
 Score number color via `scoreColor()` in `SaturationGauge.tsx` — not `--text`.
+
+### Interactive Row (left-accent-on-hover)
+Used on gap rows and roadmap phases. Do not use on table rows (they use bg only).
+```css
+border-left: 2px solid transparent;
+padding-left: 0;
+transition: background 0.15s, border-color 0.15s;
+:hover { background: --surface-alt; border-left-color: --accent-border; padding-left: 12px; }
+```
+
+---
+
+## File Notes
+
+- `LandingScreen.tsx` — deleted. The landing screen is rendered inline in `App.tsx`.
+  All landing CSS lives in `index.css` under `.lnd-*`, `.orb-*`, and `.cursor-glow` classes.
+  Do not recreate `LandingScreen.tsx` as a separate component.
