@@ -4,7 +4,7 @@ import { PIPELINE_STAGE_DEFS, TOTAL_PIPELINE_MS, MOCK_REPORT } from '../mockData
 import { createReport, getReport } from '../api';
 import { adaptReport } from '../adapter';
 
-const USE_MOCK = !import.meta.env.VITE_API_BASE_URL?.trim();
+const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 
 const POLL_INTERVAL_MS = 3_000;
 const POLL_TIMEOUT_MS  = 120_000;
