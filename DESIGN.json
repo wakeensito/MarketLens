@@ -1,0 +1,148 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-04-30T00:00:00Z",
+  "title": "Design System: MarketScout",
+  "extensions": {
+    "colorMeta": {
+      "void-midnight":    { "role": "neutral",   "displayName": "Void Midnight",    "canonical": "oklch(7% 0.032 245)",  "tonalRamp": ["oklch(7% 0.032 245)", "oklch(12% 0.030 244)", "oklch(17% 0.028 242)", "oklch(22% 0.026 240)", "oklch(32% 0.024 240)", "oklch(46% 0.020 238)", "oklch(68% 0.012 230)", "oklch(95% 0.006 220)"] },
+      "ink-surface":      { "role": "neutral",   "displayName": "Ink Surface",       "canonical": "oklch(12% 0.030 244)", "tonalRamp": ["oklch(7% 0.032 245)", "oklch(12% 0.030 244)", "oklch(17% 0.028 242)", "oklch(22% 0.026 240)", "oklch(32% 0.024 240)", "oklch(46% 0.020 238)", "oklch(68% 0.012 230)", "oklch(95% 0.006 220)"] },
+      "ionosphere-blue":  { "role": "primary",   "displayName": "Ionosphere Blue",   "canonical": "oklch(76% 0.22 215)",  "tonalRamp": ["oklch(15% 0.08 215)", "oklch(25% 0.12 215)", "oklch(35% 0.16 215)", "oklch(45% 0.18 215)", "oklch(55% 0.20 215)", "oklch(65% 0.21 215)", "oklch(76% 0.22 215)", "oklch(87% 0.16 215)"] },
+      "scanner-violet":   { "role": "secondary", "displayName": "Scanner Violet",    "canonical": "oklch(74% 0.28 300)",  "tonalRamp": ["oklch(15% 0.10 300)", "oklch(25% 0.15 300)", "oklch(35% 0.20 300)", "oklch(45% 0.22 300)", "oklch(55% 0.25 300)", "oklch(65% 0.26 300)", "oklch(74% 0.28 300)", "oklch(86% 0.18 300)"] },
+      "clearance-teal":   { "role": "tertiary",  "displayName": "Clearance Teal",    "canonical": "oklch(72% 0.20 168)",  "tonalRamp": ["oklch(15% 0.08 168)", "oklch(25% 0.12 168)", "oklch(35% 0.14 168)", "oklch(45% 0.16 168)", "oklch(55% 0.18 168)", "oklch(65% 0.19 168)", "oklch(72% 0.20 168)", "oklch(86% 0.14 168)"] },
+      "caution-amber":    { "role": "tertiary",  "displayName": "Caution Amber",     "canonical": "oklch(80% 0.18 68)",   "tonalRamp": ["oklch(15% 0.06 68)", "oklch(25% 0.10 68)", "oklch(35% 0.12 68)", "oklch(50% 0.15 68)", "oklch(62% 0.16 68)", "oklch(72% 0.17 68)", "oklch(80% 0.18 68)", "oklch(91% 0.12 68)"] },
+      "risk-coral":       { "role": "tertiary",  "displayName": "Risk Coral",        "canonical": "oklch(68% 0.22 22)",   "tonalRamp": ["oklch(15% 0.08 22)", "oklch(25% 0.12 22)", "oklch(35% 0.15 22)", "oklch(50% 0.18 22)", "oklch(60% 0.20 22)", "oklch(68% 0.22 22)", "oklch(80% 0.16 22)", "oklch(90% 0.10 22)"] },
+      "frost-white":      { "role": "neutral",   "displayName": "Frost White",       "canonical": "oklch(95% 0.006 220)", "tonalRamp": ["oklch(7% 0.032 245)", "oklch(22% 0.026 240)", "oklch(36% 0.020 235)", "oklch(48% 0.012 235)", "oklch(60% 0.010 228)", "oklch(72% 0.008 224)", "oklch(85% 0.007 220)", "oklch(95% 0.006 220)"] }
+    },
+    "typographyMeta": {
+      "display":  { "displayName": "Display",  "purpose": "Report titles and named analysis section headers." },
+      "headline": { "displayName": "Headline", "purpose": "Verdict statements — the single italic conclusive sentence above each report's scoring." },
+      "title":    { "displayName": "Title",    "purpose": "Pipeline section title and intermediate section names." },
+      "body":     { "displayName": "Body",     "purpose": "All descriptive analysis copy. Max-width 580–640px." },
+      "label":    { "displayName": "Label",    "purpose": "System-generated metadata: section numbers, timestamps, IDs, counts. Always UPPERCASE." }
+    },
+    "shadows": [
+      { "name": "focus-glow",    "value": "0 0 50px oklch(76% 0.22 215 / 0.12)",                                                            "purpose": "AI input field on focus. Diffuse, not structural." },
+      { "name": "stage-active",  "value": "0 0 14px oklch(76% 0.22 215 / 0.40)",                                                            "purpose": "Pipeline stage indicator dot when stage is running." },
+      { "name": "send-btn-glow", "value": "0 0 28px oklch(76% 0.22 215 / 0.35)",                                                            "purpose": "Primary send/analyse button on hover." },
+      { "name": "stat-card-3d",  "value": "6px 8px 20px oklch(7% 0.032 245 / 0.55), inset 0 1px 0 oklch(100% 0 0 / 0.04)",                 "purpose": "Stat card 3D tilt on hover. Only component that uses a lift shadow." },
+      { "name": "menu-float",    "value": "0 8px 32px oklch(7% 0.032 245 / 0.65), 0 0 0 1px oklch(76% 0.22 215 / 0.08)",                   "purpose": "Floating dropdown menus and popover surfaces." }
+    ],
+    "motion": [
+      { "name": "ease-out-standard", "value": "cubic-bezier(0, 0, 0.2, 1)", "purpose": "Default for all reveals, state transitions, and hover interactions. No bounce, no elastic." },
+      { "name": "duration-reveal",   "value": "350–450ms",                  "purpose": "Viewport-triggered content reveals (fadeUp). Never exceed 400ms." },
+      { "name": "duration-state",    "value": "120–200ms",                  "purpose": "Hover/focus state transitions on interactive elements." },
+      { "name": "stagger-default",   "value": "70ms",                       "purpose": "Stagger between list items entering view." },
+      { "name": "count-up",          "value": "700ms, cubic-ease-out",      "purpose": "Score count-up animation (RAF loop). Data-driven; the one exception to the 400ms cap." }
+    ],
+    "breakpoints": [
+      { "name": "mobile",  "value": "480px", "purpose": "Narrow phones. Hide decorative header chrome (badge, query label). Single-column stats grid." },
+      { "name": "compact", "value": "680px", "purpose": "Small screens. Switch competitor table to card layout. Collapse report hero to 1-column. Stack roadmap phases." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The dominant action control. Analyse / Send. Appears once per view.",
+      "html": "<button class=\"ds-btn-primary\">Analyse <svg class=\"ds-btn-arrow\" width=\"14\" height=\"14\" viewBox=\"0 0 16 16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><line x1=\"2\" y1=\"8\" x2=\"14\" y2=\"8\"/><polyline points=\"8 2 14 8 8 14\"/></svg></button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px 0 18px; border: none; border-radius: 10px; background: oklch(76% 0.22 215); color: oklch(7% 0.032 245); font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: background 0.15s, box-shadow 0.15s; } .ds-btn-primary:hover { background: oklch(82% 0.20 215); box-shadow: 0 0 28px oklch(76% 0.22 215 / 0.35); } .ds-btn-primary:disabled { opacity: 0.32; cursor: not-allowed; box-shadow: none; } .ds-btn-arrow { width: 14px; height: 14px; flex-shrink: 0; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Secondary actions: Export CSV, back navigation, header utilities.",
+      "html": "<button class=\"ds-btn-ghost\">Export CSV</button>",
+      "css": ".ds-btn-ghost { display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 12px; border-radius: 4px; border: 1px solid oklch(22% 0.028 242); background: oklch(12% 0.030 244); color: oklch(68% 0.012 230); font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; font-weight: 500; cursor: pointer; transition: border-color 0.15s, color 0.15s, background 0.15s; } .ds-btn-ghost:hover { border-color: oklch(32% 0.024 240); color: oklch(95% 0.006 220); background: oklch(17% 0.028 242); } .ds-btn-ghost:active { opacity: 0.7; }"
+    },
+    {
+      "name": "AI Input Field",
+      "kind": "input",
+      "refersTo": null,
+      "description": "The primary idea-entry surface. Glassmorphic, left-accent-bordered, toolbar-docked.",
+      "html": "<div class=\"ds-input-ai\"><textarea class=\"ds-input-textarea\" placeholder=\"e.g. AI-powered fitness coaching app for Gen Z…\" rows=\"2\"></textarea><div class=\"ds-input-toolbar\"><button class=\"ds-input-send\">Analyse →</button></div></div>",
+      "css": ".ds-input-ai { width: 100%; background: oklch(12% 0.030 244 / 0.78); backdrop-filter: blur(24px) saturate(160%); border-radius: 16px; border: 1px solid oklch(76% 0.22 215 / 0.22); border-left: 3px solid oklch(76% 0.22 215); box-shadow: 0 0 0 1px oklch(76% 0.22 215 / 0.08), 0 4px 24px oklch(7% 0.032 245 / 0.7); transition: border-color 0.2s, box-shadow 0.2s; } .ds-input-ai:focus-within { border-color: oklch(76% 0.22 215 / 0.55); box-shadow: 0 0 0 1px oklch(76% 0.22 215 / 0.16), 0 0 50px oklch(76% 0.22 215 / 0.12), 0 4px 24px oklch(7% 0.032 245 / 0.7); } .ds-input-textarea { display: block; width: 100%; padding: 14px 18px 10px; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 15px; font-weight: 400; color: oklch(95% 0.006 220); background: transparent; border: none; outline: none; resize: none; line-height: 1.55; } .ds-input-textarea::placeholder { color: oklch(48% 0.012 235); } .ds-input-toolbar { display: flex; justify-content: flex-end; padding: 8px 12px 12px; background: oklch(10% 0.028 244 / 0.65); border-top: 1px solid oklch(22% 0.028 242); border-radius: 0 0 14px 14px; } .ds-input-send { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 16px 0 18px; border: none; border-radius: 10px; background: oklch(76% 0.22 215); color: oklch(7% 0.032 245); font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; cursor: pointer; transition: background 0.15s, box-shadow 0.15s; } .ds-input-send:hover { background: oklch(82% 0.20 215); box-shadow: 0 0 28px oklch(76% 0.22 215 / 0.35); }"
+    },
+    {
+      "name": "Chip / Pill",
+      "kind": "chip",
+      "refersTo": "chip-pill",
+      "description": "Example query suggestion buttons on the landing screen.",
+      "html": "<button class=\"ds-chip-pill\">D2C supplements brand</button>",
+      "css": ".ds-chip-pill { height: 30px; padding: 0 12px; border-radius: 9999px; border: 1px solid oklch(32% 0.024 240); background: oklch(12% 0.030 244); color: oklch(68% 0.012 230); font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 12px; font-weight: 400; cursor: pointer; white-space: nowrap; transition: border-color 0.15s, color 0.15s, background 0.15s; } .ds-chip-pill:hover { border-color: oklch(76% 0.22 215 / 0.25); color: oklch(76% 0.22 215); background: oklch(76% 0.22 215 / 0.10); } .ds-chip-pill:active { opacity: 0.7; }"
+    },
+    {
+      "name": "Score Card",
+      "kind": "card",
+      "refersTo": null,
+      "description": "Displays the saturation score. Top border color encodes market status — teal (open), amber (contested), coral (crowded).",
+      "html": "<div class=\"ds-score-card ds-score-card--mid\"><div class=\"ds-score-label\">SATURATION SCORE</div><div class=\"ds-score-number\">58<span class=\"ds-score-denom\">/100</span></div><div class=\"ds-score-status\" style=\"color: oklch(80% 0.18 68)\">Contested</div></div>",
+      "css": ".ds-score-card { background: oklch(12% 0.030 244); border: 1px solid oklch(22% 0.028 242); border-radius: 6px; padding: 24px; } .ds-score-card--low { border-top: 3px solid oklch(72% 0.20 168); padding-top: 22px; } .ds-score-card--mid { border-top: 3px solid oklch(80% 0.18 68); padding-top: 22px; } .ds-score-card--high { border-top: 3px solid oklch(68% 0.22 22); padding-top: 22px; } .ds-score-label { font-family: 'IBM Plex Mono', 'Courier New', monospace; font-size: 10px; font-weight: 700; letter-spacing: 0.10em; text-transform: uppercase; color: oklch(48% 0.012 235); margin-bottom: 16px; } .ds-score-number { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 52px; font-weight: 600; letter-spacing: -0.02em; line-height: 1; color: oklch(95% 0.006 220); margin-bottom: 2px; } .ds-score-denom { font-family: 'IBM Plex Mono', 'Courier New', monospace; font-size: 16px; font-weight: 400; color: oklch(48% 0.012 235); margin-left: 4px; vertical-align: super; } .ds-score-status { font-size: 12px; font-weight: 600; margin-bottom: 14px; }"
+    },
+    {
+      "name": "Stat Card",
+      "kind": "card",
+      "refersTo": null,
+      "description": "Market data stat in a 2x2 grid. The only component with a 3D hover transform.",
+      "html": "<div class=\"ds-stat-card\"><div class=\"ds-stat-label\">MARKET SIZE</div><div class=\"ds-stat-value\">$4.2B</div><div class=\"ds-stat-change ds-stat-change--up\">↑ 18% CAGR</div></div>",
+      "css": ".ds-stat-card { background: oklch(12% 0.030 244); border: 1px solid oklch(22% 0.028 242); border-radius: 4px; padding: 16px 18px; transition: border-color 0.2s, transform 0.25s cubic-bezier(0, 0, 0.2, 1), box-shadow 0.25s cubic-bezier(0, 0, 0.2, 1); transform-style: preserve-3d; } .ds-stat-card:hover { border-color: oklch(76% 0.22 215 / 0.25); transform: perspective(600px) rotateY(4deg) rotateX(-2deg) translateZ(6px); box-shadow: 6px 8px 20px oklch(7% 0.032 245 / 0.55), inset 0 1px 0 oklch(100% 0 0 / 0.04); } .ds-stat-label { font-family: 'IBM Plex Mono', 'Courier New', monospace; font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: oklch(48% 0.012 235); margin-bottom: 6px; } .ds-stat-value { font-family: 'IBM Plex Serif', Georgia, serif; font-size: 20px; font-weight: 600; letter-spacing: -0.015em; color: oklch(95% 0.006 220); margin-bottom: 3px; line-height: 1; } .ds-stat-change { font-family: 'IBM Plex Mono', 'Courier New', monospace; font-size: 11px; } .ds-stat-change--up { color: oklch(72% 0.20 168); } .ds-stat-change--flat { color: oklch(48% 0.012 235); } .ds-stat-change--down { color: oklch(68% 0.22 22); }"
+    },
+    {
+      "name": "Brief Section Header",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "The system's most distinctive pattern. Opens every report section: mono index in accent, dash in border-strong, uppercase label, optional count at right.",
+      "html": "<div class=\"ds-brief-header\"><span class=\"ds-brief-num\">01</span><span class=\"ds-brief-dash\">—</span><span class=\"ds-brief-name\">COMPETITORS</span><span class=\"ds-brief-count\">6 found</span></div>",
+      "css": ".ds-brief-header { display: flex; align-items: baseline; gap: 8px; padding-bottom: 12px; border-bottom: 1px solid oklch(22% 0.028 242); margin-bottom: 20px; } .ds-brief-num { font-family: 'IBM Plex Mono', 'Courier New', monospace; font-size: 10px; font-weight: 700; color: oklch(76% 0.22 215); letter-spacing: 0.06em; flex-shrink: 0; } .ds-brief-dash { font-family: 'IBM Plex Mono', 'Courier New', monospace; font-size: 11px; color: oklch(46% 0.020 238); flex-shrink: 0; } .ds-brief-name { font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: oklch(68% 0.012 230); flex: 1; } .ds-brief-count { font-family: 'IBM Plex Mono', 'Courier New', monospace; font-size: 10px; color: oklch(48% 0.012 235); margin-left: auto; white-space: nowrap; }"
+    },
+    {
+      "name": "Gap Tag",
+      "kind": "chip",
+      "refersTo": "gap-tag",
+      "description": "Inline market category tags on opportunity gaps. Accent-tinted, small.",
+      "html": "<span class=\"ds-gap-tag\">B2B SaaS</span>",
+      "css": ".ds-gap-tag { display: inline-block; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 3px; background: oklch(76% 0.22 215 / 0.10); color: oklch(76% 0.22 215); border: 1px solid oklch(76% 0.22 215 / 0.25); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Intelligence Brief",
+    "overview": "MarketScout looks like a professional research deliverable, not a SaaS product. Every screen is structured like an analyst's output — numbered sections, dense tables, conclusions before evidence. A founder who opens a report should feel like they're reading something prepared for them by someone who did the work, not like they're using a dashboard.\n\nThe system earns trust through restraint. The deep midnight blue environment sets a focused, low-distraction canvas. The electric sky blue accent (Ionosphere Blue) marks every interactive element, focus state, and running process — its rarity signals importance. The scanner violet (Signal) is reserved for a single role: opportunity scores. No other element shares that hue. Color is communication here, not decoration.\n\nMotion is controlled and intentional. Data cards lift and tilt on hover to acknowledge presence — not to animate for its own sake. Stage indicators glow when active. Reveals stagger as content enters view. Nothing runs longer than 400ms unless it's a data-driven count-up. The product feels fast because every transition earns its place.",
+    "keyCharacteristics": [
+      "Dark environment (void midnight canvas), not dark-as-aesthetic but dark-as-focus",
+      "Monospaced section numbering and metadata strips that read like a file system",
+      "Progressive tonal depth: void-midnight → ink-surface → surface-raised, no shadows at rest",
+      "Two accent roles: Ionosphere Blue (interaction) and Scanner Violet (opportunity/signal), never mixed",
+      "IBM Plex type family throughout — Serif for display and verdicts, Sans for body, Mono for metadata and counts",
+      "State feedback that is tactile but controlled: 3D tilts, focus glows, accent left-borders on hover rows"
+    ],
+    "rules": [
+      { "name": "The Two Accent Rule",       "body": "Ionosphere Blue is interaction. Scanner Violet is scoring. These two roles never share a color, and no other roles borrow from either hue.",                                         "section": "colors" },
+      { "name": "The Dark Tint Rule",        "body": "Every neutral surface in this system is tinted toward hue 240–245. There is no true-black or pure-grey anywhere. The blue shift unifies the palette.",                         "section": "colors" },
+      { "name": "The Italic Verdict Rule",   "body": "IBM Plex Serif italic appears in exactly one place: the verdict statement. It signals judgment. Applying italic to any other element breaks the signal.",                      "section": "typography" },
+      { "name": "The Mono-for-Data Rule",    "body": "If a number or label comes from the system (timestamps, counts, scores, IDs), it uses IBM Plex Mono. If it comes from the AI or the user, it uses Sans or Serif.",           "section": "typography" },
+      { "name": "The Flat-By-Default Rule",  "body": "Surfaces are flat at rest. If a shadow appears on initial render, it is wrong. Shadows enter only as a response to user action (hover, focus, active pipeline state).",       "section": "elevation" }
+    ],
+    "dos": [
+      "Do use IBM Plex Mono for all system-generated data: timestamps, counts, section numbers, IDs, elapsed timers.",
+      "Do use the tonal surface ladder (void-midnight → ink-surface → surface-raised) to communicate hierarchy.",
+      "Do limit Ionosphere Blue to interactive and active states — its rarity is the signal.",
+      "Do reserve Scanner Violet for opportunity scores only.",
+      "Do use semantic color (teal/amber/coral) to encode market saturation on score cards via the top border.",
+      "Do keep body copy max-width at 580–640px.",
+      "Do use the brief-section-header pattern for every report section.",
+      "Do apply prefers-reduced-motion to all Framer Motion animations."
+    ],
+    "donts": [
+      "Don't use gradient text on any UI copy or labels. The wordmark logo is the sole exception.",
+      "Don't build generic SaaS dashboard surfaces: pastel cards, excessive border-radius, icon + heading + body card grids.",
+      "Don't use a chat-bubble or conversational framing for any part of the analysis flow.",
+      "Don't add confetti, gradient CTAs, progress celebrations, or growth-hacker copy patterns.",
+      "Don't use shadows at rest. Elevation is communicated through surface tint and borders.",
+      "Don't reuse Scanner Violet outside gap/opportunity scores.",
+      "Don't apply the 3D tilt transform to anything other than stat data cards.",
+      "Don't introduce a fourth typeface or use system-ui serif as a display face.",
+      "Don't animate layout properties (width, height, top, left). All motion uses opacity, transform, and filter only."
+    ]
+  }
+}

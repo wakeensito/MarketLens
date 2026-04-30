@@ -90,10 +90,9 @@ function CompetitorTable({ competitors }: { competitors: Competitor[] }) {
       <thead>
         <tr>
           <th>Company</th>
-          <th>Category</th>
-          <th>Funding</th>
-          <th>User Base</th>
-          <th>Presence</th>
+          <th>Strength</th>
+          <th>Weakness</th>
+          <th>Market Position</th>
         </tr>
       </thead>
       <tbody>
@@ -110,20 +109,46 @@ function CompetitorTable({ competitors }: { competitors: Competitor[] }) {
                 <div className="comp-avatar" style={{ background: AVATAR_COLORS[i % AVATAR_COLORS.length] }}>
                   {c.name.slice(0, 2).toUpperCase()}
                 </div>
-                <div>
-                  <span className="comp-name">{c.name}</span>
-                  <span className="comp-tagline">{c.tagline}</span>
-                </div>
+                <span className="comp-name">{c.name}</span>
               </div>
             </td>
-            <td><span className="comp-category-tag">{c.category}</span></td>
-            <td><span className="comp-mono">{c.funding}</span></td>
-            <td><span className="comp-mono">{c.userBase}</span></td>
+            <td><span className="comp-text">{c.strengthText}</span></td>
+            <td><span className="comp-text comp-text--muted">{c.weaknessText}</span></td>
             <td><StrengthIndicator strength={c.strength} /></td>
           </motion.tr>
         ))}
       </tbody>
     </table>
+  );
+}
+
+function CompetitorCard({ c, index }: { c: Competitor; index: number }) {
+  return (
+    <motion.div
+      className={`comp-card comp-card--${c.strength}`}
+      initial={{ opacity: 0, y: 8 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={VIEWPORT}
+      transition={{ duration: 0.35, ease: 'easeOut' as const, delay: index * 0.06 }}
+    >
+      <div className="comp-card-header">
+        <div className="comp-avatar comp-avatar--sm" style={{ background: AVATAR_COLORS[index % AVATAR_COLORS.length] }}>
+          {c.name.slice(0, 2).toUpperCase()}
+        </div>
+        <span className="comp-card-name">{c.name}</span>
+        <StrengthIndicator strength={c.strength} />
+      </div>
+      <div className="comp-card-body">
+        <div className="comp-card-field comp-card-field--strength">
+          <span className="comp-card-field-label">Strength</span>
+          <span className="comp-card-field-value">{c.strengthText}</span>
+        </div>
+        <div className="comp-card-field comp-card-field--weakness">
+          <span className="comp-card-field-label">Weakness</span>
+          <span className="comp-card-field-value comp-card-field-value--muted">{c.weaknessText}</span>
+        </div>
+      </div>
+    </motion.div>
   );
 }
 
@@ -169,9 +194,11 @@ function GapRow({ gap, index }: { gap: MarketGap; index: number }) {
         <div className="gap-index">Gap {String(index + 1).padStart(2, '0')}</div>
         <div className="gap-title">{gap.title}</div>
         <div className="gap-desc">{gap.description}</div>
-        <div className="gap-tags">
-          {gap.tags.map(t => <span key={t} className="gap-tag">{t}</span>)}
-        </div>
+        {gap.tags.length > 0 && (
+          <div className="gap-tags">
+            {gap.tags.map(t => <span key={t} className="gap-tag">{t}</span>)}
+          </div>
+        )}
       </div>
       <GapScore score={gap.opportunityScore} />
     </motion.div>
@@ -190,10 +217,6 @@ function RoadmapRow({ phase, index }: { phase: RoadmapPhase; index: number }) {
       <div className="roadmap-phase-meta">
         <div className="roadmap-phase-num">Phase {phase.phase}</div>
         <div className="roadmap-phase-title">{phase.title}</div>
-        <div className="roadmap-phase-badges">
-          <span className="roadmap-badge">{phase.timeline}</span>
-          <span className="roadmap-badge">{phase.investment}</span>
-        </div>
       </div>
       <div className="roadmap-milestones">
         {phase.milestones.map((m, i) => (
@@ -289,7 +312,12 @@ export default function ReportView({ report, reportId }: Props) {
             name="Competitive Landscape"
             count={`${report.competitors.length} companies identified`}
           />
-          <CompetitorTable competitors={report.competitors} />
+          <div className="comp-table-desktop table-scroll-wrap">
+            <CompetitorTable competitors={report.competitors} />
+          </div>
+          <div className="comp-cards">
+            {report.competitors.map((c, i) => <CompetitorCard key={c.name} c={c} index={i} />)}
+          </div>
         </div>
       </Reveal>
 

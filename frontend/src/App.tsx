@@ -18,6 +18,9 @@ export default function App() {
   const [phIdx, setPhIdx] = useState(0);
   const shellRef = useRef<HTMLDivElement>(null);
   const isLanding = screen === 'landing';
+  const [isTouchDevice] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches
+  );
 
   useEffect(() => {
     const id = setInterval(() => setPhIdx(i => (i + 1) % EXAMPLE_QUERIES.length), 3200);
@@ -63,9 +66,9 @@ export default function App() {
       <div className="orb orb-2" />
       <div className="orb orb-3" />
 
-      {/* Cursor glow — landing only */}
+      {/* Cursor glow — landing only, non-touch only */}
       <AnimatePresence>
-        {isLanding && (
+        {isLanding && !isTouchDevice && (
           <motion.div
             className="cursor-glow"
             style={{ x: glowX, y: glowY }}
@@ -86,7 +89,7 @@ export default function App() {
             transition={SPRING}
           >
             <motion.span
-              style={{ rotateX, rotateY, transformStyle: 'preserve-3d' as const }}
+              style={isTouchDevice ? undefined : { rotateX, rotateY, transformStyle: 'preserve-3d' as const }}
               className="lnd-wm-inner"
             >
               <span className="lnd-wm-primary">Market</span>
@@ -114,6 +117,7 @@ export default function App() {
               onChange={setInputValue}
               onSubmit={onSubmit}
               placeholder={EXAMPLE_QUERIES[phIdx]}
+              autoFocus={!isTouchDevice}
             />
           </motion.div>
 

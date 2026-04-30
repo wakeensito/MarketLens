@@ -21,13 +21,13 @@ export function adaptReport(json: ResultJson, idea_text: string): MarketReport {
 
   const keyStats: MarketStat[] = [
     {
-      label: 'Saturation Score',
+      label: 'Saturation',
       value: `${saturationScore}/100`,
       change: json.saturation_label ?? '',
       direction: saturationScore > 65 ? 'down' : saturationScore > 40 ? 'flat' : 'up',
     },
     {
-      label: 'Opportunity Score',
+      label: 'Opportunity',
       value: `${opportunityScore}/100`,
       change: opportunityScore > 60 ? 'Strong opportunity' : 'Moderate opportunity',
       direction: opportunityScore > 50 ? 'up' : 'flat',
@@ -39,33 +39,19 @@ export function adaptReport(json: ResultJson, idea_text: string): MarketReport {
       direction: difficultyScore > 65 ? 'down' : 'flat',
     },
     {
-      label: 'Market Size',
-      value: json.market_size ?? 'N/A',
-      change: 'AI estimate',
-      direction: 'flat',
-    },
-    {
-      label: 'Geography',
-      value: json.geography ?? 'Global',
-      change: json.business_model ?? '',
-      direction: 'flat',
-    },
-    {
       label: 'Competitors Found',
       value: String((json.competitors ?? []).length),
-      change: 'Direct players identified',
+      change: 'direct players',
       direction: 'flat',
     },
   ];
 
   const competitors: Competitor[] = (json.competitors ?? []).map(c => ({
-    name:     c.name,
-    tagline:  c.market_position,
-    funding:  'Unknown',
-    founded:  0,
-    userBase: 'Various',
-    strength: competitorStrength(c),
-    category: c.strength,
+    name:           c.name,
+    strength:       competitorStrength(c),
+    strengthText:   c.strength,
+    weaknessText:   c.weakness,
+    marketPosition: c.market_position,
   }));
 
   const gaps: MarketGap[] = (json.gaps ?? []).map((g, i) => ({
