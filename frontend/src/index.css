@@ -537,6 +537,26 @@ html { scroll-behavior: smooth; }
   box-shadow:
     0 8px 32px oklch(7% 0.032 245 / 0.65),
     0 0 0 1px oklch(76% 0.22 215 / 0.08);
+  animation: menu-drop-down 0.15s ease-out;
+  transform-origin: top left;
+}
+
+/* Compact mode: menu opens upward so it doesn't go off-screen at the viewport bottom */
+.ai-input--compact .ai-input__menu {
+  top: auto;
+  bottom: calc(100% + 6px);
+  animation: menu-drop-up 0.15s ease-out;
+  transform-origin: bottom left;
+}
+
+@keyframes menu-drop-down {
+  from { opacity: 0; transform: translateY(-6px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)   scale(1); }
+}
+
+@keyframes menu-drop-up {
+  from { opacity: 0; transform: translateY(6px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0)  scale(1); }
 }
 
 .ai-input__menu-item {
@@ -1346,7 +1366,7 @@ html { scroll-behavior: smooth; }
   .bottom-cards       { grid-template-columns: 1fr; }
   .roadmap-phase      { grid-template-columns: 1fr; gap: 12px; }
   .parallel-cards-row { flex-direction: column; }
-  .ws-main            { padding: 72px 16px 88px; }
+  .ws-main            { padding: 72px 16px 176px; }
   .ws-header          { padding: 0 12px 0 0; }
   .lnd-wm-inner       { font-size: clamp(56px, 14vw, 90px); }
   .ws-bottom-bar      { padding: 8px 12px max(16px, calc(env(safe-area-inset-bottom, 0px) + 8px)); }
@@ -1360,8 +1380,7 @@ html { scroll-behavior: smooth; }
   .landing-pill       { height: 36px; }
   /* Touch targets */
   .header-btn-ghost   { min-height: 40px; }
-  /* Reduce footer dead space — fixed bottom bar is ~88px on mobile */
-  .report-footer      { padding-bottom: 16px; }
+  .report-footer      { padding-bottom: 8px; }
 }
 
 /* Narrow phones — hide decorative header chrome, preserve core actions */
