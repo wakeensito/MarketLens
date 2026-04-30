@@ -8,10 +8,18 @@ Parameters:
     Default: prod
     AllowedValues: [dev, staging, prod]
     Description: Deployment stage
-  BedrockModelId:
+  BedrockModelIdParse:
+    Type: String
+    Default: amazon.nova-micro-v1:0
+    Description: Bedrock model for Parse stage (structured extraction)
+  BedrockModelIdAnalyse:
+    Type: String
+    Default: deepseek.v3.2
+    Description: Bedrock model for Analyse stage (reasoning)
+  BedrockModelIdSummarise:
     Type: String
     Default: anthropic.claude-3-haiku-20240307-v1:0
-    Description: Bedrock inference profile ID for AI pipeline
+    Description: Bedrock model for Summarise stage (narrative)
 
 Globals:
   Function:
@@ -271,10 +279,15 @@ Resources:
             - Effect: Allow
               Action:
                 - bedrock:InvokeModel
-              Resource: !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockModelId}"
+              Resource:
+                - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockModelIdParse}"
+                - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockModelIdAnalyse}"
+                - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockModelIdSummarise}"
       Environment:
         Variables:
-          BEDROCK_MODEL_ID: !Ref BedrockModelId
+          BEDROCK_MODEL_ID_PARSE: !Ref BedrockModelIdParse
+          BEDROCK_MODEL_ID_ANALYSE: !Ref BedrockModelIdAnalyse
+          BEDROCK_MODEL_ID_SUMMARISE: !Ref BedrockModelIdSummarise
 
   AiOrchestrationLogGroup:
     Type: AWS::Logs::LogGroup

@@ -3,6 +3,12 @@ MarketLens AI Orchestration — Durable Function pipeline.
 
 Stages: sanitize → parse → search → analyse → score → summarise → assemble
 Each stage is a durable step with automatic checkpointing and retry.
+
+Models (per stage):
+  - Parse:     Amazon Nova Micro   ($0.035/$0.14 per 1M tokens)
+  - Search:    Amazon Nova Micro   (reuses Parse model)
+  - Analyse:   DeepSeek V3.2       ($0.62/$1.85 per 1M tokens)
+  - Summarise: Claude 3 Haiku      ($0.25/$1.25 per 1M tokens)
 """
 import os
 import json
@@ -21,7 +27,11 @@ tracer = Tracer()
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(os.environ["REPORTS_TABLE"])
 bedrock = boto3.client("bedrock-runtime")
-MODEL_ID = os.environ["BEDROCK_MODEL_ID"]
+
+# Per-stage model IDs
+MODEL_ID_PARSE = os.environ["BEDROCK_MODEL_ID_PARSE"]
+MODEL_ID_ANALYSE = os.environ["BEDROCK_MODEL_ID_ANALYSE"]
+MODEL_ID_SUMMARISE = os.environ["BEDROCK_MODEL_ID_SUMMARISE"]
 
 
 def _set_stage(report_id: str, stage: str) -> None:
@@ -36,11 +46,44 @@ def _set_stage(report_id: str, stage: str) -> None:
             "Stage persistence failed (best-effort)",
             extra={"report_id": report_id, "stage": stage, "error": str(e)},
         )
-        return None
 
 
-def call_llm(prompt: str, max_tokens: int = 1024) -> str:
-    """Call Bedrock Claude and return the text response."""
+def _build_payload(model_id: str, prompt: str, max_tokens: int, temperature: float) -> str:
+    """Build the invoke_model payload based on model provider."""
+    if "anthropic" in model_id:
+        return json.dumps({
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "messages": [{"role": "user", "content": prompt}],
+        })
+    if "deepseek" in model_id:
+        # DeepSeek uses OpenAI-compatible format
+        return json.dumps({
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "messages": [{"role": "user", "content": prompt}],
+        })
+    # Amazon Nova — Converse-style payload
+    return json.dumps({
+        "inferenceConfig": {"max_new_tokens": max_tokens, "temperature": temperature},
+        "messages": [{"role": "user", "content": [{"text": prompt}]}],
+    })
+
+
+def _extract_text(model_id: str, response_body: dict) -> str:
+    """Extract text from model response based on provider format."""
+    if "anthropic" in model_id:
+        return response_body["content"][0]["text"]
+    if "deepseek" in model_id:
+        # DeepSeek uses OpenAI-compatible response format
+        return response_body["choices"][0]["message"]["content"]
+    # Amazon Nova
+    return response_body["output"]["message"]["content"][0]["text"]
+
+
+def call_llm(prompt: str, model_id: str, max_tokens: int = 1024, temperature: float = 0.2) -> str:
+    """Call a Bedrock model and return the text response. Handles retries with backoff."""
     max_attempts = int(os.environ.get("LLM_MAX_ATTEMPTS", "3"))
     backoff_base_ms = int(os.environ.get("LLM_BACKOFF_BASE_MS", "400"))
     backoff_cap_ms = int(os.environ.get("LLM_BACKOFF_CAP_MS", "4000"))
@@ -54,17 +97,13 @@ def call_llm(prompt: str, max_tokens: int = 1024) -> str:
         "ModelTimeoutException",
     }
 
-    payload = json.dumps({
-        "anthropic_version": "bedrock-2023-05-31",
-        "max_tokens": max_tokens,
-        "messages": [{"role": "user", "content": prompt}],
-    })
+    payload = _build_payload(model_id, prompt, max_tokens, temperature)
 
     last_err: Exception | None = None
     for attempt in range(1, max_attempts + 1):
         try:
             response = bedrock.invoke_model(
-                modelId=MODEL_ID,
+                modelId=model_id,
                 contentType="application/json",
                 accept="application/json",
                 body=payload,
@@ -76,10 +115,8 @@ def call_llm(prompt: str, max_tokens: int = 1024) -> str:
             except Exception as e:
                 raise ValueError(f"Bedrock response JSON parse failed: {e}") from e
 
-            try:
-                return parsed["content"][0]["text"]
-            except Exception as e:
-                raise ValueError("Bedrock response missing expected content text") from e
+            return _extract_text(model_id, parsed)
+
         except (ClientError, BotoCoreError, ValueError) as e:
             last_err = e
             code = None
@@ -90,7 +127,12 @@ def call_llm(prompt: str, max_tokens: int = 1024) -> str:
             if (not retryable) or attempt >= max_attempts:
                 logger.exception(
                     "Bedrock invoke failed",
-                    extra={"attempt": attempt, "max_attempts": max_attempts, "error_code": code},
+                    extra={
+                        "model_id": model_id,
+                        "attempt": attempt,
+                        "max_attempts": max_attempts,
+                        "error_code": code,
+                    },
                 )
                 raise
 
@@ -99,15 +141,18 @@ def call_llm(prompt: str, max_tokens: int = 1024) -> str:
             sleep_s = (backoff_ms + jitter_ms) / 1000.0
             logger.warning(
                 "Bedrock invoke transient failure; retrying",
-                extra={"attempt": attempt, "sleep_s": sleep_s, "error_code": code},
+                extra={"model_id": model_id, "attempt": attempt, "sleep_s": sleep_s, "error_code": code},
             )
             time.sleep(sleep_s)
 
     raise RuntimeError(f"Bedrock invoke failed after {max_attempts} attempts: {last_err}")
 
 
+# ---------------------------------------------------------------------------
+# Stage 1: Sanitize (no LLM)
+# ---------------------------------------------------------------------------
 def sanitize(idea_text: str) -> dict:
-    """Stage 1: Validate and clean input."""
+    """Validate and clean input."""
     cleaned = idea_text.strip()
     if len(cleaned) < 5:
         raise ValueError("Idea text too short")
@@ -116,124 +161,366 @@ def sanitize(idea_text: str) -> dict:
     return {"cleaned_idea": cleaned}
 
 
+# ---------------------------------------------------------------------------
+# Stage 2: Parse  (Nova Micro — cheap structured extraction)
+# ---------------------------------------------------------------------------
 def parse(cleaned_idea: str) -> dict:
-    """Stage 2: Extract industry, geography, business model via LLM."""
+    """Extract industry, geography, business model, complexity via LLM."""
     prompt = f"""Analyze this business idea and extract structured information.
 Return ONLY valid JSON with these fields:
-- industry: the primary industry/vertical
-- geography: target market geography
-- business_model: type of business model (SaaS, marketplace, etc.)
-- keywords: list of 3-5 search keywords for competitor research
+- industry: the primary industry/vertical (e.g. "cybersecurity", "edtech", "ecommerce")
+- sub_industry: narrower category (e.g. "cloud security", "K-12 tutoring", "dropshipping")
+- business_model: one of [b2b_saas, b2c_saas, marketplace, ecommerce, service, hardware, other]
+- target_customer: who buys/uses this (e.g. "small business owners", "enterprise IT teams")
+- geography: target market geography ("global" if unspecified)
+- keywords: list of 5-8 search keywords for competitor research
+- estimated_complexity: one of [low, medium, high] based on technical/operational complexity
+- estimated_market_age_years: approximate age of this market in years (integer)
 
-Business idea: {cleaned_idea}"""
+Business idea: <<<{cleaned_idea}>>>"""
 
-    response = call_llm(prompt, max_tokens=512)
+    response = call_llm(prompt, model_id=MODEL_ID_PARSE, max_tokens=512, temperature=0.1)
     try:
         return json.loads(response)
     except json.JSONDecodeError:
         return {
             "industry": "Technology",
+            "sub_industry": "General",
+            "business_model": "other",
+            "target_customer": "General consumers",
             "geography": "Global",
-            "business_model": "Unknown",
             "keywords": [cleaned_idea],
+            "estimated_complexity": "medium",
+            "estimated_market_age_years": 5,
         }
 
 
+# ---------------------------------------------------------------------------
+# Stage 3: Search  (Nova Micro — reuses Parse model for cost)
+# ---------------------------------------------------------------------------
 def search(parsed: dict) -> dict:
-    """Stage 3: Search for competitors, market size, trends."""
+    """Search for competitors, market size, and trends via LLM."""
     keywords = parsed.get("keywords", [])
     industry = parsed.get("industry", "")
+    sub_industry = parsed.get("sub_industry", "")
+    geography = parsed.get("geography", "Global")
+    business_model = parsed.get("business_model", "")
 
-    prompt = f"""Based on the industry "{industry}" and keywords {keywords},
-list 5 real competitors with their name, one-line description, and approximate founding year.
-Return ONLY valid JSON as a list of objects with fields: name, description, founded_year, url"""
+    prompt = f"""You are a market research assistant. Given this market context:
+- Industry: {industry}
+- Sub-industry: {sub_industry}
+- Business model: {business_model}
+- Geography: {geography}
+- Keywords: {json.dumps(keywords)}
 
-    response = call_llm(prompt, max_tokens=1024)
+Research this market thoroughly. Return ONLY valid JSON with:
+{{
+  "competitors": [
+    {{
+      "name": "Company Name",
+      "description": "One-line description of what they do",
+      "founded_year": 2015,
+      "url": "https://example.com",
+      "funding_stage": "series_c_plus | series_a_b | seed | bootstrapped | public | acquired | unknown",
+      "target_segment": "enterprise | mid_market | smb | prosumer | consumer | unknown",
+      "pricing_tier": "free | low | mid | high | enterprise | unknown"
+    }}
+  ],
+  "market_size_tam_usd": null or number (total addressable market in USD),
+  "market_growth_rate_pct": null or number (year-over-year growth percentage),
+  "market_age_years": number (how old is this market),
+  "trends": ["trend 1", "trend 2", "trend 3"]
+}}
+
+RULES:
+- List 10-15 REAL competitors. Do NOT invent companies.
+- Include a mix of direct competitors and adjacent players.
+- Be specific about funding stages and target segments when known.
+- For market size, use your best estimate. Set to null if truly unknown.
+- For growth rate, estimate based on industry knowledge. Set to null if unknown."""
+
+    response = call_llm(prompt, model_id=MODEL_ID_PARSE, max_tokens=2048, temperature=0.2)
     try:
-        competitors = json.loads(response)
+        result = json.loads(response)
+        # Normalize competitors to always be a list
+        competitors = result.get("competitors", [])
+        if not isinstance(competitors, list):
+            competitors = []
+        return {
+            "competitors": competitors,
+            "market_size_tam_usd": result.get("market_size_tam_usd"),
+            "market_growth_rate_pct": result.get("market_growth_rate_pct"),
+            "market_age_years": result.get("market_age_years", 5),
+            "trends": result.get("trends", []),
+        }
     except json.JSONDecodeError:
-        competitors = []
+        return {
+            "competitors": [],
+            "market_size_tam_usd": None,
+            "market_growth_rate_pct": None,
+            "market_age_years": 5,
+            "trends": [],
+        }
 
-    return {
-        "competitors": competitors if isinstance(competitors, list) else [],
-        "market_size": "Estimated via AI",
-        "trends": [],
-    }
 
-
+# ---------------------------------------------------------------------------
+# Stage 4: Analyse  (DeepSeek V3.2 — strong reasoning)
+# ---------------------------------------------------------------------------
 def analyse(parsed: dict, search_results: dict) -> dict:
-    """Stage 4: Synthesize competitor list with positioning via LLM."""
+    """Synthesize competitor landscape with positioning via LLM."""
     competitors = search_results.get("competitors", [])
     industry = parsed.get("industry", "")
+    sub_industry = parsed.get("sub_industry", "")
+    business_model = parsed.get("business_model", "")
+    target_customer = parsed.get("target_customer", "")
 
-    prompt = f"""You are a market analyst. Given these competitors in the {industry} space:
-{json.dumps(competitors, indent=2)}
+    prompt = f"""You are a senior market research analyst. Analyze this competitive landscape.
 
-Analyze the competitive landscape. Return ONLY valid JSON with:
-- competitor_analysis: list of objects with name, strength, weakness, market_position
-- positioning: one sentence on how a new entrant could differentiate
-- market_gaps: list of 2-3 underserved areas"""
+CONTEXT:
+- Industry: {industry} / {sub_industry}
+- Business model: {business_model}
+- Target customer: {target_customer}
+- Competitors found: {json.dumps(competitors, indent=2)}
 
-    response = call_llm(prompt, max_tokens=1024)
+Return ONLY valid JSON with this exact structure:
+{{
+  "competitor_analysis": [
+    {{
+      "name": "Company Name",
+      "strength": "Their key competitive advantage (one sentence)",
+      "weakness": "Their main vulnerability or gap (one sentence)",
+      "market_position": "leader | major | growing | niche | declining",
+      "target_segment": "enterprise | mid_market | smb | prosumer | consumer",
+      "funding_stage": "public | series_c_plus | series_a_b | seed | bootstrapped | unknown"
+    }}
+  ],
+  "market_gaps": [
+    {{
+      "title": "Gap title",
+      "description": "Why this gap exists and who it affects"
+    }}
+  ],
+  "positioning": "One sentence on how a new entrant should differentiate",
+  "has_public_companies": true/false,
+  "has_series_c_plus": true/false,
+  "dominant_segment": "enterprise | mid_market | smb | consumer | mixed",
+  "funding_concentration_high": true/false (are top 3 players holding most of the market?),
+  "rising_cac_signals": true/false (are there signs of rising customer acquisition costs?)
+}}
+
+RULES:
+- Only include competitors from the provided list. Do NOT invent new ones.
+- Be honest about strengths and weaknesses. No generic filler.
+- market_gaps should identify 2-4 genuinely underserved areas.
+- Mark uncertainty explicitly — if you don't know a funding stage, say "unknown"."""
+
+    response = call_llm(prompt, model_id=MODEL_ID_ANALYSE, max_tokens=2048, temperature=0.3)
     try:
         return json.loads(response)
     except json.JSONDecodeError:
         return {
             "competitor_analysis": [],
-            "positioning": "Differentiation opportunity exists.",
             "market_gaps": [],
+            "positioning": "Differentiation opportunity exists.",
+            "has_public_companies": False,
+            "has_series_c_plus": False,
+            "dominant_segment": "mixed",
+            "funding_concentration_high": False,
+            "rising_cac_signals": False,
         }
 
 
-def score(analysis: dict, search_results: dict) -> dict:
-    """Stage 5: Compute saturation, difficulty, opportunity scores."""
-    num_competitors = len(search_results.get("competitors", []))
+# ---------------------------------------------------------------------------
+# Stage 5: Score  (deterministic — no LLM)
+# ---------------------------------------------------------------------------
+def _clamp(value: float, lo: int = 0, hi: int = 100) -> int:
+    return int(min(hi, max(lo, round(value))))
+
+
+def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
+    """Compute saturation, difficulty, opportunity scores using the design-doc algorithm."""
+
+    competitors = analysis.get("competitor_analysis", [])
+    num_direct = len(competitors)
     num_gaps = len(analysis.get("market_gaps", []))
+    market_age = search_results.get("market_age_years") or parsed.get("estimated_market_age_years", 5)
+    tam_usd = search_results.get("market_size_tam_usd")
+    growth_pct = search_results.get("market_growth_rate_pct")
+    complexity = parsed.get("estimated_complexity", "medium")
+    business_model = parsed.get("business_model", "other")
+    dominant_segment = analysis.get("dominant_segment", "mixed")
+    has_public = analysis.get("has_public_companies", False)
+    has_series_c = analysis.get("has_series_c_plus", False)
+    funding_concentrated = analysis.get("funding_concentration_high", False)
+    rising_cac = analysis.get("rising_cac_signals", False)
+    industry = (parsed.get("industry") or "").lower()
 
-    saturation = min(95, max(10, num_competitors * 15))
-    difficulty = min(95, max(15, saturation + 10 - num_gaps * 5))
-    opportunity = min(95, max(10, 100 - saturation + num_gaps * 10))
+    # ── Saturation Score (0-100) ──
+    base_score = 20
+    competitor_count_factor = min(40, num_direct * 2.5)
 
-    if saturation <= 40:
-        label = "Low Saturation"
-    elif saturation <= 65:
-        label = "Moderate Saturation"
+    if funding_concentrated:
+        funding_factor = 25
+    elif has_series_c or has_public:
+        funding_factor = 15
     else:
-        label = "High Saturation"
+        funding_factor = 5
+
+    if market_age and market_age > 10:
+        age_factor = 10
+    elif market_age and market_age > 5:
+        age_factor = 5
+    else:
+        age_factor = 0
+
+    cac_factor = 5 if rising_cac else 0
+
+    saturation = _clamp(base_score + competitor_count_factor + funding_factor + age_factor + cac_factor)
+
+    # ── Difficulty Score (0-100) ──
+    complexity_map = {"high": 25, "medium": 15, "low": 5}
+    technical_score = complexity_map.get(complexity, 15)
+
+    capital_map = {
+        "hardware": 25, "b2b_saas": 20, "marketplace": 20,
+        "b2c_saas": 10, "ecommerce": 10, "service": 5, "other": 10,
+    }
+    capital_score = capital_map.get(business_model, 10)
+
+    segment_map = {"enterprise": 20, "mid_market": 10, "smb": 5, "prosumer": 0, "consumer": 0, "mixed": 8}
+    sales_cycle_score = segment_map.get(dominant_segment, 5)
+
+    regulated_industries = {"healthcare", "fintech", "finance", "legal", "edtech", "insurance", "banking"}
+    semi_regulated = {"proptech", "foodtech", "transport", "logistics", "real estate"}
+    if any(r in industry for r in regulated_industries):
+        regulatory_score = 20
+    elif any(r in industry for r in semi_regulated):
+        regulatory_score = 10
+    else:
+        regulatory_score = 0
+
+    if has_public:
+        brand_trust_score = 10
+    elif has_series_c:
+        brand_trust_score = 5
+    else:
+        brand_trust_score = 0
+
+    difficulty = _clamp(technical_score + capital_score + sales_cycle_score + regulatory_score + brand_trust_score)
+
+    # ── Opportunity Score (0-100) ──
+    if tam_usd and tam_usd > 10_000_000_000:
+        market_size_score = 25
+    elif tam_usd and tam_usd > 1_000_000_000:
+        market_size_score = 18
+    elif tam_usd and tam_usd > 100_000_000:
+        market_size_score = 10
+    elif tam_usd and tam_usd > 0:
+        market_size_score = 5
+    else:
+        market_size_score = 0
+
+    if growth_pct and growth_pct > 25:
+        growth_score = 25
+    elif growth_pct and growth_pct > 15:
+        growth_score = 18
+    elif growth_pct and growth_pct > 8:
+        growth_score = 10
+    else:
+        growth_score = 0
+
+    # Gap indicator: check if competitor weaknesses suggest common buyer complaints
+    weakness_keywords = {"expensive", "complex", "no smb", "limited", "outdated", "slow", "poor"}
+    weaknesses_text = " ".join(
+        (c.get("weakness") or "").lower() for c in competitors
+    )
+    has_buyer_complaint_match = any(kw in weaknesses_text for kw in weakness_keywords)
+
+    if has_buyer_complaint_match and num_gaps >= 2:
+        gap_score = 30
+    elif num_gaps >= 1:
+        gap_score = 15
+    else:
+        gap_score = 0
+
+    saturation_penalty = saturation * 0.20
+    difficulty_penalty = difficulty * 0.15
+
+    opportunity = _clamp(market_size_score + growth_score + gap_score - saturation_penalty - difficulty_penalty)
+
+    # ── Labels ──
+    def _band(val, labels):
+        if val <= 24:
+            return labels[0]
+        elif val <= 49:
+            return labels[1]
+        elif val <= 74:
+            return labels[2]
+        else:
+            return labels[3]
+
+    saturation_label = _band(saturation, ["Wide Open", "Some Players", "Competitive", "Saturated"])
+    difficulty_label = _band(difficulty, ["Easy Entry", "Manageable", "Challenging", "Very Hard"])
+    opportunity_label = _band(opportunity, ["Low", "Modest", "Strong", "Excellent"])
 
     return {
         "saturation_score": saturation,
-        "saturation_label": label,
+        "saturation_label": saturation_label,
         "difficulty_score": difficulty,
+        "difficulty_label": difficulty_label,
         "opportunity_score": opportunity,
+        "opportunity_label": opportunity_label,
         "key_stats": [
             {"label": "Saturation", "value": f"{saturation}/100"},
             {"label": "Difficulty", "value": f"{difficulty}/100"},
             {"label": "Opportunity", "value": f"{opportunity}/100"},
-            {"label": "Competitors Found", "value": str(num_competitors)},
+            {"label": "Competitors Found", "value": str(num_direct)},
         ],
     }
 
 
+# ---------------------------------------------------------------------------
+# Stage 6: Summarise  (Claude 3 Haiku — natural prose)
+# ---------------------------------------------------------------------------
 def summarise(analysis: dict, scores: dict, parsed: dict) -> dict:
-    """Stage 6: Generate beginner-friendly explanation and gap analysis via LLM."""
-    prompt = f"""You are writing a market intelligence brief for a non-technical founder.
+    """Generate beginner-friendly explanation and gap analysis via LLM."""
+    prompt = f"""You are an experienced startup advisor talking to a first-time founder.
+Your job is to explain a market in plain language — like a friend who knows the industry well.
 
-Industry: {parsed.get('industry', '')}
+VOICE GUIDELINES:
+- Use second person ("you", "your idea").
+- Avoid jargon. If you must use a term (TAM, churn, CAC), explain it inline in parentheses.
+- Be honest. If the market is brutal, say so. If it's promising, say so.
+- Short sentences. Specific numbers when available. No hedging filler.
+- Do NOT inflate numbers or make up data.
+
+INPUT:
+Industry: {parsed.get('industry', '')} / {parsed.get('sub_industry', '')}
 Business model: {parsed.get('business_model', '')}
+Target customer: {parsed.get('target_customer', '')}
 Saturation score: {scores['saturation_score']}/100 ({scores['saturation_label']})
-Difficulty score: {scores['difficulty_score']}/100
-Opportunity score: {scores['opportunity_score']}/100
-Market gaps: {json.dumps(analysis.get('market_gaps', []))}
+Difficulty score: {scores['difficulty_score']}/100 ({scores.get('difficulty_label', '')})
+Opportunity score: {scores['opportunity_score']}/100 ({scores.get('opportunity_label', '')})
+Market gaps: {json.dumps(analysis.get('market_gaps', []), indent=2)}
+Competitor count: {len(analysis.get('competitor_analysis', []))}
+Key positioning advice: {analysis.get('positioning', '')}
 
-Write a brief with these sections. Return ONLY valid JSON with:
-- oneliner: one sentence summary of the market opportunity
-- gaps: list of objects with title and description (2-3 gaps)
-- trend_signal: one sentence on market trends
-- recommendation: 2-3 sentence actionable recommendation
-- roadmap: list of 3-4 objects with phase, title, description for market entry"""
+Return ONLY valid JSON with:
+{{
+  "oneliner": "One sentence summary of the market opportunity",
+  "gaps": [
+    {{"title": "Gap title", "description": "Why this gap matters and who it serves"}}
+  ],
+  "trend_signal": "One sentence on where this market is heading",
+  "recommendation": "2-3 sentence actionable recommendation for the founder",
+  "roadmap": [
+    {{"phase": "Phase 1 (0-3 months)", "title": "Step title", "description": "What to do"}}
+  ]
+}}
 
-    response = call_llm(prompt, max_tokens=1500)
+Include 2-3 gaps, and 3-4 roadmap phases."""
+
+    response = call_llm(prompt, model_id=MODEL_ID_SUMMARISE, max_tokens=1500, temperature=0.6)
     try:
         return json.loads(response)
     except json.JSONDecodeError:
@@ -246,8 +533,11 @@ Write a brief with these sections. Return ONLY valid JSON with:
         }
 
 
+# ---------------------------------------------------------------------------
+# Stage 7: Assemble  (no LLM)
+# ---------------------------------------------------------------------------
 def assemble(parsed: dict, search_results: dict, analysis: dict, scores: dict, summary: dict) -> dict:
-    """Stage 7: Combine all results into the final report JSON."""
+    """Combine all results into the final report JSON."""
     return {
         "vertical": parsed.get("industry", ""),
         "geography": parsed.get("geography", ""),
@@ -255,10 +545,13 @@ def assemble(parsed: dict, search_results: dict, analysis: dict, scores: dict, s
         **scores,
         **summary,
         "competitors": analysis.get("competitor_analysis", []),
-        "market_size": search_results.get("market_size", ""),
+        "market_size": search_results.get("market_size_tam_usd") or "Unknown",
     }
 
 
+# ---------------------------------------------------------------------------
+# Handler
+# ---------------------------------------------------------------------------
 @durable_execution
 def handler(event: dict, context: DurableContext) -> dict:
     """
@@ -284,23 +577,23 @@ def handler(event: dict, context: DurableContext) -> dict:
         sanitized = context.step(lambda _: sanitize(idea_text), name="sanitize")
         _set_stage(report_id, "sanitize")
 
-        # Stage 2: Parse
+        # Stage 2: Parse  (Nova Micro)
         parsed = context.step(lambda _: parse(sanitized["cleaned_idea"]), name="parse")
         _set_stage(report_id, "parse")
 
-        # Stage 3: Search
+        # Stage 3: Search  (Nova Micro)
         search_results = context.step(lambda _: search(parsed), name="search")
         _set_stage(report_id, "search")
 
-        # Stage 4: Analyse
+        # Stage 4: Analyse  (DeepSeek V3.2)
         analysis = context.step(lambda _: analyse(parsed, search_results), name="analyse")
         _set_stage(report_id, "analyse")
 
-        # Stage 5: Score
-        scores = context.step(lambda _: score(analysis, search_results), name="score")
+        # Stage 5: Score  (deterministic)
+        scores = context.step(lambda _: score(parsed, analysis, search_results), name="score")
         _set_stage(report_id, "score")
 
-        # Stage 6: Summarise
+        # Stage 6: Summarise  (Claude 3 Haiku)
         summary = context.step(lambda _: summarise(analysis, scores, parsed), name="summarise")
         _set_stage(report_id, "summarise")
 
