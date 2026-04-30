@@ -82,74 +82,106 @@ body {
 button { font-family: var(--font-body); cursor: pointer; border: none; background: none; outline: none; }
 input  { font-family: var(--font-body); outline: none; border: none; background: none; color: var(--text); }
 
-/* ── App shell ────────────────────────────────────────── */
-.app { position: relative; min-height: 100vh; width: 100%; }
 html { scroll-behavior: smooth; }
 
-/* ── Workspace ────────────────────────────────────────── */
-.workspace { display: flex; flex-direction: column; min-height: 100vh; background: var(--bg); }
-
-.workspace-main {
-  flex: 1;
-  max-width: 900px;
+/* ── Shell — single-surface root ─────────────────────── */
+.shell {
+  position: relative;
+  min-height: 100vh;
   width: 100%;
-  margin: 0 auto;
-  padding: 0 32px 80px;
+  overflow-x: hidden;
+  background: var(--bg);
 }
 
-/* ── Header ───────────────────────────────────────────── */
-.header {
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  background: oklch(9% 0.030 244 / 0.85);
-  backdrop-filter: blur(16px) saturate(140%);
-  border-bottom: 1px solid var(--border);
-  padding: 0 28px;
+/* Landing: flex column centered */
+.shell--landing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 24px;
+  text-align: center;
+}
+
+/* All landing children above orbs */
+.shell--landing > *:not(.orb):not(.cursor-glow) {
+  position: relative;
+}
+
+/* Input above example pills so the model dropdown can overflow over them */
+.lnd-input-wrap { z-index: 50; }
+.landing-examples { z-index: 0; }
+
+/* Workspace: header fixed top, content scrolls, input fixed bottom */
+.shell--workspace {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ── Workspace header ─────────────────────────────────── */
+.ws-header {
+  position: fixed;
+  top: 0; left: 0; right: 0;
   height: 52px;
+  z-index: 100;
+  background: oklch(9% 0.030 244 / 0.88);
+  backdrop-filter: blur(18px) saturate(150%);
+  border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
-  gap: 16px;
-  transition: box-shadow 0.2s;
+  padding: 0 20px 0 0;
+  gap: 12px;
 }
 
-.header--scrolled {
-  border-bottom-color: var(--border-mid);
-}
-
-.header-logo {
-  font-size: 14px;
+.ws-logo {
   display: flex;
   align-items: center;
   gap: 4px;
+  height: 52px;
+  padding: 0 20px;
+  border: none;
+  background: none;
   cursor: pointer;
   flex-shrink: 0;
+  /* No overflow clip — the layoutId animation needs accurate size measurement */
 }
 
-.header-logo-primary {
+.ws-logo-primary {
   font-family: var(--font-body);
+  font-size: 14px;
   font-weight: 400;
   color: var(--text-secondary);
+  white-space: nowrap;
 }
 
-.header-logo-accent {
+.ws-logo-accent {
   font-family: var(--font-display);
+  font-size: 14px;
   font-weight: 600;
-  color: var(--accent);
+  white-space: nowrap;
+  background: linear-gradient(135deg, oklch(76% 0.22 215) 0%, oklch(68% 0.26 258) 50%, oklch(74% 0.28 300) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
-.header-query-label {
+.ws-header-meta {
+  display: contents;
+}
+
+.ws-query-label {
   font-size: 13px;
   color: var(--text-muted);
   font-style: italic;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 280px;
+  max-width: 260px;
   flex-shrink: 1;
 }
 
-.header-spacer { flex: 1; }
+.ws-header-spacer { flex: 1; }
 
 .nav-badge {
   font-family: var(--font-mono);
@@ -180,6 +212,7 @@ html { scroll-behavior: smooth; }
   transition: border-color 0.15s, color 0.15s, background 0.15s;
   white-space: nowrap;
   flex-shrink: 0;
+  margin-right: 8px;
 }
 
 .header-btn-ghost:hover {
@@ -188,22 +221,31 @@ html { scroll-behavior: smooth; }
   background: var(--surface-alt);
 }
 
-/* ── Landing ──────────────────────────────────────────── */
-.landing {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 24px;
-  background: var(--bg);
-  text-align: center;
-  position: relative;
-  overflow: hidden;
+/* ── Workspace main content ───────────────────────────── */
+.ws-main {
+  flex: 1;
+  max-width: 900px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 72px 32px 120px;
 }
 
-/* Drifting orbs — aurora atmosphere */
-.landing-orb {
+/* ── Workspace bottom bar ─────────────────────────────── */
+.ws-bottom-bar {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 100;
+  padding: 8px 24px 20px;
+  background: linear-gradient(to top, oklch(7% 0.032 245) 55%, oklch(7% 0.032 245 / 0) 100%);
+}
+
+.ws-input-wrap {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+/* ── Orbs — aurora atmosphere (always present) ────────── */
+.orb {
   position: absolute;
   border-radius: 50%;
   filter: blur(90px);
@@ -211,29 +253,23 @@ html { scroll-behavior: smooth; }
   z-index: 0;
 }
 
-.landing-orb-1 {
-  width: 700px;
-  height: 600px;
-  left: -12%;
-  bottom: -15%;
+.orb-1 {
+  width: 700px; height: 600px;
+  left: -12%; bottom: -15%;
   background: radial-gradient(circle, oklch(76% 0.22 215 / 0.24) 0%, transparent 70%);
   animation: orb-drift 16s ease-in-out infinite;
 }
 
-.landing-orb-2 {
-  width: 550px;
-  height: 480px;
-  right: -8%;
-  top: -5%;
+.orb-2 {
+  width: 550px; height: 480px;
+  right: -8%; top: -5%;
   background: radial-gradient(circle, oklch(74% 0.28 300 / 0.20) 0%, transparent 70%);
   animation: orb-drift 20s ease-in-out infinite reverse;
 }
 
-.landing-orb-3 {
-  width: 420px;
-  height: 360px;
-  right: 18%;
-  bottom: 10%;
+.orb-3 {
+  width: 420px; height: 360px;
+  right: 18%; bottom: 10%;
   background: radial-gradient(circle, oklch(55% 0.26 268 / 0.16) 0%, transparent 70%);
   animation: orb-drift 13s ease-in-out infinite 5s;
 }
@@ -244,11 +280,10 @@ html { scroll-behavior: smooth; }
   65%       { transform: translate(-3%, 4%) scale(0.96); }
 }
 
-/* Cursor-following glow blob */
-.landing-cursor-glow {
+/* Cursor glow */
+.cursor-glow {
   position: absolute;
-  width: 500px;
-  height: 500px;
+  width: 500px; height: 500px;
   border-radius: 50%;
   background: radial-gradient(circle, oklch(76% 0.22 215 / 0.09) 0%, transparent 65%);
   filter: blur(40px);
@@ -259,40 +294,26 @@ html { scroll-behavior: smooth; }
   will-change: transform;
 }
 
-/* All landing content sits above orbs (exclude blocks we stack explicitly below). */
-.landing > *:not(.landing-orb):not(.landing-cursor-glow):not(.ai-input-outer):not(.landing-examples) {
-  position: relative;
-  z-index: 1;
+/* ── Landing elements ─────────────────────────────────── */
+.lnd-wordmark {
+  margin-bottom: 28px;
+  cursor: default;
 }
 
-/* Model dropdown: input above “Try” pills (same stacking context; later DOM is not enough). */
-.landing > .ai-input-outer {
-  position: relative;
-  z-index: 50;
-}
-
-.landing > .landing-examples {
-  position: relative;
-  z-index: 0;
-}
-
-.landing-wordmark {
+.lnd-wm-inner {
+  display: block;
   font-size: clamp(72px, 11vw, 140px);
   letter-spacing: -0.04em;
   line-height: 0.95;
-  margin-bottom: 28px;
-  display: block;
-  cursor: default;
-  transform-style: preserve-3d;
 }
 
-.landing-wordmark-primary {
+.lnd-wm-primary {
   font-family: var(--font-body);
   font-weight: 300;
   color: oklch(88% 0.006 220);
 }
 
-.landing-wordmark-accent {
+.lnd-wm-accent {
   font-family: var(--font-display);
   font-weight: 600;
   background: linear-gradient(135deg, oklch(76% 0.22 215) 0%, oklch(68% 0.26 258) 50%, oklch(74% 0.28 300) 100%);
@@ -302,7 +323,7 @@ html { scroll-behavior: smooth; }
   filter: drop-shadow(0 0 40px oklch(76% 0.22 215 / 0.55));
 }
 
-.landing-sub {
+.lnd-sub {
   font-size: 17px;
   color: var(--text-secondary);
   max-width: 380px;
@@ -311,12 +332,15 @@ html { scroll-behavior: smooth; }
   font-weight: 400;
 }
 
-/* ── Animated AI input (glass, theme-aligned) ─────────── */
-.ai-input-outer {
+.lnd-input-wrap {
   width: 100%;
   max-width: 640px;
   margin-bottom: 24px;
+  position: relative;
+  z-index: 50;
 }
+
+/* ── Animated AI input (glass, theme-aligned) ─────────── */
 
 .ai-input {
   width: 100%;
@@ -348,10 +372,25 @@ html { scroll-behavior: smooth; }
   border-radius: 16px 16px 0 0;
 }
 
+.ai-input--compact {
+  border-radius: 12px;
+}
+
+.ai-input--compact .ai-input__body {
+  padding: 10px 16px 8px;
+  border-radius: 12px 12px 0 0;
+}
+
+.ai-input--compact .ai-input__toolbar {
+  border-radius: 0 0 10px 10px;
+  min-height: 44px;
+  padding: 8px 10px 10px;
+}
+
 .ai-input__textarea {
   display: block;
   width: 100%;
-  min-height: 72px;
+  min-height: 0;
   max-height: 280px;
   resize: none;
   font-size: 15px;
@@ -1213,7 +1252,8 @@ html { scroll-behavior: smooth; }
   .bottom-cards       { grid-template-columns: 1fr; }
   .roadmap-phase      { grid-template-columns: 1fr; gap: 12px; }
   .parallel-cards-row { flex-direction: column; }
-  .workspace-main     { padding: 0 16px 60px; }
-  .header             { padding: 0 16px; }
-  .landing-wordmark   { font-size: clamp(56px, 14vw, 90px); }
+  .ws-main            { padding: 72px 16px 120px; }
+  .ws-header          { padding: 0 12px 0 0; }
+  .lnd-wm-inner       { font-size: clamp(56px, 14vw, 90px); }
+  .ws-bottom-bar      { padding: 8px 12px 16px; }
 }
