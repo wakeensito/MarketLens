@@ -118,7 +118,11 @@ html { scroll-behavior: smooth; }
 .shell--workspace {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* ── Workspace header ─────────────────────────────────── */
@@ -285,6 +289,12 @@ html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) {
   .orb        { animation: none; }
   .spin       { animation: none; }
+}
+
+/* Kill orb animations on touch devices — large blurred composited layers
+   interfere with iOS scroll gesture detection */
+@media (hover: none) {
+  .orb { animation: none; }
 }
 
 /* Cursor glow */
@@ -1254,7 +1264,17 @@ html { scroll-behavior: smooth; }
   padding-bottom: 40px;
 }
 
-.report-footer-text { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); }
+.report-footer-text {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-right: 12px;
+}
 
 .report-export-btn {
   height: 32px;
@@ -1326,7 +1346,7 @@ html { scroll-behavior: smooth; }
   .bottom-cards       { grid-template-columns: 1fr; }
   .roadmap-phase      { grid-template-columns: 1fr; gap: 12px; }
   .parallel-cards-row { flex-direction: column; }
-  .ws-main            { padding: 72px 16px 120px; }
+  .ws-main            { padding: 72px 16px 88px; }
   .ws-header          { padding: 0 12px 0 0; }
   .lnd-wm-inner       { font-size: clamp(56px, 14vw, 90px); }
   .ws-bottom-bar      { padding: 8px 12px max(16px, calc(env(safe-area-inset-bottom, 0px) + 8px)); }
@@ -1340,6 +1360,8 @@ html { scroll-behavior: smooth; }
   .landing-pill       { height: 36px; }
   /* Touch targets */
   .header-btn-ghost   { min-height: 40px; }
+  /* Reduce footer dead space — fixed bottom bar is ~88px on mobile */
+  .report-footer      { padding-bottom: 16px; }
 }
 
 /* Narrow phones — hide decorative header chrome, preserve core actions */
