@@ -1,16 +1,25 @@
 import { motion } from 'framer-motion';
-import { Check, Loader2, Minus } from 'lucide-react';
+import { Check, Loader2, Minus, AlertCircle, RotateCcw } from 'lucide-react';
 import type { PipelineStage, StageStatus } from '../types';
 
 interface Props {
-  stages: PipelineStage[];
-  query: string;
+  stages:     PipelineStage[];
+  query:      string;
+  finalizing: boolean;
+  error:      string | null;
+  onRetry:    () => void;
 }
 
 function StatusIcon({ status }: { status: StageStatus }) {
   if (status === 'done')    return <Check    size={12} strokeWidth={2.5} color="var(--success)" />;
   if (status === 'running') return <Loader2  size={12} strokeWidth={2}   color="var(--accent)"  className="spin" />;
   return <Minus size={10} strokeWidth={2} color="var(--text-muted)" />;
+}
+
+function stageProgress(elapsedMs: number, durationMs: number, isDone: boolean, isRunning: boolean): number {
+  if (isDone)    return 100;
+  if (isRunning) return Math.min((elapsedMs / durationMs) * 100, 97);
+  return 0;
 }
 
 function formatMs(ms: number): string {
@@ -21,7 +30,7 @@ function formatMs(ms: number): string {
 function StageRow({ stage }: { stage: PipelineStage }) {
   const isRunning = stage.status === 'running';
   const isDone    = stage.status === 'done';
-  const progress  = isRunning ? Math.min((stage.elapsedMs / stage.durationMs) * 100, 97) : (isDone ? 100 : 0);
+  const progress  = stageProgress(stage.elapsedMs, stage.durationMs, isDone, isRunning);
 
   return (
     <div className={`pipeline-stage stage--${stage.status}`}>
@@ -70,7 +79,7 @@ function ParallelBlock({ stages }: { stages: PipelineStage[] }) {
         {stages.map(stage => {
           const sr = stage.status === 'running';
           const sd = stage.status === 'done';
-          const progress = sr ? Math.min((stage.elapsedMs / stage.durationMs) * 100, 97) : (sd ? 100 : 0);
+          const progress = stageProgress(stage.elapsedMs, stage.durationMs, sd, sr);
 
           return (
             <div key={stage.id} className={`parallel-mini-card parallel-mini-card--${stage.status}`}>
@@ -99,7 +108,7 @@ function ParallelBlock({ stages }: { stages: PipelineStage[] }) {
   );
 }
 
-export default function PipelineTracker({ stages, query }: Props) {
+export default function PipelineTracker({ stages, query, finalizing, error, onRetry }: Props) {
   const rendered: React.ReactNode[] = [];
   const seenGroups = new Set<string>();
 
@@ -128,7 +137,29 @@ export default function PipelineTracker({ stages, query }: Props) {
           Analysing <span className="pipeline-query-text pipeline-query-gap">"{query}"</span>
         </div>
       </div>
-      <div className="pipeline-stages">{rendered}</div>
+
+      {error ? (
+        <div className="pipeline-error">
+          <div className="pipeline-error-msg">
+            <AlertCircle size={14} color="var(--danger)" strokeWidth={2} />
+            {error}
+          </div>
+          <button className="pipeline-retry-btn" onClick={onRetry}>
+            <RotateCcw size={12} strokeWidth={2} />
+            Try again
+          </button>
+        </div>
+      ) : (
+        <>
+          <div className="pipeline-stages">{rendered}</div>
+          {finalizing && (
+            <div className="pipeline-finalizing">
+              <Loader2 size={13} strokeWidth={2} color="var(--accent)" className="spin" />
+              Generating final report…
+            </div>
+          )}
+        </>
+      )}
     </motion.div>
   );
 }

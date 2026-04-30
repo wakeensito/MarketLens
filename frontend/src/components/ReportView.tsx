@@ -1,11 +1,13 @@
 import { useRef, useEffect, useState } from 'react';
 import { motion, useInView, type Variants } from 'framer-motion';
-import { TrendingUp, AlertTriangle } from 'lucide-react';
+import { TrendingUp, AlertTriangle, Download, Loader2 } from 'lucide-react';
 import type { MarketReport, Competitor, MarketGap, RoadmapPhase, MarketStat } from '../types';
 import SaturationGauge from './SaturationGauge';
+import { exportReport } from '../api';
 
 interface Props {
-  report: MarketReport;
+  report:   MarketReport;
+  reportId: string;
 }
 
 const fadeUp: Variants = {
@@ -225,9 +227,25 @@ function VerdictDeclaration({ score }: { score: number }) {
   );
 }
 
-export default function ReportView({ report }: Props) {
-  const [briefId] = useState(() => `MS-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 9000) + 1000)}`);
-  const [dateStr] = useState(() => new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }));
+export default function ReportView({ report, reportId }: Props) {
+  const [briefId]    = useState(() => `MS-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 9000) + 1000)}`);
+  const [dateStr]    = useState(() => new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }));
+  const [exporting,    setExporting]    = useState(false);
+  const [exportError,  setExportError]  = useState<string | null>(null);
+
+  async function handleExport() {
+    if (exporting) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      const { download_url } = await exportReport(reportId);
+      window.open(download_url, '_blank', 'noopener,noreferrer');
+    } catch {
+      setExportError('Export failed. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  }
 
   return (
     <div className="report">
@@ -330,6 +348,15 @@ export default function ReportView({ report }: Props) {
           <span className="report-footer-text">
             {briefId} · Generated {dateStr} · MarketLens Intelligence Engine
           </span>
+          <div className="report-export-group">
+            {exportError && <span className="report-export-error">{exportError}</span>}
+            <button className="report-export-btn" onClick={handleExport} disabled={exporting}>
+              {exporting
+                ? <Loader2 size={12} strokeWidth={2} className="spin" />
+                : <Download size={12} strokeWidth={2} />}
+              {exporting ? 'Exporting…' : 'Export CSV'}
+            </button>
+          </div>
         </div>
       </Reveal>
     </div>
