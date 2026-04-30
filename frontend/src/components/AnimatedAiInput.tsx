@@ -59,7 +59,7 @@ function useAutoResizeTextarea(minHeight: number, maxHeight: number) {
 export interface AnimatedAiInputProps {
   value: string;
   onChange: (value: string) => void;
-  onSubmit: () => void;
+  onSubmit: (value: string, modelId?: string) => void;
   placeholder: string;
   /** Submit enabled when trimmed length is greater than this (default 4 → need 5+ chars). */
   minChars?: number;
@@ -101,7 +101,7 @@ const AnimatedAiInput = forwardRef<HTMLTextAreaElement, AnimatedAiInputProps>(
 
     const fireSubmit = () => {
       if (!canSubmit) return;
-      onSubmit();
+      onSubmit(value.trim(), selectedId);
       adjustHeight(true);
     };
 
@@ -143,7 +143,7 @@ const AnimatedAiInput = forwardRef<HTMLTextAreaElement, AnimatedAiInputProps>(
                     initial={{ opacity: 0, y: -4 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 4 }}
-                    transition={{ duration: 0.15, ease: 'easeOut' as const }}
+                    transition={{ duration: 0.35, ease: 'easeOut' as const }}
                   >
                     <SelectedIcon className="ai-input__model-icon" aria-hidden />
                     <span className="ai-input__model-label">{selected.label}</span>

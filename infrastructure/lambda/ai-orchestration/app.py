@@ -7,10 +7,13 @@ Each stage is a durable step with automatic checkpointing and retry.
 import os
 import json
 import boto3
+import random
+import time
 from datetime import datetime
 
 from aws_lambda_powertools import Logger, Tracer
 from aws_durable_execution_sdk_python import durable_execution, DurableContext
+from botocore.exceptions import BotoCoreError, ClientError
 
 logger = Logger()
 tracer = Tracer()
@@ -23,18 +26,69 @@ MODEL_ID = os.environ["BEDROCK_MODEL_ID"]
 
 def call_llm(prompt: str, max_tokens: int = 1024) -> str:
     """Call Bedrock Claude and return the text response."""
-    response = bedrock.invoke_model(
-        modelId=MODEL_ID,
-        contentType="application/json",
-        accept="application/json",
-        body=json.dumps({
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": max_tokens,
-            "messages": [{"role": "user", "content": prompt}],
-        }),
-    )
-    result = json.loads(response["body"].read())
-    return result["content"][0]["text"]
+    max_attempts = int(os.environ.get("LLM_MAX_ATTEMPTS", "3"))
+    backoff_base_ms = int(os.environ.get("LLM_BACKOFF_BASE_MS", "400"))
+    backoff_cap_ms = int(os.environ.get("LLM_BACKOFF_CAP_MS", "4000"))
+
+    transient_codes = {
+        "ThrottlingException",
+        "TooManyRequestsException",
+        "ServiceUnavailableException",
+        "InternalServerException",
+        "ModelNotReadyException",
+        "ModelTimeoutException",
+    }
+
+    payload = json.dumps({
+        "anthropic_version": "bedrock-2023-05-31",
+        "max_tokens": max_tokens,
+        "messages": [{"role": "user", "content": prompt}],
+    })
+
+    last_err: Exception | None = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = bedrock.invoke_model(
+                modelId=MODEL_ID,
+                contentType="application/json",
+                accept="application/json",
+                body=payload,
+            )
+
+            raw = response["body"].read()
+            try:
+                parsed = json.loads(raw)
+            except Exception as e:
+                raise ValueError(f"Bedrock response JSON parse failed: {e}") from e
+
+            try:
+                return parsed["content"][0]["text"]
+            except Exception as e:
+                raise ValueError("Bedrock response missing expected content text") from e
+        except (ClientError, BotoCoreError, ValueError) as e:
+            last_err = e
+            code = None
+            if isinstance(e, ClientError):
+                code = e.response.get("Error", {}).get("Code")
+
+            retryable = isinstance(e, ValueError) or (code in transient_codes if code else True)
+            if (not retryable) or attempt >= max_attempts:
+                logger.exception(
+                    "Bedrock invoke failed",
+                    extra={"attempt": attempt, "max_attempts": max_attempts, "error_code": code},
+                )
+                raise
+
+            backoff_ms = min(backoff_cap_ms, backoff_base_ms * (2 ** (attempt - 1)))
+            jitter_ms = random.randint(0, 250)
+            sleep_s = (backoff_ms + jitter_ms) / 1000.0
+            logger.warning(
+                "Bedrock invoke transient failure; retrying",
+                extra={"attempt": attempt, "sleep_s": sleep_s, "error_code": code},
+            )
+            time.sleep(sleep_s)
+
+    raise RuntimeError(f"Bedrock invoke failed after {max_attempts} attempts: {last_err}")
 
 
 def sanitize(idea_text: str) -> dict:
@@ -202,50 +256,66 @@ def handler(event: dict, context: DurableContext) -> dict:
 
     logger.info("Pipeline started", extra={"report_id": report_id})
 
-    # Update status to running
-    table.update_item(
-        Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
-        UpdateExpression="SET #s = :status",
-        ExpressionAttributeNames={"#s": "status"},
-        ExpressionAttributeValues={":status": "running"},
-    )
+    try:
+        # Update status to running
+        table.update_item(
+            Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
+            UpdateExpression="SET #s = :status",
+            ExpressionAttributeNames={"#s": "status"},
+            ExpressionAttributeValues={":status": "running"},
+        )
 
-    # Stage 1: Sanitize
-    sanitized = context.step(lambda _: sanitize(idea_text), name="sanitize")
+        # Stage 1: Sanitize
+        sanitized = context.step(lambda _: sanitize(idea_text), name="sanitize")
 
-    # Stage 2: Parse
-    parsed = context.step(lambda _: parse(sanitized["cleaned_idea"]), name="parse")
+        # Stage 2: Parse
+        parsed = context.step(lambda _: parse(sanitized["cleaned_idea"]), name="parse")
 
-    # Stage 3: Search
-    search_results = context.step(lambda _: search(parsed), name="search")
+        # Stage 3: Search
+        search_results = context.step(lambda _: search(parsed), name="search")
 
-    # Stage 4: Analyse
-    analysis = context.step(lambda _: analyse(parsed, search_results), name="analyse")
+        # Stage 4: Analyse
+        analysis = context.step(lambda _: analyse(parsed, search_results), name="analyse")
 
-    # Stage 5: Score
-    scores = context.step(lambda _: score(analysis, search_results), name="score")
+        # Stage 5: Score
+        scores = context.step(lambda _: score(analysis, search_results), name="score")
 
-    # Stage 6: Summarise
-    summary = context.step(lambda _: summarise(analysis, scores, parsed), name="summarise")
+        # Stage 6: Summarise
+        summary = context.step(lambda _: summarise(analysis, scores, parsed), name="summarise")
 
-    # Stage 7: Assemble
-    result = context.step(
-        lambda _: assemble(parsed, search_results, analysis, scores, summary),
-        name="assemble",
-    )
+        # Stage 7: Assemble
+        result = context.step(
+            lambda _: assemble(parsed, search_results, analysis, scores, summary),
+            name="assemble",
+        )
 
-    # Write final result to DynamoDB
-    now = datetime.utcnow().isoformat()
-    table.update_item(
-        Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
-        UpdateExpression="SET #s = :status, result_json = :result, completed_at = :now",
-        ExpressionAttributeNames={"#s": "status"},
-        ExpressionAttributeValues={
-            ":status": "complete",
-            ":result": result,
-            ":now": now,
-        },
-    )
+        # Write final result to DynamoDB
+        now = datetime.utcnow().isoformat()
+        table.update_item(
+            Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
+            UpdateExpression="SET #s = :status, result_json = :result, completed_at = :now",
+            ExpressionAttributeNames={"#s": "status"},
+            ExpressionAttributeValues={
+                ":status": "complete",
+                ":result": result,
+                ":now": now,
+            },
+        )
 
-    logger.info("Pipeline completed", extra={"report_id": report_id})
-    return {"report_id": report_id, "status": "complete"}
+        logger.info("Pipeline completed", extra={"report_id": report_id})
+        return {"report_id": report_id, "status": "complete"}
+    except Exception as e:
+        logger.exception("Pipeline failed", extra={"report_id": report_id})
+        if report_id:
+            now = datetime.utcnow().isoformat()
+            table.update_item(
+                Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
+                UpdateExpression="SET #s = :status, error_message = :error_message, completed_at = :now",
+                ExpressionAttributeNames={"#s": "status"},
+                ExpressionAttributeValues={
+                    ":status": "failed",
+                    ":error_message": str(e),
+                    ":now": now,
+                },
+            )
+        raise

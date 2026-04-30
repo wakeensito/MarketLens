@@ -1,4 +1,7 @@
-const BASE = 'https://amcgahmo7i.execute-api.us-east-1.amazonaws.com/dev';
+const ENV_BASE = (import.meta.env.VITE_API_BASE_URL ?? '').trim();
+const BASE =
+  (ENV_BASE ? ENV_BASE.replace(/\/$/, '') : '') ||
+  (typeof window !== 'undefined' ? `${window.location.origin}/dev` : '/dev');
 
 export interface BackendCompetitor {
   name: string;
@@ -71,12 +74,32 @@ export interface ApiReport {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
-  if (!res.ok) throw new Error(`API ${res.status}`);
-  return res.json() as Promise<T>;
+  const controller = new AbortController();
+  const timeoutMs = 20_000;
+
+  const upstreamSignal = options?.signal;
+  if (upstreamSignal) {
+    if (upstreamSignal.aborted) controller.abort();
+    else upstreamSignal.addEventListener('abort', () => controller.abort(), { once: true });
+  }
+
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${BASE}${path}`, {
+      headers: { 'Content-Type': 'application/json' },
+      ...options,
+      signal: controller.signal,
+    });
+    if (!res.ok) throw new Error(`API ${res.status}`);
+    return res.json() as Promise<T>;
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw new Error(`API timeout after ${timeoutMs}ms`, { cause: e });
+    }
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function createReport(idea_text: string): Promise<ApiReport> {

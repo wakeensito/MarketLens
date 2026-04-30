@@ -156,7 +156,9 @@ export function adaptReport(json: ResultJson, idea_text: string): MarketReport {
       : '.');
 
   const w = json.summary.what_would_it_take;
-  const recommendation = `${w.key_differentiator_required} ${w.biggest_risk}`;
+  const first = w.key_differentiator_required.trim();
+  const sep = /[.!?]$/.test(first) ? ' ' : '. ';
+  const recommendation = `${first}${sep}${w.biggest_risk.trim()}`;
 
   return {
     idea:             idea_text,

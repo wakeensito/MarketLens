@@ -22,7 +22,6 @@ export default function LandingScreen({ onSearch }: Props) {
   const [phIdx, setPhIdx] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const landingRef = useRef<HTMLDivElement>(null);
-  const valid = value.trim().length > 4;
 
   const mouseX = useMotionValue(0.5);
   const mouseY = useMotionValue(0.5);
@@ -49,7 +48,9 @@ export default function LandingScreen({ onSearch }: Props) {
     mouseY.set(0.5);
   }, [mouseX, mouseY]);
 
-  const submit = () => { if (valid) onSearch(value.trim()); };
+  const submit = (nextValue: string) => {
+    if (nextValue.trim().length > 4) onSearch(nextValue.trim());
+  };
 
   const handleExample = (ex: string) => {
     setValue(ex);

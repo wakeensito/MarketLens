@@ -75,15 +75,31 @@ def create_report():
 
     # Invoke AI Orchestration Lambda asynchronously (durable execution)
     if AI_FUNCTION_NAME:
-        lambda_client.invoke(
-            FunctionName=AI_FUNCTION_NAME,
-            InvocationType="Event",
-            Payload=json.dumps({
-                "report_id": report_id,
-                "idea_text": idea_text,
-            }),
-        )
-        logger.info("AI pipeline triggered", extra={"report_id": report_id})
+        try:
+            lambda_client.invoke(
+                FunctionName=AI_FUNCTION_NAME,
+                InvocationType="Event",
+                Payload=json.dumps({
+                    "report_id": report_id,
+                    "idea_text": idea_text,
+                }),
+            )
+            table.update_item(
+                Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
+                UpdateExpression="SET invoke_status = :s",
+                ExpressionAttributeValues={":s": "invoked"},
+            )
+            logger.info("AI pipeline triggered", extra={"report_id": report_id})
+        except Exception as e:
+            logger.error("AI invoke failed", extra={"report_id": report_id, "error": str(e)})
+            table.update_item(
+                Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
+                UpdateExpression="SET invoke_status = :s, invocation_failure = :m",
+                ExpressionAttributeValues={
+                    ":s": "failed",
+                    ":m": str(e),
+                },
+            )
 
     return {"report_id": report_id, "status": "pending"}, 201
 
