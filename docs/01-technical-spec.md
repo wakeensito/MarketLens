@@ -441,7 +441,16 @@ marketlens-infra/
 - State locking via DynamoDB table — prevents concurrent applies.
 - State files separated per environment AND per module to limit blast radius of state corruption.
 - State access restricted to CI/CD pipeline IAM role and a restricted ops IAM role (MFA required).
-- **Sensitive values** (passwords, keys) never stored in Terraform state — Secrets Manager is the source of truth.
+- **Sensitive values** (passwords, keys) never stored in Terraform state — Secrets Manager or SSM Parameter Store (SecureString) is the source of truth.
+
+### 9.5 Least-Privilege IAM Policy Rules
+
+All IAM policies — whether in SAM `template.yaml` or Terraform — must follow these rules:
+
+1. **No wildcard resources.** Every `Resource` in an IAM statement must reference a specific ARN, not `*`. If a Lambda needs `bedrock:InvokeModel`, list the exact model ARNs. If it needs `ssm:GetParameter`, list the exact parameter ARN.
+2. **Scope external API keys to exact parameters.** When storing API keys (Brave Search, Crunchbase, Stripe, etc.) in SSM Parameter Store, the IAM policy must grant `ssm:GetParameter` on the specific parameter path only (e.g. `/marketlens/${Stage}/brave-search-api-key`), never a wildcard like `/marketlens/${Stage}/*`.
+3. **Use SAM policy templates where possible.** `DynamoDBCrudPolicy`, `S3CrudPolicy`, `LambdaInvokePolicy` etc. are pre-scoped to a single resource. Prefer these over hand-written statements.
+4. **Review IAM on every PR.** Any change to `Policies` in `template.yaml` or `*.tf` files must be reviewed for scope creep. A policy that worked for one parameter should not be widened to cover future parameters preemptively.
 
 ---
 

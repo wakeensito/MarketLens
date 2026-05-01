@@ -153,5 +153,19 @@ Dark mode. Deep midnight blue + electric sky blue accent + violet signal.
 
 - **SAM**: Lambdas, API Gateway, S3, CloudFront, DynamoDB
 - **Terraform**: IAM roles (CD role with GitHub OIDC)
-- **Bedrock**: Claude 3 Haiku (`anthropic.claude-3-haiku-20240307-v1:0`) for all LLM calls
+- **Bedrock**: 3-model pipeline — Nova Micro (Parse/Search), DeepSeek V3.2 (Analyse), Claude 3 Haiku (Summarise)
+- **Brave Search API**: Real web search for competitor/market data (key in SSM Parameter Store)
 - **Lambda Durable Functions**: AI pipeline with automatic checkpointing per stage
+
+## IAM & Least Privilege
+
+All IAM policies follow the principle of least privilege. When adding new permissions:
+
+- **Bedrock**: scope `bedrock:InvokeModel` to the exact foundation model ARNs used, not `*`
+- **SSM Parameter Store**: scope `ssm:GetParameter` to the exact parameter ARN (e.g. `/marketlens/${Stage}/brave-search-api-key`), not a wildcard path
+- **DynamoDB**: use SAM policy templates (`DynamoDBCrudPolicy`, `DynamoDBReadPolicy`) scoped to the specific table
+- **S3**: use SAM policy templates (`S3CrudPolicy`) scoped to the specific bucket
+- **Secrets Manager**: scope to the exact secret ARN, not `*`
+- **Lambda invoke**: scope to the exact function ARN, not `*`
+
+Never use wildcard (`*`) resources in IAM statements. If a new external API key or parameter is added, create a dedicated SSM parameter and add a scoped IAM permission for only that parameter.
