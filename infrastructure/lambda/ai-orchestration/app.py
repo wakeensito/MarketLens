@@ -381,9 +381,9 @@ RULES:
             competitors = []
         return {
             "competitors": competitors,
-            "market_size_tam_usd": result.get("market_size_tam_usd"),
-            "market_growth_rate_pct": result.get("market_growth_rate_pct"),
-            "market_age_years": result.get("market_age_years", 5),
+            "market_size_tam_usd": _safe_number(result.get("market_size_tam_usd")),
+            "market_growth_rate_pct": _safe_number(result.get("market_growth_rate_pct")),
+            "market_age_years": _safe_number(result.get("market_age_years"), default=5),
             "trends": result.get("trends", []),
             "user_pain_points": result.get("user_pain_points", []),
         }
@@ -441,9 +441,9 @@ RULES:
             competitors = []
         return {
             "competitors": competitors,
-            "market_size_tam_usd": result.get("market_size_tam_usd"),
-            "market_growth_rate_pct": result.get("market_growth_rate_pct"),
-            "market_age_years": result.get("market_age_years", 5),
+            "market_size_tam_usd": _safe_number(result.get("market_size_tam_usd")),
+            "market_growth_rate_pct": _safe_number(result.get("market_growth_rate_pct")),
+            "market_age_years": _safe_number(result.get("market_age_years"), default=5),
             "trends": result.get("trends", []),
         }
     except json.JSONDecodeError:
@@ -530,15 +530,55 @@ def _clamp(value: float, lo: int = 0, hi: int = 100) -> int:
     return int(min(hi, max(lo, round(value))))
 
 
+def _safe_number(val, default=None) -> float | None:
+    """Coerce a value to float. LLMs often return numbers as strings or with
+    formatting like '$14.8B'. This handles those cases gracefully."""
+    if val is None:
+        return default
+    if isinstance(val, (int, float)):
+        return float(val)
+    if isinstance(val, str):
+        # Strip currency symbols, commas, whitespace
+        cleaned = val.strip().replace(",", "").replace("$", "").replace("€", "").replace("£", "")
+        if not cleaned:
+            return default
+        # Handle suffixes: B(illion), M(illion), K(thousand), T(rillion)
+        multipliers = {"T": 1e12, "B": 1e9, "M": 1e6, "K": 1e3}
+        upper = cleaned.upper()
+        for suffix, mult in multipliers.items():
+            if upper.endswith(suffix):
+                try:
+                    return float(upper[:-1]) * mult
+                except ValueError:
+                    return default
+        # Handle percentage signs
+        if cleaned.endswith("%"):
+            try:
+                return float(cleaned[:-1])
+            except ValueError:
+                return default
+        try:
+            return float(cleaned)
+        except ValueError:
+            return default
+    return default
+
+
 def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
-    """Compute saturation, difficulty, opportunity scores using the design-doc algorithm."""
+    """Compute saturation, difficulty, opportunity scores using the design-doc algorithm.
+
+    Uses continuous scaling where possible to produce varied, data-sensitive
+    scores instead of collapsing into a handful of fixed buckets.
+    """
 
     competitors = analysis.get("competitor_analysis", [])
     num_direct = len(competitors)
     num_gaps = len(analysis.get("market_gaps", []))
-    market_age = search_results.get("market_age_years") or parsed.get("estimated_market_age_years", 5)
-    tam_usd = search_results.get("market_size_tam_usd")
-    growth_pct = search_results.get("market_growth_rate_pct")
+    market_age = _safe_number(
+        search_results.get("market_age_years"), default=None
+    ) or _safe_number(parsed.get("estimated_market_age_years"), default=5)
+    tam_usd = _safe_number(search_results.get("market_size_tam_usd"))
+    growth_pct = _safe_number(search_results.get("market_growth_rate_pct"))
     complexity = parsed.get("estimated_complexity", "medium")
     business_model = parsed.get("business_model", "other")
     dominant_segment = analysis.get("dominant_segment", "mixed")
@@ -549,38 +589,43 @@ def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
     industry = (parsed.get("industry") or "").lower()
 
     # ── Saturation Score (0-100) ──
-    base_score = 20
-    competitor_count_factor = min(40, num_direct * 2.5)
+    # Continuous competitor scaling: 0 competitors → 0, 16+ → 40 (linear, capped)
+    competitor_count_factor = min(40.0, num_direct * (40.0 / 16.0))
 
-    if funding_concentrated:
-        funding_factor = 25
-    elif has_series_c or has_public:
-        funding_factor = 15
+    # Funding maturity: continuous 0-25 based on signals
+    funding_factor = 3.0
+    if funding_concentrated and has_public:
+        funding_factor = 25.0
+    elif funding_concentrated:
+        funding_factor = 22.0
+    elif has_public:
+        funding_factor = 16.0
+    elif has_series_c:
+        funding_factor = 11.0
+
+    # Market age: continuous 0-15 (young markets = low saturation)
+    if market_age is not None and market_age > 0:
+        age_factor = min(15.0, market_age * 1.0)  # 1 point per year, cap at 15
     else:
-        funding_factor = 5
+        age_factor = 3.0  # unknown age gets a small default
 
-    if market_age and market_age > 10:
-        age_factor = 10
-    elif market_age and market_age > 5:
-        age_factor = 5
-    else:
-        age_factor = 0
+    cac_factor = 7.0 if rising_cac else 0.0
 
-    cac_factor = 5 if rising_cac else 0
-
-    saturation = _clamp(base_score + competitor_count_factor + funding_factor + age_factor + cac_factor)
+    # Base is lower (12) so the other factors have more room to differentiate
+    saturation_raw = 12.0 + competitor_count_factor + funding_factor + age_factor + cac_factor
+    saturation = _clamp(saturation_raw)
 
     # ── Difficulty Score (0-100) ──
     complexity_map = {"high": 25, "medium": 15, "low": 5}
     technical_score = complexity_map.get(complexity, 15)
 
     capital_map = {
-        "hardware": 25, "b2b_saas": 20, "marketplace": 20,
-        "b2c_saas": 10, "ecommerce": 10, "service": 5, "other": 10,
+        "hardware": 25, "b2b_saas": 18, "marketplace": 20,
+        "b2c_saas": 10, "ecommerce": 8, "service": 5, "other": 12,
     }
-    capital_score = capital_map.get(business_model, 10)
+    capital_score = capital_map.get(business_model, 12)
 
-    segment_map = {"enterprise": 20, "mid_market": 10, "smb": 5, "prosumer": 0, "consumer": 0, "mixed": 8}
+    segment_map = {"enterprise": 20, "mid_market": 12, "smb": 5, "prosumer": 2, "consumer": 0, "mixed": 8}
     sales_cycle_score = segment_map.get(dominant_segment, 5)
 
     regulated_industries = {"healthcare", "fintech", "finance", "legal", "edtech", "insurance", "banking"}
@@ -592,38 +637,37 @@ def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
     else:
         regulatory_score = 0
 
-    if has_public:
-        brand_trust_score = 10
+    brand_trust_score = 0.0
+    if has_public and funding_concentrated:
+        brand_trust_score = 12.0
+    elif has_public:
+        brand_trust_score = 8.0
     elif has_series_c:
-        brand_trust_score = 5
-    else:
-        brand_trust_score = 0
+        brand_trust_score = 4.0
 
     difficulty = _clamp(technical_score + capital_score + sales_cycle_score + regulatory_score + brand_trust_score)
 
     # ── Opportunity Score (0-100) ──
-    if tam_usd and tam_usd > 10_000_000_000:
-        market_size_score = 25
-    elif tam_usd and tam_usd > 1_000_000_000:
-        market_size_score = 18
-    elif tam_usd and tam_usd > 100_000_000:
-        market_size_score = 10
-    elif tam_usd and tam_usd > 0:
-        market_size_score = 5
+    # Continuous market size scoring using log scale
+    if tam_usd is not None and tam_usd > 0:
+        import math
+        # log10(100M)=8, log10(1B)=9, log10(10B)=10, log10(100B)=11
+        log_tam = math.log10(tam_usd)
+        # Map log10 range [6..12] → score [2..30]
+        market_size_score = min(30.0, max(0.0, (log_tam - 6.0) * 5.0))
     else:
-        market_size_score = 0
+        market_size_score = 0.0
 
-    if growth_pct and growth_pct > 25:
-        growth_score = 25
-    elif growth_pct and growth_pct > 15:
-        growth_score = 18
-    elif growth_pct and growth_pct > 8:
-        growth_score = 10
+    # Continuous growth scoring
+    if growth_pct is not None and growth_pct > 0:
+        # 5% → 4, 15% → 12, 25% → 20, 40%+ → 23 (diminishing returns)
+        growth_score = min(28.0, growth_pct * 0.8 if growth_pct <= 25 else 20.0 + (growth_pct - 25) * 0.2)
     else:
-        growth_score = 0
+        growth_score = 0.0
 
     # Gap indicator: check if competitor weaknesses suggest common buyer complaints
-    weakness_keywords = {"expensive", "complex", "no smb", "limited", "outdated", "slow", "poor"}
+    weakness_keywords = {"expensive", "complex", "no smb", "limited", "outdated", "slow", "poor",
+                         "lacking", "missing", "frustrating", "clunky", "overpriced", "rigid"}
     weaknesses_text = " ".join(
         (c.get("weakness") or "").lower() for c in competitors
     )
@@ -631,20 +675,38 @@ def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
     pain_points = search_results.get("user_pain_points", [])
     pain_text = " ".join(p.lower() for p in pain_points if isinstance(p, str))
     combined_complaints = weaknesses_text + " " + pain_text
-    has_buyer_complaint_match = any(kw in combined_complaints for kw in weakness_keywords)
+    complaint_matches = sum(1 for kw in weakness_keywords if kw in combined_complaints)
     num_pain_points = len(pain_points)
 
-    if has_buyer_complaint_match and (num_gaps >= 2 or num_pain_points >= 2):
-        gap_score = 30
-    elif num_gaps >= 1 or num_pain_points >= 1:
-        gap_score = 15
-    else:
-        gap_score = 0
+    # Continuous gap scoring based on number of signals
+    gap_signals = num_gaps + num_pain_points + complaint_matches
+    gap_score = min(30.0, gap_signals * 3.5)
 
-    saturation_penalty = saturation * 0.20
-    difficulty_penalty = difficulty * 0.15
+    saturation_penalty = saturation * 0.18
+    difficulty_penalty = difficulty * 0.12
 
     opportunity = _clamp(market_size_score + growth_score + gap_score - saturation_penalty - difficulty_penalty)
+
+    logger.info(
+        "Score breakdown",
+        extra={
+            "num_competitors": num_direct,
+            "num_gaps": num_gaps,
+            "tam_usd": tam_usd,
+            "growth_pct": growth_pct,
+            "market_age": market_age,
+            "saturation_raw": round(saturation_raw, 1),
+            "saturation": saturation,
+            "difficulty": difficulty,
+            "opportunity_raw": round(market_size_score + growth_score + gap_score - saturation_penalty - difficulty_penalty, 1),
+            "opportunity": opportunity,
+            "market_size_score": round(market_size_score, 1),
+            "growth_score": round(growth_score, 1),
+            "gap_score": round(gap_score, 1),
+            "gap_signals": gap_signals,
+            "complaint_matches": complaint_matches,
+        },
+    )
 
     # ── Labels ──
     def _band(val, labels):
