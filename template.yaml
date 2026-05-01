@@ -10,11 +10,11 @@ Parameters:
     Description: Deployment stage
   BedrockModelIdParse:
     Type: String
-    Default: amazon.nova-micro-v1:0
+    Default: anthropic.claude-3-haiku-20240307-v1:0
     Description: Bedrock model for Parse stage (structured extraction)
   BedrockModelIdAnalyse:
     Type: String
-    Default: deepseek.v3.2
+    Default: anthropic.claude-3-haiku-20240307-v1:0
     Description: Bedrock model for Analyse stage (reasoning)
   BedrockModelIdSummarise:
     Type: String
