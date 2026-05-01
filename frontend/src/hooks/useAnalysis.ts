@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { AppState, PipelineStage, MarketReport } from '../types';
-import { PIPELINE_STAGE_DEFS, TOTAL_PIPELINE_MS, MOCK_REPORT } from '../mockData';
+import { PIPELINE_STAGE_DEFS, TOTAL_PIPELINE_MS, MOCK_REPORT, MOCK_HISTORY } from '../mockData';
 import { createReport, getReport } from '../api';
 import { adaptReport } from '../adapter';
 
@@ -53,16 +53,17 @@ function deriveStages(prev: PipelineStage[], currentStage: string | undefined, a
 }
 
 export interface AnalysisState {
-  screen:        AppState;
-  query:         string;
-  stages:        PipelineStage[];
-  report:        MarketReport | null;
-  error:         string | null;
-  reportId:      string | null;
-  finalizing:    boolean;
-  startAnalysis: (q: string) => void;
-  handleReset:   () => void;
-  handleRetry:   () => void;
+  screen:                AppState;
+  query:                 string;
+  stages:                PipelineStage[];
+  report:                MarketReport | null;
+  error:                 string | null;
+  reportId:              string | null;
+  finalizing:            boolean;
+  startAnalysis:         (q: string) => void;
+  loadHistoricalReport:  (reportId: string) => void;
+  handleReset:           () => void;
+  handleRetry:           () => void;
 }
 
 export function useAnalysis(): AnalysisState {
@@ -184,6 +185,35 @@ export function useAnalysis(): AnalysisState {
     }
   }, [stopAll, startPolling, showReport]);
 
+  const loadHistoricalReport = useCallback((id: string) => {
+    stopAll();
+    setError(null);
+    setReport(null);
+    setFinalizing(false);
+
+    if (USE_MOCK) {
+      const item = MOCK_HISTORY.find(h => h.report_id === id);
+      if (item?.result_json) {
+        setQuery(item.idea_text);
+        setReportId(id);
+        setReport(adaptReport(item.result_json, item.idea_text));
+        setScreen('report');
+      }
+      return;
+    }
+
+    getReport(id)
+      .then(data => {
+        if (data.status === 'complete' && data.result_json) {
+          setQuery(data.idea_text);
+          setReportId(id);
+          setReport(adaptReport(data.result_json, data.idea_text));
+          setScreen('report');
+        }
+      })
+      .catch(() => setError('Failed to load briefing.'));
+  }, [stopAll]);
+
   const handleReset = useCallback(() => {
     stopAll();
     setScreen('landing');
@@ -203,6 +233,6 @@ export function useAnalysis(): AnalysisState {
 
   return {
     screen, query, stages, report, error, reportId, finalizing,
-    startAnalysis, handleReset, handleRetry,
+    startAnalysis, loadHistoricalReport, handleReset, handleRetry,
   };
 }
