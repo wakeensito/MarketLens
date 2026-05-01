@@ -127,11 +127,13 @@ Terraform is added in Phase 1 for the heavier infrastructure (VPC, RDS, ECS). SA
 
 **Reference:** [03 — AI Pipeline §4 (Search), §5 (Analyse), §6 (Score)](./03-ai-pipeline.md)
 
-- [ ] Choose search API provider (Brave Search API or Serper — pick one, move on)
 - [x] Implement `search` step: competitor lookup via Bedrock LLM (real search API integration later)
-- [x] Implement `analyse` step: Bedrock Claude 3 Haiku call, competitor list extraction, schema validation
-- [x] Implement `score` step: deterministic Saturation, Difficulty, Opportunity algorithm
+- [x] Implement `analyse` step: Bedrock LLM call, competitor list extraction, schema validation
+- [x] Implement `score` step: deterministic Saturation, Difficulty, Opportunity algorithm (full design-doc formula)
 - [x] Graceful degradation: if LLM returns invalid JSON, fallback to defaults (don't kill the pipeline)
+- [x] Multi-model pipeline: Nova Micro (Parse/Search), DeepSeek V3.2 (Analyse), Claude 3 Haiku (Summarise)
+- [x] Provider-aware payload handling: Anthropic, DeepSeek (OpenAI-style), and Nova formats
+- [x] Richer prompts: Parse extracts sub_industry, complexity, market age; Search returns 10-15 competitors with funding/TAM/growth; Analyse outputs structured scoring signals
 - [ ] Unit test scoring algorithm: known inputs → expected outputs
 
 **Done when:** Given an idea, returns scored competitor list. Scores are deterministic.
@@ -142,7 +144,7 @@ Terraform is added in Phase 1 for the heavier infrastructure (VPC, RDS, ECS). SA
 
 **Reference:** [03 — AI Pipeline §7 (Summarise), §8 (Assemble), §9 (Final Report Schema)](./03-ai-pipeline.md)
 
-- [x] Implement `summarise` step: Bedrock Claude 3 Haiku call, beginner-friendly prose
+- [x] Implement `summarise` step: Bedrock Claude 3 Haiku call, beginner-friendly "startup advisor" prose
 - [x] Implement `assemble` step: merge all outputs into final `result_json`
 - [x] Write status updates to DynamoDB (pending → running → complete/failed)
 - [x] Write `result_json` to DynamoDB on completion
