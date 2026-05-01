@@ -374,7 +374,7 @@ export default function ReportView({ report, reportId }: Props) {
       <Reveal>
         <div className="report-footer">
           <span className="report-footer-text">
-            {briefId} · Generated {dateStr} · MarketLens Intelligence Engine
+            {briefId} · Generated {dateStr}
           </span>
           <div className="report-export-group">
             {exportError && <span className="report-export-error">{exportError}</span>}

@@ -5,7 +5,6 @@ import PipelineTracker from './components/PipelineTracker';
 import ReportView from './components/ReportView';
 import AnimatedAiInput from './components/AnimatedAiInput';
 import RecentThreads from './components/RecentThreads';
-import SettingsModal from './components/SettingsModal';
 import { useAnalysis } from './hooks/useAnalysis';
 import { EXAMPLE_QUERIES } from './mockData';
 
@@ -20,8 +19,6 @@ export default function App() {
   const [sidebarOpen,  setSidebarOpen]  = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth > 680 : true
   );
-  const [settingsOpen, setSettingsOpen] = useState(false);
-
   const [inputValue, setInputValue] = useState('');
   const [phIdx, setPhIdx] = useState(0);
   const shellRef = useRef<HTMLDivElement>(null);
@@ -153,11 +150,7 @@ export default function App() {
             onClose={() => setSidebarOpen(false)}
             activeId={reportId}
             onSelect={id => { loadHistoricalReport(id); if (window.innerWidth <= 680) setSidebarOpen(false); setInputValue(''); }}
-            onOpenSettings={() => setSettingsOpen(true)}
           />
-
-          {/* Settings modal */}
-          <SettingsModal isOpen={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
           {/* Main workspace column */}
           <div className={`workspace-body${sidebarOpen ? '' : ' workspace-body--sidebar-closed'}`}>
@@ -231,25 +224,20 @@ export default function App() {
               </AnimatePresence>
             </main>
 
-            {/* Bottom input bar */}
             <motion.div
-              className="ws-bottom-bar"
+              layoutId="ml-input"
+              className="ws-input-wrap"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1, transition: { duration: 0.2 } }}
+              transition={SPRING}
             >
-              <motion.div
-                layoutId="ml-input"
-                className="ws-input-wrap"
-                transition={SPRING}
-              >
-                <AnimatedAiInput
-                  value={inputValue}
-                  onChange={setInputValue}
-                  onSubmit={onSubmit}
-                  placeholder="Ask a follow-up or start a new analysis…"
-                  compact
-                />
-              </motion.div>
+              <AnimatedAiInput
+                value={inputValue}
+                onChange={setInputValue}
+                onSubmit={onSubmit}
+                placeholder="Ask a follow-up or start a new analysis…"
+                compact
+              />
             </motion.div>
           </div>
         </>
