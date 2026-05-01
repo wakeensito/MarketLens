@@ -26,11 +26,10 @@ function relativeDate(iso: string): string {
 }
 
 interface Props {
-  isOpen:          boolean;
-  onClose:         () => void;
-  activeId:        string | null;
-  onSelect:        (reportId: string) => void;
-  onOpenSettings:  () => void;
+  isOpen:   boolean;
+  onClose:  () => void;
+  activeId: string | null;
+  onSelect: (reportId: string) => void;
 }
 
 const PROFILE_MENU_ITEMS = [
@@ -42,7 +41,7 @@ const PROFILE_MENU_ITEMS = [
   { id: 'logout',          label: 'Log Out',         Icon: LogOut,     danger: true  },
 ];
 
-export default function RecentThreads({ isOpen, onClose, activeId, onSelect, onOpenSettings }: Props) {
+export default function RecentThreads({ isOpen, onClose, activeId, onSelect }: Props) {
   const [reports, setReports] = useState<ApiReport[]>([]);
   const [loading, setLoading] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -163,7 +162,6 @@ export default function RecentThreads({ isOpen, onClose, activeId, onSelect, onO
           )}
         </div>
 
-        {/* Profile footer with inline popover */}
         <div className="sidebar-profile-group" ref={profileGroupRef}>
           <AnimatePresence>
             {profileOpen && (
@@ -180,11 +178,9 @@ export default function RecentThreads({ isOpen, onClose, activeId, onSelect, onO
                     <Fragment key={item.id}>
                       {item.danger && <div className="profile-menu-sep" />}
                       <button
+                        type="button"
                         className={`profile-menu-item${item.danger ? ' profile-menu-item--danger' : ''}`}
-                        onClick={() => {
-                          setProfileOpen(false);
-                          if (!item.danger) onOpenSettings();
-                        }}
+                        onClick={() => setProfileOpen(false)}
                       >
                         <Icon size={13} strokeWidth={2} />
                         {item.label}
@@ -197,6 +193,7 @@ export default function RecentThreads({ isOpen, onClose, activeId, onSelect, onO
           </AnimatePresence>
 
           <button
+            type="button"
             className={`sidebar-profile${profileOpen ? ' sidebar-profile--active' : ''}`}
             onClick={() => setProfileOpen(o => !o)}
             aria-label="Open profile menu"
