@@ -6,7 +6,7 @@ Each stage is a durable step with automatic checkpointing and retry.
 
 Models (per stage):
   - Parse:     Amazon Nova Micro   ($0.035/$0.14 per 1M tokens)
-  - Search:    Amazon Nova Micro   (reuses Parse model)
+  - Search:    Brave Search API    ($5/1K requests) + Nova Micro (structuring)
   - Analyse:   DeepSeek V3.2       ($0.62/$1.85 per 1M tokens)
   - Summarise: Claude 3 Haiku      ($0.25/$1.25 per 1M tokens)
 """
@@ -15,6 +15,7 @@ import json
 import boto3
 import random
 import time
+import requests
 from datetime import datetime
 
 from aws_lambda_powertools import Logger, Tracer
@@ -32,6 +33,57 @@ bedrock = boto3.client("bedrock-runtime")
 MODEL_ID_PARSE = os.environ["BEDROCK_MODEL_ID_PARSE"]
 MODEL_ID_ANALYSE = os.environ["BEDROCK_MODEL_ID_ANALYSE"]
 MODEL_ID_SUMMARISE = os.environ["BEDROCK_MODEL_ID_SUMMARISE"]
+
+# Brave Search API
+ssm = boto3.client("ssm")
+_brave_api_key: str | None = None
+
+BRAVE_SEARCH_URL = "https://api.search.brave.com/res/v1/web/search"
+
+
+def _get_brave_api_key() -> str | None:
+    """Retrieve Brave Search API key from SSM Parameter Store (cached in memory)."""
+    global _brave_api_key
+    if _brave_api_key is not None:
+        return _brave_api_key
+    param_name = os.environ.get("BRAVE_SEARCH_API_KEY_PARAM", "")
+    if not param_name:
+        return None
+    try:
+        resp = ssm.get_parameter(Name=param_name, WithDecryption=True)
+        _brave_api_key = resp["Parameter"]["Value"]
+        return _brave_api_key
+    except Exception as e:
+        logger.warning("Failed to retrieve Brave API key from SSM", extra={"error": str(e)})
+        return None
+
+
+def _brave_search(query: str, count: int = 20) -> list[dict]:
+    """Call Brave Search API and return web results. Returns empty list on failure."""
+    api_key = _get_brave_api_key()
+    if not api_key:
+        return []
+    try:
+        resp = requests.get(
+            BRAVE_SEARCH_URL,
+            headers={"X-Subscription-Token": api_key, "Accept": "application/json"},
+            params={"q": query, "count": count, "country": "us", "search_lang": "en"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        results = data.get("web", {}).get("results", [])
+        return [
+            {
+                "title": r.get("title", ""),
+                "url": r.get("url", ""),
+                "description": r.get("description", ""),
+            }
+            for r in results
+        ]
+    except Exception as e:
+        logger.warning("Brave Search API call failed", extra={"query": query, "error": str(e)})
+        return []
 
 
 def _set_stage(report_id: str, stage: str) -> None:
@@ -196,10 +248,152 @@ Business idea: <<<{cleaned_idea}>>>"""
 
 
 # ---------------------------------------------------------------------------
-# Stage 3: Search  (Nova Micro — reuses Parse model for cost)
+# Stage 3: Search  (Brave Search API + Nova Micro for structuring)
 # ---------------------------------------------------------------------------
 def search(parsed: dict) -> dict:
-    """Search for competitors, market size, and trends via LLM."""
+    """Search for competitors, market size, and trends via Brave Search API.
+
+    Runs 6 targeted searches across high-quality sources, then uses Nova Micro
+    to structure the raw results into the schema the pipeline expects.
+    Falls back to pure LLM search if Brave API is unavailable.
+    """
+    keywords = parsed.get("keywords", [])
+    industry = parsed.get("industry", "")
+    sub_industry = parsed.get("sub_industry", "")
+    geography = parsed.get("geography", "Global")
+    business_model = parsed.get("business_model", "")
+    keyword_str = " ".join(keywords[:4])
+
+    # ── 6 targeted Brave searches ──
+
+    # 1. Competitors via Crunchbase (funding, stage, description)
+    competitor_crunchbase = _brave_search(
+        f'"{sub_industry}" site:crunchbase.com/organization', count=15
+    )
+    # 2. Competitors via general web (broader net)
+    competitor_general = _brave_search(
+        f"{industry} {sub_industry} competitors alternatives companies {keyword_str}", count=15
+    )
+    # 3. Market size from research firms
+    market_size = _brave_search(
+        f'"{industry}" "{sub_industry}" market size TAM revenue '
+        f"site:statista.com OR site:grandviewresearch.com OR site:mordorintelligence.com OR site:fortunebusinessinsights.com",
+        count=10,
+    )
+    # 4. Funding and trends from tech press
+    funding_trends = _brave_search(
+        f'"{sub_industry}" startup raised funding 2025 2026 '
+        f"site:techcrunch.com OR site:crunchbase.com/funding-round",
+        count=10,
+    )
+    # 5. User pain points from communities (gap signals)
+    pain_points = _brave_search(
+        f'"{sub_industry}" {keyword_str} "wish" OR "missing" OR "expensive" OR "frustrating" '
+        f"site:reddit.com OR site:g2.com OR site:trustpilot.com",
+        count=10,
+    )
+    # 6. Industry trends and analysis
+    trend_results = _brave_search(
+        f"{industry} {sub_industry} trends predictions outlook 2025 2026", count=10
+    )
+
+    # Merge competitor results (dedup by URL)
+    seen_urls: set[str] = set()
+    all_competitors: list[dict] = []
+    for r in competitor_crunchbase + competitor_general:
+        if r["url"] not in seen_urls:
+            seen_urls.add(r["url"])
+            all_competitors.append(r)
+
+    has_brave_data = len(all_competitors) > 0
+
+    if not has_brave_data:
+        logger.info("Brave Search unavailable, falling back to LLM-only search")
+        return _search_fallback_llm(parsed)
+
+    # Format raw results for the LLM to structure
+    competitor_snippets = "\n".join(
+        f"- {r['title']}: {r['description']} ({r['url']})" for r in all_competitors[:25]
+    )
+    market_snippets = "\n".join(
+        f"- {r['title']}: {r['description']}" for r in market_size[:10]
+    )
+    funding_snippets = "\n".join(
+        f"- {r['title']}: {r['description']}" for r in funding_trends[:10]
+    )
+    pain_snippets = "\n".join(
+        f"- {r['title']}: {r['description']}" for r in pain_points[:10]
+    )
+    trend_snippets = "\n".join(
+        f"- {r['title']}: {r['description']}" for r in trend_results[:10]
+    )
+
+    prompt = f"""You are a market research assistant. I've searched the web for information about the
+{industry} / {sub_industry} market ({business_model}, {geography}).
+
+COMPETITOR & COMPANY RESULTS (from Crunchbase + web):
+{competitor_snippets}
+
+MARKET SIZE & RESEARCH REPORTS:
+{market_snippets}
+
+RECENT FUNDING & DEALS:
+{funding_snippets}
+
+USER PAIN POINTS & REVIEWS:
+{pain_snippets}
+
+INDUSTRY TRENDS & OUTLOOK:
+{trend_snippets}
+
+Based on these REAL search results, extract structured data. Return ONLY valid JSON:
+{{
+  "competitors": [
+    {{
+      "name": "Company Name",
+      "description": "One-line description from search results",
+      "founded_year": 2015,
+      "url": "https://actual-url-from-results.com",
+      "funding_stage": "series_c_plus | series_a_b | seed | bootstrapped | public | acquired | unknown",
+      "target_segment": "enterprise | mid_market | smb | prosumer | consumer | unknown",
+      "pricing_tier": "free | low | mid | high | enterprise | unknown"
+    }}
+  ],
+  "market_size_tam_usd": null or number,
+  "market_growth_rate_pct": null or number,
+  "market_age_years": number,
+  "trends": ["trend 1", "trend 2", "trend 3"],
+  "user_pain_points": ["pain point 1", "pain point 2"]
+}}
+
+RULES:
+- Extract 10-15 REAL companies from the search results. Use actual names and URLs.
+- Do NOT invent companies that aren't in the search results.
+- For market size and growth, extract actual numbers from the research report snippets.
+- For user pain points, extract real complaints from the community/review results.
+- If a data point isn't in the search results, set it to null — do not guess."""
+
+    response = call_llm(prompt, model_id=MODEL_ID_PARSE, max_tokens=2048, temperature=0.1)
+    try:
+        result = json.loads(response)
+        competitors = result.get("competitors", [])
+        if not isinstance(competitors, list):
+            competitors = []
+        return {
+            "competitors": competitors,
+            "market_size_tam_usd": result.get("market_size_tam_usd"),
+            "market_growth_rate_pct": result.get("market_growth_rate_pct"),
+            "market_age_years": result.get("market_age_years", 5),
+            "trends": result.get("trends", []),
+            "user_pain_points": result.get("user_pain_points", []),
+        }
+    except json.JSONDecodeError:
+        logger.warning("Failed to parse structured search results, falling back to LLM-only")
+        return _search_fallback_llm(parsed)
+
+
+def _search_fallback_llm(parsed: dict) -> dict:
+    """Fallback: use Nova Micro to generate search results when Brave is unavailable."""
     keywords = parsed.get("keywords", [])
     industry = parsed.get("industry", "")
     sub_industry = parsed.get("sub_industry", "")
@@ -242,7 +436,6 @@ RULES:
     response = call_llm(prompt, model_id=MODEL_ID_PARSE, max_tokens=2048, temperature=0.2)
     try:
         result = json.loads(response)
-        # Normalize competitors to always be a list
         competitors = result.get("competitors", [])
         if not isinstance(competitors, list):
             competitors = []
@@ -434,11 +627,16 @@ def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
     weaknesses_text = " ".join(
         (c.get("weakness") or "").lower() for c in competitors
     )
-    has_buyer_complaint_match = any(kw in weaknesses_text for kw in weakness_keywords)
+    # Also factor in real user pain points from search
+    pain_points = search_results.get("user_pain_points", [])
+    pain_text = " ".join(p.lower() for p in pain_points if isinstance(p, str))
+    combined_complaints = weaknesses_text + " " + pain_text
+    has_buyer_complaint_match = any(kw in combined_complaints for kw in weakness_keywords)
+    num_pain_points = len(pain_points)
 
-    if has_buyer_complaint_match and num_gaps >= 2:
+    if has_buyer_complaint_match and (num_gaps >= 2 or num_pain_points >= 2):
         gap_score = 30
-    elif num_gaps >= 1:
+    elif num_gaps >= 1 or num_pain_points >= 1:
         gap_score = 15
     else:
         gap_score = 0
@@ -482,7 +680,7 @@ def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
 # ---------------------------------------------------------------------------
 # Stage 6: Summarise  (Claude 3 Haiku — natural prose)
 # ---------------------------------------------------------------------------
-def summarise(analysis: dict, scores: dict, parsed: dict) -> dict:
+def summarise(analysis: dict, scores: dict, parsed: dict, search_results: dict) -> dict:
     """Generate beginner-friendly explanation and gap analysis via LLM."""
     prompt = f"""You are an experienced startup advisor talking to a first-time founder.
 Your job is to explain a market in plain language — like a friend who knows the industry well.
@@ -502,6 +700,7 @@ Saturation score: {scores['saturation_score']}/100 ({scores['saturation_label']}
 Difficulty score: {scores['difficulty_score']}/100 ({scores.get('difficulty_label', '')})
 Opportunity score: {scores['opportunity_score']}/100 ({scores.get('opportunity_label', '')})
 Market gaps: {json.dumps(analysis.get('market_gaps', []), indent=2)}
+User pain points from reviews: {json.dumps(search_results.get('user_pain_points', []))}
 Competitor count: {len(analysis.get('competitor_analysis', []))}
 Key positioning advice: {analysis.get('positioning', '')}
 
@@ -581,7 +780,7 @@ def handler(event: dict, context: DurableContext) -> dict:
         parsed = context.step(lambda _: parse(sanitized["cleaned_idea"]), name="parse")
         _set_stage(report_id, "parse")
 
-        # Stage 3: Search  (Nova Micro)
+        # Stage 3: Search  (Brave Search API + Nova Micro)
         search_results = context.step(lambda _: search(parsed), name="search")
         _set_stage(report_id, "search")
 
@@ -594,7 +793,7 @@ def handler(event: dict, context: DurableContext) -> dict:
         _set_stage(report_id, "score")
 
         # Stage 6: Summarise  (Claude 3 Haiku)
-        summary = context.step(lambda _: summarise(analysis, scores, parsed), name="summarise")
+        summary = context.step(lambda _: summarise(analysis, scores, parsed, search_results), name="summarise")
         _set_stage(report_id, "summarise")
 
         # Stage 7: Assemble

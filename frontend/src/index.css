@@ -123,6 +123,26 @@ html { scroll-behavior: smooth; }
   overflow-x: hidden;
   overscroll-behavior-y: contain;
   -webkit-overflow-scrolling: touch;
+  /* Slightly lighter than landing — prevents the pure-black void feeling */
+  background: oklch(9% 0.032 245);
+}
+
+/* Pin orbs to the viewport in workspace so aurora persists through report scroll */
+.shell--workspace .orb {
+  position: fixed;
+}
+
+/* Stronger aurora presence in workspace — content needs more atmosphere to read against */
+.shell--workspace .orb-1 {
+  background: radial-gradient(circle, oklch(76% 0.22 215 / 0.34) 0%, transparent 70%);
+  width: 800px; height: 680px;
+}
+.shell--workspace .orb-2 {
+  background: radial-gradient(circle, oklch(74% 0.28 300 / 0.28) 0%, transparent 70%);
+  width: 640px; height: 560px;
+}
+.shell--workspace .orb-3 {
+  background: radial-gradient(circle, oklch(55% 0.26 268 / 0.22) 0%, transparent 70%);
 }
 
 /* ── Workspace header ─────────────────────────────────── */
@@ -242,7 +262,7 @@ html { scroll-behavior: smooth; }
   bottom: 0; left: 0; right: 0;
   z-index: 100;
   padding: 8px 24px max(20px, calc(env(safe-area-inset-bottom, 0px) + 12px));
-  background: linear-gradient(to top, oklch(7% 0.032 245) 55%, oklch(7% 0.032 245 / 0) 100%);
+  background: linear-gradient(to top, oklch(9% 0.032 245) 55%, oklch(9% 0.032 245 / 0) 100%);
 }
 
 .ws-input-wrap {
@@ -292,9 +312,10 @@ html { scroll-behavior: smooth; }
 }
 
 /* Kill orb animations on touch devices — large blurred composited layers
-   interfere with iOS scroll gesture detection */
+   interfere with iOS scroll gesture detection. Also reduce blur intensity
+   since composited blur on fixed elements can cause scroll jank on iOS. */
 @media (hover: none) {
-  .orb { animation: none; }
+  .orb { animation: none; filter: blur(60px); }
 }
 
 /* Cursor glow */
@@ -919,7 +940,13 @@ html { scroll-behavior: smooth; }
 .verdict-body-text { font-size: 14px; color: var(--text-secondary); line-height: 1.7; max-width: 580px; }
 
 /* ── Report ───────────────────────────────────────────── */
-.report { padding: 40px 0 0; }
+.report {
+  padding: 40px 0 0;
+  /* Subtle radial atmosphere anchored to the report reading column */
+  background:
+    radial-gradient(ellipse 70% 400px at 80% 30%, oklch(76% 0.22 215 / 0.04) 0%, transparent 100%),
+    radial-gradient(ellipse 60% 360px at 20% 70%, oklch(74% 0.28 300 / 0.04) 0%, transparent 100%);
+}
 
 .report-overline {
   font-size: 11px;
@@ -1381,6 +1408,23 @@ html { scroll-behavior: smooth; }
   /* Touch targets */
   .header-btn-ghost   { min-height: 40px; }
   .report-footer      { padding-bottom: 8px; }
+
+  /* Workspace orbs — mobile sweet spot: visible presence, not a color wash.
+     ~320px orb + 60px blur (touch) spreads ~440px — fills viewport with depth,
+     not saturation. Opacity sits at the threshold where you feel it but
+     don't fight it. */
+  .shell--workspace .orb-1 {
+    width: 340px; height: 300px;
+    background: radial-gradient(circle, oklch(76% 0.22 215 / 0.28) 0%, transparent 70%);
+  }
+  .shell--workspace .orb-2 {
+    width: 280px; height: 240px;
+    background: radial-gradient(circle, oklch(74% 0.28 300 / 0.22) 0%, transparent 70%);
+  }
+  .shell--workspace .orb-3 {
+    width: 220px; height: 190px;
+    background: radial-gradient(circle, oklch(55% 0.26 268 / 0.18) 0%, transparent 70%);
+  }
 }
 
 /* Narrow phones — hide decorative header chrome, preserve core actions */

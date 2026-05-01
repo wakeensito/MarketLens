@@ -283,11 +283,17 @@ Resources:
                 - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockModelIdParse}"
                 - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockModelIdAnalyse}"
                 - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockModelIdSummarise}"
+            - Effect: Allow
+              Action:
+                - ssm:GetParameter
+              Resource:
+                - !Sub "arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/marketlens/${Stage}/*"
       Environment:
         Variables:
           BEDROCK_MODEL_ID_PARSE: !Ref BedrockModelIdParse
           BEDROCK_MODEL_ID_ANALYSE: !Ref BedrockModelIdAnalyse
           BEDROCK_MODEL_ID_SUMMARISE: !Ref BedrockModelIdSummarise
+          BRAVE_SEARCH_API_KEY_PARAM: !Sub /marketlens/${Stage}/brave-search-api-key
 
   AiOrchestrationLogGroup:
     Type: AWS::Logs::LogGroup
