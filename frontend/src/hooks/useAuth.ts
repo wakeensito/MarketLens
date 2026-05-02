@@ -21,10 +21,22 @@ export interface AuthState {
   logout: () => Promise<void>;
   /** Silently refresh the access token */
   refresh: () => Promise<boolean>;
+  /** Instant mock login — only present when VITE_USE_MOCK=true */
+  mockLogin?: () => void;
 }
 
 const ENV_BASE = (import.meta.env.VITE_API_BASE_URL ?? '').trim();
 const BASE = ENV_BASE ? ENV_BASE.replace(/\/$/, '') : '';
+
+const IS_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
+
+const MOCK_USER: AuthUser = {
+  user_id: 'mock-user-001',
+  email: 'demo@marketlens.ai',
+  name: 'Demo User',
+  org_id: 'mock-org',
+  plan: 'analyst',
+};
 
 // Check the non-HttpOnly cookie to avoid unnecessary /auth/me calls
 function hasLoginCookie(): boolean {
@@ -38,6 +50,14 @@ export function useAuth(): AuthState {
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const checkAuth = useCallback(async () => {
+    // Mock mode: skip backend, start unauthenticated so sign-in flow can be tested
+    if (IS_MOCK) {
+      setIsAuthenticated(false);
+      setUser(null);
+      setLoading(false);
+      return;
+    }
+
     if (!hasLoginCookie()) {
       setIsAuthenticated(false);
       setUser(null);
@@ -68,8 +88,13 @@ export function useAuth(): AuthState {
   }, []);
 
   const login = useCallback(() => {
+    if (IS_MOCK) return; // no-op in mock mode; use mockLogin instead
     window.location.href = `${BASE}/auth/login`;
   }, []);
+
+  const mockLogin = IS_MOCK
+    ? () => { setIsAuthenticated(true); setUser(MOCK_USER); }
+    : undefined;
 
   const logout = useCallback(async () => {
     try {
@@ -124,7 +149,7 @@ export function useAuth(): AuthState {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void checkAuth(); }, [checkAuth]);
 
-  return { loading, isAuthenticated, user, login, logout, refresh };
+  return { loading, isAuthenticated, user, login, logout, refresh, mockLogin };
 }
 
 import { useContext } from 'react';
