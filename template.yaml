@@ -464,8 +464,7 @@ Resources:
           COGNITO_CLIENT_ID: !Ref CognitoUserPoolClient
           COGNITO_CLIENT_SECRET: !GetAtt CognitoUserPoolClient.ClientSecret
           COGNITO_USER_POOL_ID: !Ref CognitoUserPool
-          # CLOUDFRONT_DOMAIN and COGNITO_REDIRECT_URI are derived at runtime
-          # from the Host header to avoid circular dependency with CloudFront.
+          APP_DOMAIN: !Sub "https://${CognitoCallbackDomain}"
       Events:
         AuthAny:
           Type: Api

@@ -120,13 +120,7 @@ export function useAuth(): AuthState {
     };
   }, [isAuthenticated, refresh]);
 
-  // Initial auth check — run once on mount.
-  // Uses the ref == null pattern for one-time initialization (react-hooks/refs).
-  const didInit = useRef<boolean | null>(null);
-  if (didInit.current == null) {
-    didInit.current = true;
-    queueMicrotask(() => { void checkAuth(); });
-  }
+  useEffect(() => { void checkAuth(); }, [checkAuth]);
 
   return { loading, isAuthenticated, user, login, logout, refresh };
 }

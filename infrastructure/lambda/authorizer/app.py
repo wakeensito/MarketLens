@@ -17,9 +17,11 @@ import boto3
 import jwt
 from jwt import PyJWKClient
 
-from aws_lambda_powertools import Logger
+from aws_lambda_powertools import Logger, Metrics
+from aws_lambda_powertools.metrics import MetricUnit
 
 logger = Logger()
+metrics = Metrics(namespace="MarketLens", service="Authorizer")
 
 # ── Config ──
 CLIENT_ID = os.environ["COGNITO_CLIENT_ID"]
@@ -96,6 +98,7 @@ def _generate_policy(principal_id: str, effect: str, resource: str, context: dic
     }
 
 
+@metrics.log_metrics
 def lambda_handler(event: dict, context) -> dict:
     """
     Authorizer handler. Always allows the request through (mixed mode),
@@ -138,6 +141,7 @@ def lambda_handler(event: dict, context) -> dict:
             })
     except jwt.ExpiredSignatureError:
         logger.info("Expired access token")
+        metrics.add_metric(name="AuthTokenExpired", unit=MetricUnit.Count, value=1)
         return _generate_policy("anonymous", "Allow", method_arn, {
             "user_id": "anonymous",
             "org_id": "anonymous",
@@ -146,6 +150,7 @@ def lambda_handler(event: dict, context) -> dict:
         })
     except Exception as e:
         logger.warning("JWT validation failed", extra={"error": str(e)})
+        metrics.add_metric(name="AuthTokenInvalid", unit=MetricUnit.Count, value=1)
         return _generate_policy("anonymous", "Allow", method_arn, {
             "user_id": "anonymous",
             "org_id": "anonymous",
@@ -161,6 +166,7 @@ def lambda_handler(event: dict, context) -> dict:
         user = result.get("Item")
         if not user:
             logger.warning("Authenticated user not found in DB", extra={"sub": sub})
+            metrics.add_metric(name="AuthUserNotFound", unit=MetricUnit.Count, value=1)
             return _generate_policy(sub, "Allow", method_arn, {
                 "user_id": sub,
                 "org_id": "anonymous",
@@ -180,6 +186,7 @@ def lambda_handler(event: dict, context) -> dict:
 
     except Exception as e:
         logger.error("User lookup failed", extra={"error": str(e), "sub": sub})
+        metrics.add_metric(name="AuthDbError", unit=MetricUnit.Count, value=1)
         return _generate_policy(sub, "Allow", method_arn, {
             "user_id": sub,
             "org_id": "anonymous",

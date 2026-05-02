@@ -30,8 +30,12 @@ export default function App() {
     typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches
   );
 
-  // Track whether anonymous user has used their free report
-  const [anonUsed, setAnonUsed] = useState(false);
+  // Track whether anonymous user has used their free report (persisted across refreshes)
+  const [anonUsed, setAnonUsed] = useState(() =>
+    typeof window !== 'undefined' && sessionStorage.getItem('ml_anon_used') === '1'
+  );
+
+  const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
     const id = setInterval(() => setPhIdx(i => (i + 1) % EXAMPLE_QUERIES.length), 3200);
@@ -47,12 +51,11 @@ export default function App() {
     return () => mq.removeEventListener('change', sync);
   }, []);
 
-  // Check for auth_error in URL (from failed OAuth callback)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const authError = params.get('auth_error');
-    if (authError) {
-      // Clean URL
+    const err = params.get('auth_error');
+    if (err) {
+      setAuthError(err);
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
@@ -90,9 +93,9 @@ export default function App() {
     startAnalysis(val.trim());
     setInputValue('');
 
-    // Mark anonymous usage
     if (!auth.isAuthenticated) {
       setAnonUsed(true);
+      sessionStorage.setItem('ml_anon_used', '1');
     }
   }, [startAnalysis, auth.isAuthenticated, anonUsed]);
 
@@ -178,6 +181,22 @@ export default function App() {
                 Maybe later
               </button>
             </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── AUTH ERROR BANNER ────────────────────────────────── */}
+      <AnimatePresence>
+        {authError && (
+          <motion.div
+            className="auth-error-banner"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            transition={{ duration: 0.25, ease: 'easeOut' as const }}
+          >
+            <span className="auth-error-text">{authError}</span>
+            <button className="auth-error-dismiss" onClick={() => setAuthError(null)} aria-label="Dismiss">×</button>
           </motion.div>
         )}
       </AnimatePresence>

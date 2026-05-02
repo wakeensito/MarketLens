@@ -2051,6 +2051,45 @@ html { scroll-behavior: smooth; }
   color: var(--text-secondary);
 }
 
+/* ── Auth error banner ───────────────────────────────── */
+.auth-error-banner {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--danger-light);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-md);
+  z-index: 200;
+  max-width: min(480px, calc(100vw - 32px));
+}
+
+.auth-error-text {
+  font-size: 13px;
+  color: var(--text);
+  flex: 1;
+}
+
+.auth-error-dismiss {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  transition: color 0.15s;
+}
+
+.auth-error-dismiss:hover {
+  color: var(--text);
+}
+
 /* ── Landing auth prompt ─────────────────────────────── */
 .landing-auth-prompt {
   display: flex;

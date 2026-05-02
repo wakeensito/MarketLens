@@ -36,6 +36,7 @@ CLIENT_ID = os.environ["COGNITO_CLIENT_ID"]
 CLIENT_SECRET = os.environ["COGNITO_CLIENT_SECRET"]
 USER_POOL_ID = os.environ["COGNITO_USER_POOL_ID"]
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
+APP_DOMAIN = os.environ["APP_DOMAIN"].rstrip("/")
 
 # Cognito endpoints
 TOKEN_ENDPOINT = f"https://{COGNITO_DOMAIN}/oauth2/token"
@@ -63,23 +64,23 @@ def _get_jwks_client():
     return _jwks_client
 
 
-def _set_cookie(name: str, value: str, max_age: int, http_only: bool = True) -> str:
+def _set_cookie(name: str, value: str, max_age: int, http_only: bool = True, samesite: str = "Strict") -> str:
     """Build a Set-Cookie header value."""
     parts = [
         f"{name}={value}",
         f"Max-Age={max_age}",
         "Path=/",
         "Secure",
-        "SameSite=Lax",  # Lax required for OAuth redirect flow
+        f"SameSite={samesite}",
     ]
     if http_only:
         parts.append("HttpOnly")
     return "; ".join(parts)
 
 
-def _clear_cookie(name: str) -> str:
+def _clear_cookie(name: str, samesite: str = "Strict") -> str:
     """Build a Set-Cookie header that clears a cookie."""
-    return f"{name}=; Max-Age=0; Path=/; Secure; SameSite=Lax; HttpOnly"
+    return f"{name}=; Max-Age=0; Path=/; Secure; SameSite={samesite}; HttpOnly"
 
 
 def _parse_cookies(cookie_header: str) -> dict:
@@ -202,27 +203,12 @@ def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _get_origin_domain() -> str:
-    """Derive the CloudFront domain from the request's Host or Origin header."""
-    origin = app.current_event.get_header_value("Origin") or ""
-    referer = app.current_event.get_header_value("Referer") or ""
-
-    if origin and "cloudfront" in origin:
-        return origin.replace("https://", "").replace("http://", "").split("/")[0]
-    if referer and "cloudfront" in referer:
-        return referer.replace("https://", "").replace("http://", "").split("/")[0]
-    x_fwd_host = app.current_event.get_header_value("X-Forwarded-Host") or ""
-    if x_fwd_host:
-        return x_fwd_host.split(",")[0].strip()
-    return app.current_event.get_header_value("Host") or ""
-
-
 def _get_redirect_uri() -> str:
-    return f"https://{_get_origin_domain()}/auth/callback"
+    return f"{APP_DOMAIN}/auth/callback"
 
 
 def _get_app_url() -> str:
-    return f"https://{_get_origin_domain()}/"
+    return f"{APP_DOMAIN}/"
 
 
 # ── Routes ──
@@ -242,7 +228,7 @@ def login():
         "state": state,
     })
 
-    state_cookie = _set_cookie("ml_oauth_state", state, STATE_COOKIE_MAX_AGE)
+    state_cookie = _set_cookie("ml_oauth_state", state, STATE_COOKIE_MAX_AGE, samesite="Lax")
 
     return {
         "statusCode": 302,
@@ -333,7 +319,7 @@ def callback():
         _set_cookie("ml_access", access_token, ACCESS_TOKEN_MAX_AGE),
         _set_cookie("ml_refresh", refresh_token, REFRESH_TOKEN_MAX_AGE),
         _set_cookie("ml_logged_in", "1", REFRESH_TOKEN_MAX_AGE, http_only=False),
-        _clear_cookie("ml_oauth_state"),
+        _clear_cookie("ml_oauth_state", samesite="Lax"),
     ]
 
     return {
