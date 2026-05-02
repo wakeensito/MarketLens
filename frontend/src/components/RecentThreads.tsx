@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, X, PanelLeftClose, Zap, Palette, User, Settings2, HelpCircle, LogOut } from 'lucide-react';
 import type { ApiReport } from '../api';
 import { listReports } from '../api';
-import { useAuthContext } from '../AuthContext';
+import { useAuthContext } from '../hooks/useAuth';
 import { MOCK_HISTORY } from '../mockData';
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';

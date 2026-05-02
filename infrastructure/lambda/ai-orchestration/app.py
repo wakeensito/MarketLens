@@ -86,8 +86,10 @@ def _brave_search(query: str, count: int = 20) -> list[dict]:
         return []
 
 
-def _set_stage(report_id: str, stage: str, org_id: str = "") -> None:
-    pk = f"ORG#{org_id}#REPORT#{report_id}" if org_id else f"REPORT#{report_id}"
+def _set_stage(report_id: str, stage: str, org_id: str) -> None:
+    if not org_id:
+        raise ValueError(f"_set_stage called without org_id for report {report_id}")
+    pk = f"ORG#{org_id}#REPORT#{report_id}"
     try:
         table.update_item(
             Key={"pk": pk, "sk": f"REPORT#{report_id}"},

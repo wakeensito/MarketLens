@@ -74,11 +74,11 @@ def generate_csv(report: dict) -> str:
 
 def _get_auth_context() -> dict:
     """Extract auth context injected by the Lambda Authorizer."""
-    raw_event = app.current_event._data
+    raw_event = app.current_event.raw_event
     authorizer = (
         raw_event.get("requestContext", {})
         .get("authorizer", {})
-    )
+    ) if isinstance(raw_event, dict) else {}
     return {
         "user_id": authorizer.get("user_id", "anonymous"),
         "org_id": authorizer.get("org_id", "anonymous"),

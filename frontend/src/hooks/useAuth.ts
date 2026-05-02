@@ -97,6 +97,8 @@ export function useAuth(): AuthState {
       }
       return true;
     } catch {
+      setIsAuthenticated(false);
+      setUser(null);
       return false;
     }
   }, []);
@@ -118,10 +120,22 @@ export function useAuth(): AuthState {
     };
   }, [isAuthenticated, refresh]);
 
-  // Initial auth check on mount
-  useEffect(() => {
-    checkAuth();
-  }, [checkAuth]);
+  // Initial auth check — run once on mount.
+  // Uses the ref == null pattern for one-time initialization (react-hooks/refs).
+  const didInit = useRef<boolean | null>(null);
+  if (didInit.current == null) {
+    didInit.current = true;
+    queueMicrotask(() => { void checkAuth(); });
+  }
 
   return { loading, isAuthenticated, user, login, logout, refresh };
+}
+
+import { useContext } from 'react';
+import { AuthContext } from '../authContext';
+
+export function useAuthContext(): AuthState {
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuthContext must be used within AuthProvider');
+  return ctx;
 }

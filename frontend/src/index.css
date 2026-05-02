@@ -1946,7 +1946,7 @@ html { scroll-behavior: smooth; }
   position: fixed;
   inset: 0;
   z-index: 500;
-  background: oklch(7% 0.032 245 / 0.75);
+  background: color-mix(in oklch, var(--bg) 75%, transparent);
   backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
@@ -2016,6 +2016,11 @@ html { scroll-behavior: smooth; }
   box-shadow: 0 2px 12px oklch(0% 0 0 / 0.1);
 }
 
+.auth-gate-btn--google:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--border-focus);
+}
+
 .auth-gate-btn--github {
   background: oklch(18% 0 0);
   color: oklch(95% 0 0);
@@ -2025,6 +2030,11 @@ html { scroll-behavior: smooth; }
 .auth-gate-btn--github:hover {
   background: oklch(24% 0 0);
   box-shadow: 0 2px 12px oklch(0% 0 0 / 0.2);
+}
+
+.auth-gate-btn--github:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--border-focus);
 }
 
 .auth-gate-dismiss {

@@ -39,7 +39,7 @@ AI_FUNCTION_NAME = os.environ.get("AI_FUNCTION_NAME", "")
 
 def _get_auth_context(event=None) -> dict:
     """Extract auth context injected by the Lambda Authorizer."""
-    raw_event = app.current_event._data if event is None else event
+    raw_event = app.current_event.raw_event if event is None else event
     authorizer = (
         raw_event.get("requestContext", {})
         .get("authorizer", {})
@@ -53,60 +53,75 @@ def _get_auth_context(event=None) -> dict:
     }
 
 
-def _check_rate_limit(auth: dict) -> str | None:
-    """Check daily report creation limit. Returns error message or None."""
+def _atomic_check_and_increment(auth: dict) -> str | None:
+    """Atomically check rate limit and increment counter.
+
+    Uses a conditional UpdateItem so two concurrent requests cannot both pass.
+    Returns error message if rate limited, None if allowed.
+    """
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     if not auth["is_authenticated"]:
-        # Anonymous: check how many reports exist under ORG#anonymous
+        # Anonymous: count today's reports under ORG#anonymous via GSI
+        today_prefix = today  # ISO date prefix for gsi1sk
         result = table.query(
             IndexName="gsi1",
-            KeyConditionExpression="gsi1pk = :pk",
-            ExpressionAttributeValues={":pk": "ORG#anonymous#REPORTS"},
+            KeyConditionExpression="gsi1pk = :pk AND begins_with(gsi1sk, :today)",
+            ExpressionAttributeValues={
+                ":pk": "ORG#anonymous#REPORTS",
+                ":today": today_prefix,
+            },
             Select="COUNT",
         )
         if result.get("Count", 0) >= ANONYMOUS_LIMIT:
             return "Sign up for a free account to run more analyses."
         return None
 
-    # Authenticated: check daily count from user record
+    # Authenticated: atomic check-and-increment on user record
     user_pk = f"USER#{auth['user_id']}"
     try:
-        result = table.get_item(Key={"pk": user_pk, "sk": user_pk})
-        user = result.get("Item", {})
-        count_date = user.get("report_count_date", "")
-        count = int(user.get("report_count_today", 0))
+        # Attempt to increment, but only if under the daily limit.
+        # If report_count_date != today, reset to 1 (new day).
+        # If report_count_date == today, increment only if < limit.
+        try:
+            # Case 1: Same day — increment if under limit
+            table.update_item(
+                Key={"pk": user_pk, "sk": user_pk},
+                UpdateExpression="SET report_count_today = report_count_today + :one",
+                ConditionExpression="report_count_date = :today AND report_count_today < :limit",
+                ExpressionAttributeValues={
+                    ":one": 1,
+                    ":today": today,
+                    ":limit": FREE_TIER_DAILY_LIMIT,
+                },
+            )
+            return None
+        except ClientError as e:
+            if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
+                raise
 
-        if count_date != today:
-            # New day — reset counter
-            count = 0
-
-        if count >= FREE_TIER_DAILY_LIMIT:
-            return f"Daily limit reached ({FREE_TIER_DAILY_LIMIT} reports/day on free tier)."
+            # Condition failed — either new day or limit reached.
+            # Try resetting for new day.
+            try:
+                table.update_item(
+                    Key={"pk": user_pk, "sk": user_pk},
+                    UpdateExpression="SET report_count_today = :one, report_count_date = :today",
+                    ConditionExpression="report_count_date <> :today",
+                    ExpressionAttributeValues={
+                        ":one": 1,
+                        ":today": today,
+                    },
+                )
+                return None
+            except ClientError as e2:
+                if e2.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                    # Same day AND limit reached
+                    return f"Daily limit reached ({FREE_TIER_DAILY_LIMIT} reports/day on free tier)."
+                raise
     except Exception as e:
         logger.warning("Rate limit check failed", extra={"error": str(e)})
-        # Fail open — allow the request
-    return None
-
-
-def _increment_report_count(auth: dict):
-    """Increment the daily report counter for authenticated users."""
-    if not auth["is_authenticated"]:
-        return
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    user_pk = f"USER#{auth['user_id']}"
-    try:
-        table.update_item(
-            Key={"pk": user_pk, "sk": user_pk},
-            UpdateExpression="SET report_count_today = if_not_exists(report_count_today, :zero) + :one, report_count_date = :today",
-            ExpressionAttributeValues={
-                ":zero": 0,
-                ":one": 1,
-                ":today": today,
-            },
-        )
-    except Exception as e:
-        logger.warning("Failed to increment report count", extra={"error": str(e)})
+        # Fail open
+        return None
 
 
 @app.get("/reports")
@@ -146,8 +161,8 @@ def create_report():
     if len(idea_text) > _MAX_IDEA_LEN:
         idea_text = idea_text[:_MAX_IDEA_LEN]
 
-    # Rate limit check
-    rate_error = _check_rate_limit(auth)
+    # Atomic rate limit check + increment
+    rate_error = _atomic_check_and_increment(auth)
     if rate_error:
         return {"error": rate_error, "code": "RATE_LIMITED"}, 429
 
@@ -169,9 +184,6 @@ def create_report():
     table.put_item(Item=item)
 
     logger.info("Report created", extra={"report_id": report_id, "org_id": org_id, "user_id": auth["user_id"]})
-
-    # Increment daily counter
-    _increment_report_count(auth)
 
     # Invoke AI Orchestration Lambda asynchronously (durable execution)
     if AI_FUNCTION_NAME:

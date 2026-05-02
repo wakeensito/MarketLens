@@ -28,6 +28,7 @@ AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 REPORTS_TABLE = os.environ["REPORTS_TABLE"]
 
 JWKS_URI = f"https://cognito-idp.{AWS_REGION}.amazonaws.com/{USER_POOL_ID}/.well-known/jwks.json"
+EXPECTED_ISSUER = f"https://cognito-idp.{AWS_REGION}.amazonaws.com/{USER_POOL_ID}"
 
 # Cached across invocations
 _jwks_client = None
@@ -123,8 +124,18 @@ def lambda_handler(event: dict, context) -> dict:
             signing_key.key,
             algorithms=["RS256"],
             audience=CLIENT_ID,
+            issuer=EXPECTED_ISSUER,
             options={"verify_exp": True},
         )
+
+        # Cognito access tokens have token_use=access; reject ID tokens
+        if claims.get("token_use") != "access":
+            logger.warning("Token is not an access token", extra={"token_use": claims.get("token_use")})
+            return _generate_policy("anonymous", "Allow", method_arn, {
+                "user_id": "anonymous",
+                "org_id": "anonymous",
+                "is_authenticated": "false",
+            })
     except jwt.ExpiredSignatureError:
         logger.info("Expired access token")
         return _generate_policy("anonymous", "Allow", method_arn, {

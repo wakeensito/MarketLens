@@ -13,10 +13,7 @@ Endpoints:
 """
 import os
 import json
-import time
-import hashlib
-import hmac
-import base64
+import secrets
 import urllib.parse
 
 import boto3
@@ -43,13 +40,13 @@ AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 # Cognito endpoints
 TOKEN_ENDPOINT = f"https://{COGNITO_DOMAIN}/oauth2/token"
 AUTHORIZE_ENDPOINT = f"https://{COGNITO_DOMAIN}/oauth2/authorize"
-LOGOUT_ENDPOINT = f"https://{COGNITO_DOMAIN}/logout"
 JWKS_URI = f"https://cognito-idp.{AWS_REGION}.amazonaws.com/{USER_POOL_ID}/.well-known/jwks.json"
+EXPECTED_ISSUER = f"https://cognito-idp.{AWS_REGION}.amazonaws.com/{USER_POOL_ID}"
 
 # Cookie config
 ACCESS_TOKEN_MAX_AGE = 3600        # 1 hour
 REFRESH_TOKEN_MAX_AGE = 2592000    # 30 days
-COOKIE_DOMAIN = ""                 # empty = same origin (CloudFront domain)
+STATE_COOKIE_MAX_AGE = 600         # 10 minutes (OAuth state CSRF)
 
 # DynamoDB for user records
 dynamodb = boto3.resource("dynamodb")
@@ -66,17 +63,6 @@ def _get_jwks_client():
     return _jwks_client
 
 
-def _compute_secret_hash(username: str) -> str:
-    """Compute Cognito SECRET_HASH for token requests."""
-    msg = username + CLIENT_ID
-    dig = hmac.new(
-        CLIENT_SECRET.encode("utf-8"),
-        msg.encode("utf-8"),
-        hashlib.sha256,
-    ).digest()
-    return base64.b64encode(dig).decode("utf-8")
-
-
 def _set_cookie(name: str, value: str, max_age: int, http_only: bool = True) -> str:
     """Build a Set-Cookie header value."""
     parts = [
@@ -84,7 +70,7 @@ def _set_cookie(name: str, value: str, max_age: int, http_only: bool = True) -> 
         f"Max-Age={max_age}",
         "Path=/",
         "Secure",
-        "SameSite=Strict",
+        "SameSite=Lax",  # Lax required for OAuth redirect flow
     ]
     if http_only:
         parts.append("HttpOnly")
@@ -93,7 +79,7 @@ def _set_cookie(name: str, value: str, max_age: int, http_only: bool = True) -> 
 
 def _clear_cookie(name: str) -> str:
     """Build a Set-Cookie header that clears a cookie."""
-    return f"{name}=; Max-Age=0; Path=/; Secure; SameSite=Strict; HttpOnly"
+    return f"{name}=; Max-Age=0; Path=/; Secure; SameSite=Lax; HttpOnly"
 
 
 def _parse_cookies(cookie_header: str) -> dict:
@@ -109,8 +95,8 @@ def _parse_cookies(cookie_header: str) -> dict:
     return cookies
 
 
-def _decode_access_token(token: str) -> dict:
-    """Decode and validate a Cognito access token."""
+def _decode_and_verify_token(token: str) -> dict:
+    """Decode and validate a Cognito token with full verification."""
     jwks_client = _get_jwks_client()
     signing_key = jwks_client.get_signing_key_from_jwt(token)
     return jwt.decode(
@@ -118,37 +104,32 @@ def _decode_access_token(token: str) -> dict:
         signing_key.key,
         algorithms=["RS256"],
         audience=CLIENT_ID,
+        issuer=EXPECTED_ISSUER,
         options={"verify_exp": True},
     )
 
 
 def _ensure_user_record(sub: str, email: str, name: str) -> dict:
-    """Create or fetch user + personal org in DynamoDB. Returns user item."""
+    """Create or fetch user + personal org in DynamoDB.
+
+    Uses TransactWriteItems to atomically create both org and user records,
+    with a condition check to prevent duplicate creation on concurrent logins.
+    Returns user item.
+    """
     from uuid import uuid4
 
     user_pk = f"USER#{sub}"
+
+    # Check if user already exists (fast path)
     result = reports_table.get_item(Key={"pk": user_pk, "sk": user_pk})
     existing = result.get("Item")
-
     if existing:
         return existing
 
-    # First login — create personal org + user record
+    # First login — create personal org + user record atomically
     org_id = str(uuid4()).replace("-", "")[:16]
     now = _iso_now()
 
-    # Create org record
-    reports_table.put_item(Item={
-        "pk": f"ORG#{org_id}",
-        "sk": f"ORG#{org_id}",
-        "org_id": org_id,
-        "org_name": f"{name or email}'s workspace",
-        "owner_sub": sub,
-        "plan": "free",
-        "created_at": now,
-    })
-
-    # Create user record
     user_item = {
         "pk": user_pk,
         "sk": user_pk,
@@ -161,10 +142,59 @@ def _ensure_user_record(sub: str, email: str, name: str) -> dict:
         "report_count_today": 0,
         "report_count_date": now[:10],
     }
-    reports_table.put_item(Item=user_item)
 
-    logger.info("New user created", extra={"user_id": sub, "org_id": org_id})
-    return user_item
+    org_item = {
+        "pk": f"ORG#{org_id}",
+        "sk": f"ORG#{org_id}",
+        "org_id": org_id,
+        "org_name": f"{name or email}'s workspace",
+        "owner_sub": sub,
+        "plan": "free",
+        "created_at": now,
+    }
+
+    try:
+        client = reports_table.meta.client
+        client.transact_write_items(
+            TransactItems=[
+                {
+                    "Put": {
+                        "TableName": reports_table.name,
+                        "Item": {k: _serialize_value(v) for k, v in org_item.items()},
+                        "ConditionExpression": "attribute_not_exists(pk)",
+                    }
+                },
+                {
+                    "Put": {
+                        "TableName": reports_table.name,
+                        "Item": {k: _serialize_value(v) for k, v in user_item.items()},
+                        "ConditionExpression": "attribute_not_exists(pk)",
+                    }
+                },
+            ]
+        )
+        logger.info("New user created", extra={"user_id": sub, "org_id": org_id})
+        return user_item
+    except client.exceptions.TransactionCanceledException:
+        # Race condition: another concurrent login already created the user
+        result = reports_table.get_item(Key={"pk": user_pk, "sk": user_pk})
+        existing = result.get("Item")
+        if existing:
+            return existing
+        raise
+
+
+def _serialize_value(val):
+    """Convert a Python value to DynamoDB AttributeValue format for low-level client."""
+    if isinstance(val, str):
+        return {"S": val}
+    if isinstance(val, (int, float)):
+        return {"N": str(val)}
+    if isinstance(val, bool):
+        return {"BOOL": val}
+    if val is None:
+        return {"NULL": True}
+    return {"S": str(val)}
 
 
 def _iso_now() -> str:
@@ -173,11 +203,7 @@ def _iso_now() -> str:
 
 
 def _get_origin_domain() -> str:
-    """Derive the CloudFront domain from the request's Host or Origin header.
-    Falls back to Referer. This avoids a circular dependency in the SAM template."""
-    # API Gateway forwards the original Host header from CloudFront
-    host = app.current_event.get_header_value("Host") or ""
-    # If behind API Gateway, the Host is the APIGW domain — check Origin/Referer instead
+    """Derive the CloudFront domain from the request's Host or Origin header."""
     origin = app.current_event.get_header_value("Origin") or ""
     referer = app.current_event.get_header_value("Referer") or ""
 
@@ -185,23 +211,18 @@ def _get_origin_domain() -> str:
         return origin.replace("https://", "").replace("http://", "").split("/")[0]
     if referer and "cloudfront" in referer:
         return referer.replace("https://", "").replace("http://", "").split("/")[0]
-    # For direct CloudFront → APIGW, the Host header is the APIGW domain.
-    # The actual CF domain comes through the X-Forwarded-Host or we derive from Referer.
     x_fwd_host = app.current_event.get_header_value("X-Forwarded-Host") or ""
     if x_fwd_host:
         return x_fwd_host.split(",")[0].strip()
-    # Last resort: use the Host header (works when CF passes it through)
-    return host
+    return app.current_event.get_header_value("Host") or ""
 
 
 def _get_redirect_uri() -> str:
-    domain = _get_origin_domain()
-    return f"https://{domain}/auth/callback"
+    return f"https://{_get_origin_domain()}/auth/callback"
 
 
 def _get_app_url() -> str:
-    domain = _get_origin_domain()
-    return f"https://{domain}/"
+    return f"https://{_get_origin_domain()}/"
 
 
 # ── Routes ──
@@ -210,16 +231,23 @@ def _get_app_url() -> str:
 @app.get("/login")
 @tracer.capture_method
 def login():
-    """Redirect to Cognito Hosted UI."""
+    """Redirect to Cognito Hosted UI with CSRF state parameter."""
+    state = secrets.token_urlsafe(32)
+
     params = urllib.parse.urlencode({
         "client_id": CLIENT_ID,
         "response_type": "code",
         "scope": "openid email profile",
         "redirect_uri": _get_redirect_uri(),
+        "state": state,
     })
+
+    state_cookie = _set_cookie("ml_oauth_state", state, STATE_COOKIE_MAX_AGE)
+
     return {
         "statusCode": 302,
         "headers": {"Location": f"{AUTHORIZE_ENDPOINT}?{params}"},
+        "multiValueHeaders": {"Set-Cookie": [state_cookie]},
         "body": "",
     }
 
@@ -230,6 +258,7 @@ def callback():
     """Exchange authorization code for tokens, set cookies, redirect to app."""
     code = app.current_event.get_query_string_value("code")
     error = app.current_event.get_query_string_value("error")
+    state = app.current_event.get_query_string_value("state")
 
     if error:
         logger.warning("OAuth callback error", extra={"error": error})
@@ -237,6 +266,15 @@ def callback():
 
     if not code:
         return _redirect_with_error("Missing authorization code.")
+
+    # Validate CSRF state
+    cookie_header = app.current_event.get_header_value("Cookie") or ""
+    cookies = _parse_cookies(cookie_header)
+    expected_state = cookies.get("ml_oauth_state", "")
+
+    if not state or not expected_state or not secrets.compare_digest(state, expected_state):
+        logger.warning("OAuth state mismatch (CSRF check failed)")
+        return _redirect_with_error("Authentication failed. Please try again.")
 
     # Exchange code for tokens
     try:
@@ -262,33 +300,46 @@ def callback():
     refresh_token = tokens.get("refresh_token", "")
     id_token = tokens.get("id_token", "")
 
-    # Decode ID token to get user info (unverified — we trust Cognito here)
+    # Validate tokens are present
+    if not access_token or not refresh_token:
+        logger.error("Cognito returned incomplete tokens", extra={
+            "has_access": bool(access_token),
+            "has_refresh": bool(refresh_token),
+        })
+        return _redirect_with_error("Login failed. Please try again.")
+
+    # Decode and verify ID token (full signature + issuer validation)
     try:
-        id_claims = jwt.decode(id_token, options={"verify_signature": False})
+        id_claims = _decode_and_verify_token(id_token)
         sub = id_claims.get("sub", "")
         email = id_claims.get("email", "")
         name = id_claims.get("name", "") or id_claims.get("cognito:username", "")
-    except Exception:
-        sub, email, name = "", "", ""
+    except Exception as e:
+        logger.error("ID token verification failed", extra={"error": str(e)})
+        return _redirect_with_error("Login failed. Please try again.")
+
+    if not sub:
+        logger.error("ID token missing sub claim")
+        return _redirect_with_error("Login failed. Please try again.")
 
     # Ensure user + org exist in DynamoDB
-    if sub:
-        try:
-            _ensure_user_record(sub, email, name)
-        except Exception as e:
-            logger.error("User record creation failed", extra={"error": str(e), "sub": sub})
+    try:
+        _ensure_user_record(sub, email, name)
+    except Exception as e:
+        logger.error("User record creation failed", extra={"error": str(e), "sub": sub})
 
-    # Set cookies and redirect to app
-    cookies = [
+    # Set cookies and redirect to app (clear the state cookie)
+    response_cookies = [
         _set_cookie("ml_access", access_token, ACCESS_TOKEN_MAX_AGE),
         _set_cookie("ml_refresh", refresh_token, REFRESH_TOKEN_MAX_AGE),
         _set_cookie("ml_logged_in", "1", REFRESH_TOKEN_MAX_AGE, http_only=False),
+        _clear_cookie("ml_oauth_state"),
     ]
 
     return {
         "statusCode": 302,
         "headers": {"Location": _get_app_url()},
-        "multiValueHeaders": {"Set-Cookie": cookies},
+        "multiValueHeaders": {"Set-Cookie": response_cookies},
         "body": "",
     }
 
@@ -323,6 +374,9 @@ def refresh():
         return {"error": "Refresh failed"}, 401
 
     new_access = tokens.get("access_token", "")
+    if not new_access:
+        return {"error": "Refresh failed"}, 401
+
     set_cookies = [
         _set_cookie("ml_access", new_access, ACCESS_TOKEN_MAX_AGE),
         _set_cookie("ml_logged_in", "1", REFRESH_TOKEN_MAX_AGE, http_only=False),
@@ -344,7 +398,6 @@ def logout():
     cookies = _parse_cookies(cookie_header)
     refresh_token = cookies.get("ml_refresh", "")
 
-    # Revoke refresh token with Cognito (best-effort)
     if refresh_token:
         try:
             cognito = boto3.client("cognito-idp")
@@ -382,12 +435,11 @@ def me():
         return {"authenticated": False}, 200
 
     try:
-        claims = _decode_access_token(access_token)
+        claims = _decode_and_verify_token(access_token)
         sub = claims.get("sub", "")
     except Exception:
         return {"authenticated": False}, 200
 
-    # Fetch user record
     try:
         result = reports_table.get_item(Key={"pk": f"USER#{sub}", "sk": f"USER#{sub}"})
         user = result.get("Item")

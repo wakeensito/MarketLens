@@ -1,6 +1,6 @@
 # BFF Auth Lambda — token exchange with Cognito
 # boto3 is included in Lambda runtime — do not add here
 # aws-lambda-powertools is provided via layer — do not add here
-PyJWT==2.9.0
-cryptography==44.0.3
+PyJWT==2.12.1
+cryptography==46.0.6
 requests==2.32.3

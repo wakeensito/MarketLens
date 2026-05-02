@@ -34,14 +34,6 @@ Parameters:
     Type: String
     NoEcho: true
     Description: Google OAuth2 client secret
-  GitHubClientId:
-    Type: String
-    NoEcho: true
-    Description: GitHub OAuth2 client ID
-  GitHubClientSecret:
-    Type: String
-    NoEcho: true
-    Description: GitHub OAuth2 client secret
   CognitoCallbackDomain:
     Type: String
     Default: "localhost"
@@ -125,32 +117,14 @@ Resources:
         name: name
         username: sub
 
-  GitHubIdentityProvider:
-    Type: AWS::Cognito::UserPoolIdentityProvider
-    Properties:
-      UserPoolId: !Ref CognitoUserPool
-      ProviderName: GitHub
-      ProviderType: OIDC
-      ProviderDetails:
-        client_id: !Ref GitHubClientId
-        client_secret: !Ref GitHubClientSecret
-        authorize_scopes: "openid user:email"
-        oidc_issuer: "https://token.actions.githubusercontent.com"
-        attributes_request_method: GET
-        authorize_url: "https://github.com/login/oauth/authorize"
-        token_url: "https://github.com/login/oauth/access_token"
-        attributes_url: "https://api.github.com/user"
-        jwks_uri: "https://token.actions.githubusercontent.com/.well-known/jwks"
-      AttributeMapping:
-        email: email
-        name: name
-        username: sub
+  # GitHub SSO requires a Lambda-backed OIDC proxy because GitHub does not
+  # expose a standard OIDC issuer for user login. Deferred to post-beta.
+  # See docs/BACKLOG.md for implementation plan.
 
   CognitoUserPoolClient:
     Type: AWS::Cognito::UserPoolClient
     DependsOn:
       - GoogleIdentityProvider
-      - GitHubIdentityProvider
     Properties:
       ClientName: !Sub marketlens-app-${Stage}
       UserPoolId: !Ref CognitoUserPool
@@ -171,7 +145,6 @@ Resources:
         - !Sub "https://${CognitoCallbackDomain}/"
       SupportedIdentityProviders:
         - Google
-        - GitHub
       ExplicitAuthFlows:
         - ALLOW_REFRESH_TOKEN_AUTH
       AccessTokenValidity: 1

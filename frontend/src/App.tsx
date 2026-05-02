@@ -6,7 +6,7 @@ import ReportView from './components/ReportView';
 import AnimatedAiInput from './components/AnimatedAiInput';
 import RecentThreads from './components/RecentThreads';
 import { useAnalysis } from './hooks/useAnalysis';
-import { useAuthContext } from './AuthContext';
+import { useAuthContext } from './hooks/useAuth';
 import { EXAMPLE_QUERIES } from './mockData';
 
 const SPRING = { type: 'spring' as const, stiffness: 280, damping: 36 };
