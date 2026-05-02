@@ -1,5 +1,5 @@
 import type { PipelineStage } from './types';
-import type { ResultJson } from './api';
+import type { ApiReport, ResultJson } from './api';
 
 export const PIPELINE_STAGE_DEFS: Omit<PipelineStage, 'status' | 'elapsedMs'>[] = [
   {
@@ -153,6 +153,45 @@ export const MOCK_REPORT: ResultJson = {
     { label: 'Competitors Found',  value: '4' },
   ],
 };
+
+export const MOCK_HISTORY: ApiReport[] = [
+  {
+    report_id: 'mock-h1',
+    idea_text: 'Creator economy monetization platform',
+    status:    'complete',
+    created_at: new Date(Date.now() - 3600000 * 2).toISOString(),
+    pk: 'REPORT#mock-h1', sk: 'REPORT#mock-h1',
+    gsi1pk: 'REPORTS', gsi1sk: new Date(Date.now() - 3600000 * 2).toISOString(),
+    result_json: { ...MOCK_REPORT, saturation_score: '73', saturation_label: 'Highly Saturated' },
+  },
+  {
+    report_id: 'mock-h2',
+    idea_text: 'Sustainable food delivery platform',
+    status:    'complete',
+    created_at: new Date(Date.now() - 86400000).toISOString(),
+    pk: 'REPORT#mock-h2', sk: 'REPORT#mock-h2',
+    gsi1pk: 'REPORTS', gsi1sk: new Date(Date.now() - 86400000).toISOString(),
+    result_json: { ...MOCK_REPORT, saturation_score: '81', saturation_label: 'Highly Saturated' },
+  },
+  {
+    report_id: 'mock-h3',
+    idea_text: 'B2B SaaS for construction project management',
+    status:    'complete',
+    created_at: new Date(Date.now() - 172800000).toISOString(),
+    pk: 'REPORT#mock-h3', sk: 'REPORT#mock-h3',
+    gsi1pk: 'REPORTS', gsi1sk: new Date(Date.now() - 172800000).toISOString(),
+    result_json: { ...MOCK_REPORT, saturation_score: '34', saturation_label: 'Low Saturation' },
+  },
+  {
+    report_id: 'mock-h4',
+    idea_text: 'Pet telehealth and vet booking service',
+    status:    'complete',
+    created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
+    pk: 'REPORT#mock-h4', sk: 'REPORT#mock-h4',
+    gsi1pk: 'REPORTS', gsi1sk: new Date(Date.now() - 86400000 * 5).toISOString(),
+    result_json: { ...MOCK_REPORT, saturation_score: '47', saturation_label: 'Moderately Saturated' },
+  },
+];
 
 export const EXAMPLE_QUERIES = [
   'AI fitness coaching app',

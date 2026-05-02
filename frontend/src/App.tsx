@@ -1,8 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
+import { History, PanelLeft } from 'lucide-react';
 import PipelineTracker from './components/PipelineTracker';
 import ReportView from './components/ReportView';
 import AnimatedAiInput from './components/AnimatedAiInput';
+import RecentThreads from './components/RecentThreads';
 import { useAnalysis } from './hooks/useAnalysis';
 import { EXAMPLE_QUERIES } from './mockData';
 
@@ -11,9 +13,12 @@ const SPRING = { type: 'spring' as const, stiffness: 280, damping: 36 };
 export default function App() {
   const {
     screen, query, stages, report, error, reportId, finalizing,
-    startAnalysis, handleReset, handleRetry,
+    startAnalysis, loadHistoricalReport, handleReset, handleRetry,
   } = useAnalysis();
 
+  const [sidebarOpen,  setSidebarOpen]  = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth > 680 : true
+  );
   const [inputValue, setInputValue] = useState('');
   const [phIdx, setPhIdx] = useState(0);
   const shellRef = useRef<HTMLDivElement>(null);
@@ -25,6 +30,15 @@ export default function App() {
   useEffect(() => {
     const id = setInterval(() => setPhIdx(i => (i + 1) % EXAMPLE_QUERIES.length), 3200);
     return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia('(min-width: 681px)');
+    const sync = () => setSidebarOpen(mq.matches);
+    sync();
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
   }, []);
 
   const mouseX = useMotionValue(0.5);
@@ -139,75 +153,91 @@ export default function App() {
       {/* ── WORKSPACE ────────────────────────────────────────── */}
       {!isLanding && (
         <>
-          {/* Fixed header */}
-          <header className="ws-header">
-            {/* Wordmark — small (shared layoutId with landing) */}
-            <motion.button
-              type="button"
-              layoutId="ml-wordmark"
-              className="ws-logo"
-              onClick={onReset}
-              transition={SPRING}
-            >
-              <span className="ws-logo-primary">Market</span>
-              <span className="ws-logo-accent">Lens</span>
-            </motion.button>
+          {/* Persistent sidebar on desktop / overlay on mobile */}
+          <RecentThreads
+            isOpen={sidebarOpen}
+            onClose={() => setSidebarOpen(false)}
+            activeId={reportId}
+            onSelect={id => { loadHistoricalReport(id); if (window.innerWidth <= 680) setSidebarOpen(false); setInputValue(''); }}
+          />
 
-            {/* Header meta fades in separately */}
-            <motion.div
-              className="ws-header-meta"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1, transition: { delay: 0.28, duration: 0.3 } }}
-            >
-              {query && <div className="ws-query-label">"{query}"</div>}
-              <div className="ws-header-spacer" />
-              <span className="nav-badge">Beta</span>
-              <button type="button" className="header-btn-ghost" onClick={onReset}>
-                + New analysis
+          {/* Main workspace column */}
+          <div className={`workspace-body${sidebarOpen ? '' : ' workspace-body--sidebar-closed'}`}>
+            <header className="ws-header">
+              {/* Sidebar toggle — mobile always, desktop when sidebar is closed */}
+              <button
+                type="button"
+                className="ws-sidebar-toggle"
+                onClick={() => setSidebarOpen(o => !o)}
+                aria-label="Toggle sidebar"
+              >
+                {sidebarOpen
+                  ? <History size={15} strokeWidth={2} />
+                  : <PanelLeft size={15} strokeWidth={2} />}
               </button>
-            </motion.div>
-          </header>
 
-          {/* Scrollable main */}
-          <main className="ws-main">
-            <AnimatePresence mode="wait">
-              {screen === 'analysis' ? (
-                <motion.div
-                  key="pipeline"
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0, transition: { delay: 0.22, duration: 0.38, ease: 'easeOut' as const } }}
-                  exit={{ opacity: 0, transition: { duration: 0.18 } }}
-                >
-                  <PipelineTracker
-                    stages={stages}
-                    query={query}
-                    finalizing={finalizing}
-                    error={error}
-                    onRetry={handleRetry}
-                  />
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="report"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1, transition: { duration: 0.4 } }}
-                >
-                  {report && reportId && <ReportView report={report} reportId={reportId} />}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </main>
+              {/* Wordmark — small (shared layoutId with landing) */}
+              <motion.button
+                type="button"
+                layoutId="ml-wordmark"
+                className="ws-logo"
+                onClick={onReset}
+                transition={SPRING}
+              >
+                <span className="ws-logo-primary">Market</span>
+                <span className="ws-logo-accent">Lens</span>
+              </motion.button>
 
-          {/* Fixed bottom bar */}
-          <motion.div
-            className="ws-bottom-bar"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1, transition: { duration: 0.2 } }}
-          >
-            {/* Input — compact (shared layoutId with landing) */}
+              {/* Header meta fades in separately */}
+              <motion.div
+                className="ws-header-meta"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1, transition: { delay: 0.28, duration: 0.3 } }}
+              >
+                {query && <div className="ws-query-label">"{query}"</div>}
+                <div className="ws-header-spacer" />
+                <span className="nav-badge">Beta</span>
+                <button type="button" className="header-btn-ghost" onClick={onReset}>
+                  + New analysis
+                </button>
+              </motion.div>
+            </header>
+
+            {/* Scrollable main */}
+            <main className="ws-main">
+              <AnimatePresence mode="wait">
+                {screen === 'analysis' ? (
+                  <motion.div
+                    key="pipeline"
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0, transition: { delay: 0.22, duration: 0.38, ease: 'easeOut' as const } }}
+                    exit={{ opacity: 0, transition: { duration: 0.18 } }}
+                  >
+                    <PipelineTracker
+                      stages={stages}
+                      query={query}
+                      finalizing={finalizing}
+                      error={error}
+                      onRetry={handleRetry}
+                    />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="report"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1, transition: { duration: 0.4 } }}
+                  >
+                    {report && reportId && <ReportView report={report} reportId={reportId} />}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </main>
+
             <motion.div
               layoutId="ml-input"
               className="ws-input-wrap"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1, transition: { duration: 0.2 } }}
               transition={SPRING}
             >
               <AnimatedAiInput
@@ -218,7 +248,7 @@ export default function App() {
                 compact
               />
             </motion.div>
-          </motion.div>
+          </div>
         </>
       )}
     </div>
