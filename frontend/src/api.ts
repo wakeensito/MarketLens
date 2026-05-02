@@ -70,6 +70,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   try {
     const res = await fetch(`${BASE}${path}`, {
       headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
       ...options,
       signal: controller.signal,
     });

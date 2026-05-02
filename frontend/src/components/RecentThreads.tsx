@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, X, PanelLeftClose, Zap, Palette, User, Settings2, HelpCircle, LogOut } from 'lucide-react';
 import type { ApiReport } from '../api';
 import { listReports } from '../api';
+import { useAuthContext } from '../AuthContext';
 import { MOCK_HISTORY } from '../mockData';
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
@@ -42,6 +43,7 @@ const PROFILE_MENU_ITEMS = [
 ];
 
 export default function RecentThreads({ isOpen, onClose, activeId, onSelect }: Props) {
+  const auth = useAuthContext();
   const [reports, setReports] = useState<ApiReport[]>([]);
   const [loading, setLoading] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -196,7 +198,10 @@ export default function RecentThreads({ isOpen, onClose, activeId, onSelect }: P
                       <button
                         type="button"
                         className={`profile-menu-item${item.danger ? ' profile-menu-item--danger' : ''}`}
-                        onClick={() => setProfileOpen(false)}
+                        onClick={() => {
+                          setProfileOpen(false);
+                          if (item.id === 'logout') auth.logout();
+                        }}
                       >
                         <Icon size={13} strokeWidth={2} />
                         {item.label}
@@ -211,16 +216,32 @@ export default function RecentThreads({ isOpen, onClose, activeId, onSelect }: P
           <button
             type="button"
             className={`sidebar-profile${profileOpen ? ' sidebar-profile--active' : ''}`}
-            onClick={() => setProfileOpen(o => !o)}
-            aria-label="Open profile menu"
+            onClick={() => {
+              if (auth.isAuthenticated) {
+                setProfileOpen(o => !o);
+              } else {
+                auth.login();
+              }
+            }}
+            aria-label={auth.isAuthenticated ? "Open profile menu" : "Sign in"}
             aria-expanded={profileOpen}
           >
-            <div className="sidebar-profile-avatar">JP</div>
+            <div className="sidebar-profile-avatar">
+              {auth.isAuthenticated && auth.user
+                ? (auth.user.name || auth.user.email || '?').slice(0, 2).toUpperCase()
+                : '?'}
+            </div>
             <div className="sidebar-profile-info">
-              <span className="sidebar-profile-name">Joaquin Porter</span>
+              <span className="sidebar-profile-name">
+                {auth.isAuthenticated && auth.user
+                  ? auth.user.name || auth.user.email
+                  : 'Sign in'}
+              </span>
               <span className="sidebar-profile-plan">
                 <Zap size={9} strokeWidth={2.5} />
-                Free plan
+                {auth.isAuthenticated && auth.user
+                  ? `${auth.user.plan || 'Free'} plan`
+                  : 'Get started'}
               </span>
             </div>
             <div className="sidebar-profile-dots">···</div>

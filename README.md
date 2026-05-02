@@ -34,10 +34,17 @@ sam local start-api   # starts local API Gateway at http://localhost:3000
 ### Deploy to AWS
 
 ```bash
-# First time (guided)
+# First time (guided) — two-step deploy required for auth
 sam build
 sam deploy --guided
+# After first deploy: copy CloudFrontDomainName from stack outputs,
+# set CognitoCallbackDomain parameter to that value, then redeploy:
+sam build && sam deploy
+```
 
+The first deploy creates the Cognito User Pool but cannot configure callback URLs because the CloudFront domain doesn't exist yet. After the first deploy, grab the `CloudFrontDomainName` from the stack outputs, set it as the `CognitoCallbackDomain` parameter, and redeploy. Subsequent deploys are single-step.
+
+```bash
 # Subsequent deploys
 sam build && sam deploy
 ```
@@ -47,13 +54,15 @@ sam build && sam deploy
 ## Project Structure
 
 ```text
-├── template.yaml                  # SAM template (S3, CloudFront, API GW, DynamoDB, Lambdas)
+├── template.yaml                  # SAM template (S3, CloudFront, API GW, Cognito, DynamoDB, Lambdas)
 ├── samconfig.toml                 # SAM deploy config (auto-generated)
 ├── infrastructure/
 │   └── lambda/
-│       ├── api/                   # REST API Lambda (reports CRUD)
+│       ├── api/                   # REST API Lambda (reports CRUD, org-scoped)
 │       ├── ai-orchestration/      # AI pipeline (Durable Function)
-│       └── export/                # PDF/CSV export Lambda
+│       ├── export/                # PDF/CSV export Lambda
+│       ├── bff/                   # BFF Auth Lambda (login, callback, refresh, logout, me)
+│       └── authorizer/            # Lambda Authorizer (JWT validation, auth context injection)
 ├── infra/
 │   └── iam/                       # Terraform (CD role, OIDC provider)
 ├── frontend/                      # React + Vite + TypeScript
@@ -73,10 +82,11 @@ sam build && sam deploy
 | Service | Purpose |
 |---|---|
 | S3 | Frontend hosting + report exports |
-| CloudFront | CDN with security headers, SPA routing |
-| API Gateway | REST API with access logging |
-| Lambda (x3) | API, AI Orchestration, Export |
-| DynamoDB | Reports storage (pay-per-request, PITR) |
+| CloudFront | CDN with security headers, SPA routing, cookie forwarding for auth |
+| API Gateway | REST API with access logging + Lambda Authorizer (default) |
+| Cognito | User pool with Google SSO + GitHub SSO (OIDC), mandatory TOTP MFA |
+| Lambda (x5) | API, AI Orchestration, Export, BFF Auth, Authorizer |
+| DynamoDB | Reports (org-scoped), user records, org records (pay-per-request, PITR) |
 | IAM (OIDC) | GitHub Actions CD role |
 
 ### IaC Split
@@ -90,9 +100,11 @@ sam build && sam deploy
 
 | Function | Purpose | Runtime |
 |---|---|---|
-| `marketlens-api` | REST endpoints for reports CRUD | Python 3.13 |
+| `marketlens-api` | REST endpoints for reports CRUD (org-scoped) | Python 3.13 |
 | `marketlens-ai-orchestration` | AI analysis pipeline (Durable Function) | Python 3.13 |
 | `marketlens-export` | CSV/PDF report generation | Python 3.13 |
+| `marketlens-bff-auth` | BFF auth endpoints (login, callback, refresh, logout, me) | Python 3.13 |
+| `marketlens-authorizer` | Lambda Authorizer — JWT validation, auth context injection | Python 3.13 |
 
 ### AI Pipeline (Lambda Durable Functions)
 
@@ -103,6 +115,28 @@ sanitize → parse → search → analyse → score → summarise → assemble
 ```
 
 Each stage is a `context.step()` call — if the function is interrupted, it resumes from the last completed step.
+
+### Authentication (BFF Pattern)
+
+Auth uses the Backend-for-Frontend (BFF) pattern — more secure than client-side token handling because tokens never touch JavaScript.
+
+```text
+Browser → CloudFront → BFF Lambda (/auth/*) → Cognito
+                     → Lambda Authorizer (validates cookies on /api/*)
+```
+
+**Flow:** User clicks "Sign in with Google/GitHub" → redirected to Cognito hosted UI → callback hits BFF Lambda → BFF exchanges auth code for tokens → tokens set as HttpOnly/Secure/SameSite=Strict cookies (`ml_access`, `ml_refresh`, `ml_logged_in`) → all subsequent API requests carry cookies automatically.
+
+**Lambda Authorizer** (REQUEST type, 300s cache): reads `ml_access` cookie, validates JWT against Cognito JWKS, looks up user record in DynamoDB, injects `user_id`, `org_id`, `plan`, `email` into request context. Supports mixed mode — anonymous requests get Allow with anonymous context.
+
+**Rate limiting:** Anonymous users get 1 free report. Signed-in free tier users get 3 reports/day (daily counter with date-based reset on user record).
+
+**CloudFront cookie forwarding:** Custom cache policy (zero TTL) and origin request policy forward `ml_access`, `ml_refresh`, `ml_logged_in` cookies on `/api/*` and `/auth/*` paths.
+
+**DynamoDB key schema (org-scoped):**
+- Reports: `PK: ORG#{org_id}#REPORT#{report_id}`, `SK: REPORT#{report_id}`, `GSI1PK: ORG#{org_id}#REPORTS`
+- Users: `PK/SK: USER#{sub}`
+- Orgs: `PK/SK: ORG#{org_id}`
 
 ---
 
@@ -133,6 +167,10 @@ Each stage is a `context.step()` call — if the function is interrupted, it res
 | Secret | Description |
 |---|---|
 | `CODECOV_TOKEN` | From [codecov.io](https://codecov.io) |
+| `GOOGLE_CLIENT_ID` | Google OAuth 2.0 client ID (from Google Cloud Console) |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth 2.0 client secret |
+| `GITHUB_OAUTH_CLIENT_ID` | GitHub OAuth App client ID (from GitHub Developer Settings) |
+| `GITHUB_OAUTH_CLIENT_SECRET` | GitHub OAuth App client secret |
 
 ---
 
@@ -159,7 +197,8 @@ Each stage is a `context.step()` call — if the function is interrupted, it res
 
 ## Status
 
-- **Version:** 1.0
-- **Last updated:** April 2026
+- **Version:** 1.1
+- **Last updated:** May 2026
 - **Region:** us-east-1
 - **Account:** (configured per environment)
+- **Auth:** Cognito + Google/GitHub SSO (BFF pattern)

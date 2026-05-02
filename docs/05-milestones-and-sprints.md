@@ -13,15 +13,15 @@
 
 This plan starts with the simplest possible AWS deployment — Lambda Durable Functions + API Gateway + S3 — to get a working "idea in, report out" loop. The full microservices architecture (ECS, RDS, RBAC, multi-tenancy) comes after the PoC proves the AI pipeline produces reports people actually want.
 
-| PoC (Phase 0) | Full Architecture (Phase 1+) |
-|---|---|
-| 2 S3 buckets (frontend + exports) | Multi-bucket with Object Lock, lifecycle policies |
-| 3 Lambdas (API + durable pipeline + export) | 10 microservices on ECS Fargate + Lambda |
-| API Gateway (REST) + CloudFront | API Gateway + WAF + per-tenant throttling |
-| DynamoDB (reports table) | RDS Postgres with RLS + DynamoDB + ElastiCache |
-| SAM + Terraform (IAM) for deployment | SAM (application layer) + Terraform (infrastructure layer) |
-| No auth (hardcoded user) | Cognito + JWT + RBAC + Permission Engine |
-| Python only | Python (AI) + TypeScript (services) + Rust or Go (Permission Engine, Audit) |
+| PoC (Phase 0) | Current (Post-Auth) | Full Architecture (Target) |
+|---|---|---|
+| 2 S3 buckets (frontend + exports) | 2 S3 buckets (frontend + exports) | Multi-bucket with Object Lock, lifecycle policies |
+| 3 Lambdas (API + durable pipeline + export) | 5 Lambdas (API + AI + Export + BFF Auth + Authorizer) | 10 microservices on ECS Fargate + Lambda |
+| API Gateway (REST) + CloudFront | API Gateway + Lambda Authorizer + CloudFront (cookie forwarding) | API Gateway + WAF + per-tenant throttling |
+| DynamoDB (reports table) | DynamoDB (org-scoped reports + user/org records) | RDS Postgres with RLS + DynamoDB + ElastiCache |
+| SAM + Terraform (IAM) for deployment | SAM + Terraform (IAM) for deployment | SAM (application layer) + Terraform (infrastructure layer) |
+| No auth (hardcoded user) | Cognito + Google/GitHub SSO + BFF Lambda + HttpOnly cookies | Cognito + JWT + RBAC + Permission Engine |
+| Python only | Python only (all 5 Lambdas) | Python (AI) + TypeScript (services) + Rust or Go (Permission Engine, Audit) |
 
 ---
 
@@ -70,12 +70,19 @@ This plan starts with the simplest possible AWS deployment — Lambda Durable Fu
                                              │  → reads from DynamoDB           │
                                              └──────────────────────────────────┘
 
-                                             ┌──────────────────────────────────┐
-                                             │  DynamoDB: ReportsTable          │
-                                             │  PK/SK: REPORT#{report_id}       │
-                                             │  attrs: status, current_stage,   │
-                                             │         result_json, completed_at │
-                                             └──────────────────────────────────┘
+                                             ┌──────────────────────────────────────────┐
+                                             │  DynamoDB: ReportsTable                  │
+                                             │                                          │
+                                             │  Reports (org-scoped):                   │
+                                             │    PK: ORG#{org_id}#REPORT#{report_id}   │
+                                             │    SK: REPORT#{report_id}                │
+                                             │    GSI1PK: ORG#{org_id}#REPORTS          │
+                                             │    attrs: status, current_stage,         │
+                                             │           result_json, completed_at      │
+                                             │                                          │
+                                             │  Users:  PK/SK: USER#{sub}               │
+                                             │  Orgs:   PK/SK: ORG#{org_id}             │
+                                             └──────────────────────────────────────────┘
 ```
 
 ### IaC: AWS SAM
@@ -246,25 +253,48 @@ Terraform is added in Phase 1 for the heavier infrastructure (VPC, RDS, ECS). SA
 
 > **Goal:** Real accounts. Real isolation. No more hardcoded user.
 
-### Days 14–15 — Auth Service
+### Days 14–15 — Auth Service ✅ DONE
 
 **Reference:** [01 — Technical Spec §3 (Access Control)](./01-technical-spec.md), [02 — Microservices §3 (Auth Service)](./02-microservices-design.md)
 
-- [ ] Provision Cognito User Pool: email/password, MFA optional (enforced for admins)
-- [ ] Build Auth Service (ECS Fargate): wraps Cognito, manages sessions in DynamoDB
-- [ ] Endpoints: `/auth/signup`, `/auth/login`, `/auth/refresh`, `/auth/logout`
-- [ ] JWT validation: API Gateway Lambda Authoriser — validates every request
-- [ ] Authoriser injects `user_id`, `org_id` into request context — all downstream services read from context, never re-validate
-- [ ] Session management: store in DynamoDB with TTL, idle timeout 30 min
-- [ ] Wire Report Service: replace hardcoded org with `org_id` from JWT context
+**What was built:** BFF (Backend-for-Frontend) Lambda pattern instead of ECS Fargate Auth Service. Tokens stored in HttpOnly/Secure/SameSite=Strict cookies — tokens never touch JavaScript. Lambda Authorizer reads cookies and injects auth context into all API requests.
 
-**Done when:** Sign up → login → JWT → call Report Service with real identity. RLS now uses real `org_id`.
+- [x] Provision Cognito User Pool: email usernames, mandatory TOTP MFA, 30-day device remembering
+- [x] Configure Google SSO (native) + GitHub SSO (OIDC) identity providers — no email+password signup
+- [x] Cognito User Pool Client: authorization code flow, 1h access/ID tokens, 30-day refresh tokens
+- [x] Build BFF Auth Lambda (`infrastructure/lambda/bff/app.py`): `/auth/login`, `/auth/callback`, `/auth/refresh`, `/auth/logout`, `/auth/me`
+- [x] Tokens stored in HttpOnly/Secure/SameSite=Strict cookies (`ml_access`, `ml_refresh`, `ml_logged_in`)
+- [x] CloudFront domain derived at runtime from request headers (avoids circular dependency with `CognitoCallbackDomain` parameter)
+- [x] Build Lambda Authorizer (`infrastructure/lambda/authorizer/app.py`): REQUEST type, 300s cache, identity source is Cookie header
+- [x] Authorizer validates JWT against Cognito JWKS, looks up user record in DynamoDB, injects `user_id`, `org_id`, `is_authenticated`, `plan`, `email` into request context
+- [x] Mixed-mode authorizer: anonymous requests get Allow with anonymous context (supports free anonymous report)
+- [x] CloudFront cookie forwarding: custom cache policy (zero TTL) and origin request policy forwarding auth cookies on `/api/*` and `/auth/*` paths
+- [x] Wire API Lambda: reads auth context from `requestContext.authorizer`, all queries scoped to `ORG#{org_id}`
+- [x] Wire AI Orchestration Lambda: accepts `org_id` in event payload, all DynamoDB operations use org-scoped keys
+- [x] Wire Export Lambda: reads auth context from authorizer, DynamoDB lookups use org-scoped keys
+- [x] Application-level rate limiting: anonymous gets 1 report total, free tier gets 3/day (daily counter on user record with date-based reset)
+- [x] DynamoDB key schema migrated: `PK: ORG#{org_id}#REPORT#{report_id}`, `SK: REPORT#{report_id}`, `GSI1PK: ORG#{org_id}#REPORTS`
+- [x] New record types: `USER#{sub}` (user records), `ORG#{org_id}` (org records)
+- [x] Frontend: `useAuth` hook (checks `ml_logged_in` cookie, calls `/auth/me`, silent refresh every 50 min)
+- [x] Frontend: `AuthProvider` context wraps app in `main.tsx`
+- [x] Frontend: `credentials: 'include'` on all fetch calls
+- [x] Frontend: auth gate modal (Google + GitHub SSO buttons) shown after anonymous user exhausts free report
+- [x] Frontend: landing page shows "Try one free / Sign in for 3/day"
+- [x] Frontend: profile section shows real user name/email/plan, logout calls `/auth/logout`
+- [ ] Session management in DynamoDB (sessions table) — deferred, stateless JWT via cookies
+- [ ] Scoped CORS (set to `AllowOrigin: '*'` — acceptable because all traffic goes through CloudFront same-origin)
+
+**Architecture deviation:** Design docs describe Browser → Auth Service (ECS) → Cognito with JWT in Authorization header. What was built: Browser → CloudFront → BFF Lambda (`/auth/*`) → Cognito with tokens in HttpOnly cookies. This is the BFF pattern — more secure because tokens never touch JavaScript.
+
+**Done.** Sign up via Google/GitHub → Cognito callback → BFF sets cookies → Lambda Authorizer validates on every request → all data org-scoped.
 
 ---
 
-### Days 16–17 — Permission Engine
+### Days 16–17 — Permission Engine ⏳ DEFERRED
 
 **Reference:** [01 — Technical Spec §4–5 (RBAC)](./01-technical-spec.md), [02 — Microservices §4 (Permission Engine)](./02-microservices-design.md)
+
+**Status:** Deferred — not needed for beta. The Lambda Authorizer provides basic auth context injection (user_id, org_id, plan, email). All users have the same role (free tier user). Full RBAC will be built when multi-role orgs are needed.
 
 - [ ] Build Permission Engine (ECS Fargate, Go): gRPC server
 - [ ] Implement `Authorize` RPC: resolve user roles → permission strings → allow/deny
@@ -273,23 +303,26 @@ Terraform is added in Phase 1 for the heavier infrastructure (VPC, RDS, ECS). SA
 - [ ] Wire Report Service: every endpoint calls `Permission Engine.Authorize` before executing
 - [ ] Wire Audit Service to log every `denied` decision
 
-> **This is the snap-in point.** New roles, new permissions, new rules → add to Permission Engine only. No other service changes.
-
-**Done when:** A `viewer` cannot create reports. An `analyst` can. An `org_owner` can do everything.
+**What exists instead:** Lambda Authorizer injects auth context (user_id, org_id, plan) into every request. Application-level rate limiting enforces free tier limits (1 anonymous report, 3/day for signed-in users). No role differentiation yet.
 
 ---
 
-### Days 18–19 — Org & User Service
+### Days 18–19 — Org & User Service ⚠️ PARTIALLY DONE
 
 **Reference:** [02 — Microservices §5 (Org & User Service)](./02-microservices-design.md)
 
+**Status:** User and org records are auto-created on first login by the BFF Lambda callback handler. No standalone service, no invite flow, no team management.
+
+- [x] User record created in DynamoDB on first Cognito callback (`USER#{sub}`)
+- [x] Org record created in DynamoDB on first login (`ORG#{org_id}`)
+- [x] User linked to org via `org_id` attribute
 - [ ] Build Org & User Service (ECS Fargate, TypeScript)
 - [ ] Endpoints: create org, invite user, list users, assign role, remove user
 - [ ] Invite flow: email → one-time token → accept → Cognito user created → role assigned
 - [ ] On any RBAC change: call `Permission Engine.RefreshPolicy` to bust cache
 - [ ] Self-service: users can update display name, change password, view own sessions
 
-**Done when:** You can create an org, invite a second user, assign them a role, and their permissions work immediately.
+**Done (partial).** Users and orgs exist in DynamoDB. No invite flow, no team management, no self-service profile editing.
 
 ---
 
@@ -416,16 +449,16 @@ These are not blocked — they're deliberately deferred until beta proves the pr
 Some things genuinely block others. This is the order that matters:
 
 ```text
-Phase 0 (PoC) — prove the pipeline works
-  └── Phase 1 (Foundation) — add real infra, data layer, audit chain
-        └── Phase 2 (Auth) — real accounts, org isolation
+Phase 0 (PoC) — prove the pipeline works ✅
+  └── Phase 1 (Foundation) — add real infra, data layer, audit chain (CI/CD done, rest pending)
+        └── Phase 2 (Auth) — real accounts, org isolation ✅ (core auth done, RBAC + team mgmt deferred)
               └── Phase 3 (Beta) — wire UI to backend, launch
                     └── Phase 4 (Billing) — billing needs users
                           └── Phase 5 (Hardening) — fills in what's already wired
 
 INDEPENDENT (can be done anytime after Phase 1):
   - Audit Service depth (Phase 5) — pipe exists from Day 11
-  - Permission Engine role expansion — engine exists from Day 17
+  - Permission Engine role expansion — deferred from Phase 2, build when needed
   - DR setup — infra exists from Phase 1
 ```
 

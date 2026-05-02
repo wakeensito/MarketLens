@@ -72,6 +72,20 @@ def generate_csv(report: dict) -> str:
     return output.getvalue()
 
 
+def _get_auth_context() -> dict:
+    """Extract auth context injected by the Lambda Authorizer."""
+    raw_event = app.current_event._data
+    authorizer = (
+        raw_event.get("requestContext", {})
+        .get("authorizer", {})
+    )
+    return {
+        "user_id": authorizer.get("user_id", "anonymous"),
+        "org_id": authorizer.get("org_id", "anonymous"),
+        "is_authenticated": authorizer.get("is_authenticated", "false") == "true",
+    }
+
+
 @app.post("/reports/<report_id>/export")
 @tracer.capture_method
 def export_report(report_id: str):
@@ -83,8 +97,11 @@ def export_report(report_id: str):
         body = {}
     export_format = body.get("format", "csv")
 
-    # Fetch report
-    result = table.get_item(Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"})
+    auth = _get_auth_context()
+    org_id = auth["org_id"]
+
+    # Fetch report (org-scoped)
+    result = table.get_item(Key={"pk": f"ORG#{org_id}#REPORT#{report_id}", "sk": f"REPORT#{report_id}"})
     item = result.get("Item")
 
     if not item:

@@ -8,6 +8,12 @@ Parameters:
     Default: prod
     AllowedValues: [dev, staging, prod]
     Description: Deployment stage
+  ApiKeyValue:
+    Type: String
+    NoEcho: true
+    Description: API key for gateway authentication (injected by CloudFront, never exposed to browser)
+    MinLength: 20
+    MaxLength: 128
   BedrockModelIdParse:
     Type: String
     Default: anthropic.claude-3-haiku-20240307-v1:0
@@ -20,6 +26,29 @@ Parameters:
     Type: String
     Default: anthropic.claude-3-haiku-20240307-v1:0
     Description: Bedrock model for Summarise stage (narrative)
+  GoogleClientId:
+    Type: String
+    NoEcho: true
+    Description: Google OAuth2 client ID
+  GoogleClientSecret:
+    Type: String
+    NoEcho: true
+    Description: Google OAuth2 client secret
+  GitHubClientId:
+    Type: String
+    NoEcho: true
+    Description: GitHub OAuth2 client ID
+  GitHubClientSecret:
+    Type: String
+    NoEcho: true
+    Description: GitHub OAuth2 client secret
+  CognitoCallbackDomain:
+    Type: String
+    Default: "localhost"
+    Description: >-
+      CloudFront domain for Cognito callback URLs (e.g. d111111abcdef8.cloudfront.net).
+      First deploy: leave as default. After deploy, copy CloudFrontDomainName from
+      stack outputs, set this parameter, and redeploy.
 
 Globals:
   Function:
@@ -39,6 +68,121 @@ Globals:
     TracingEnabled: true
 
 Resources:
+  # ─── Cognito: User Pool + Identity Providers ───
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub marketlens-users-${Stage}
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+      MfaConfiguration: "ON"
+      EnabledMfas:
+        - SOFTWARE_TOKEN_MFA
+      Schema:
+        - Name: email
+          Required: true
+          Mutable: true
+        - Name: name
+          Required: false
+          Mutable: true
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireLowercase: true
+          RequireUppercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+      AccountRecoverySetting:
+        RecoveryMechanisms:
+          - Name: verified_email
+            Priority: 1
+      DeviceConfiguration:
+        ChallengeRequiredOnNewDevice: false
+        DeviceOnlyRememberedOnUserPrompt: true
+      UserPoolAddOns:
+        AdvancedSecurityMode: AUDIT
+
+  CognitoUserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub marketlens-${Stage}-${AWS::AccountId}
+      UserPoolId: !Ref CognitoUserPool
+
+  GoogleIdentityProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Properties:
+      UserPoolId: !Ref CognitoUserPool
+      ProviderName: Google
+      ProviderType: Google
+      ProviderDetails:
+        client_id: !Ref GoogleClientId
+        client_secret: !Ref GoogleClientSecret
+        authorize_scopes: "openid email profile"
+      AttributeMapping:
+        email: email
+        name: name
+        username: sub
+
+  GitHubIdentityProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Properties:
+      UserPoolId: !Ref CognitoUserPool
+      ProviderName: GitHub
+      ProviderType: OIDC
+      ProviderDetails:
+        client_id: !Ref GitHubClientId
+        client_secret: !Ref GitHubClientSecret
+        authorize_scopes: "openid user:email"
+        oidc_issuer: "https://token.actions.githubusercontent.com"
+        attributes_request_method: GET
+        authorize_url: "https://github.com/login/oauth/authorize"
+        token_url: "https://github.com/login/oauth/access_token"
+        attributes_url: "https://api.github.com/user"
+        jwks_uri: "https://token.actions.githubusercontent.com/.well-known/jwks"
+      AttributeMapping:
+        email: email
+        name: name
+        username: sub
+
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    DependsOn:
+      - GoogleIdentityProvider
+      - GitHubIdentityProvider
+    Properties:
+      ClientName: !Sub marketlens-app-${Stage}
+      UserPoolId: !Ref CognitoUserPool
+      GenerateSecret: true
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthScopes:
+        - openid
+        - email
+        - profile
+      # Callback/logout URLs use the CognitoCallbackDomain parameter.
+      # First deploy uses "localhost" (placeholder). After deploy, set the
+      # parameter to the real CloudFront domain and redeploy.
+      CallbackURLs:
+        - !Sub "https://${CognitoCallbackDomain}/auth/callback"
+      LogoutURLs:
+        - !Sub "https://${CognitoCallbackDomain}/"
+      SupportedIdentityProviders:
+        - Google
+        - GitHub
+      ExplicitAuthFlows:
+        - ALLOW_REFRESH_TOKEN_AUTH
+      AccessTokenValidity: 1
+      IdTokenValidity: 1
+      RefreshTokenValidity: 30
+      TokenValidityUnits:
+        AccessToken: hours
+        IdToken: hours
+        RefreshToken: days
+      PreventUserExistenceErrors: ENABLED
+
   # ─── S3: Frontend Hosting ───
   WebUIBucket:
     Type: AWS::S3::Bucket
@@ -116,6 +260,45 @@ Resources:
             ReferrerPolicy: strict-origin-when-cross-origin
             Override: true
 
+  # Cookie forwarding policy for /api/* and /auth/* paths
+  CookieForwardingCachePolicy:
+    Type: AWS::CloudFront::CachePolicy
+    Properties:
+      CachePolicyConfig:
+        Name: !Sub marketlens-cookie-cache-${Stage}
+        DefaultTTL: 0
+        MaxTTL: 0
+        MinTTL: 0
+        ParametersInCacheKeyAndForwardedToOrigin:
+          CookiesConfig:
+            CookieBehavior: none
+          HeadersConfig:
+            HeaderBehavior: none
+          QueryStringsConfig:
+            QueryStringBehavior: none
+          EnableAcceptEncodingGzip: true
+
+  CookieForwardingOriginRequestPolicy:
+    Type: AWS::CloudFront::OriginRequestPolicy
+    Properties:
+      OriginRequestPolicyConfig:
+        Name: !Sub marketlens-cookie-origin-${Stage}
+        CookiesConfig:
+          CookieBehavior: whitelist
+          Cookies:
+            - ml_access
+            - ml_refresh
+            - ml_logged_in
+        HeadersConfig:
+          HeaderBehavior: whitelist
+          Headers:
+            - Accept
+            - Content-Type
+            - Origin
+            - Referer
+        QueryStringsConfig:
+          QueryStringBehavior: all
+
   CloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
     Properties:
@@ -133,6 +316,9 @@ Resources:
               OriginProtocolPolicy: https-only
               OriginSSLProtocols:
                 - TLSv1.2
+            OriginCustomHeaders:
+              - HeaderName: x-api-key
+                HeaderValue: !Ref ApiKeyValue
         DefaultRootObject: index.html
         PriceClass: PriceClass_100
         Enabled: true
@@ -150,13 +336,24 @@ Resources:
           ViewerProtocolPolicy: redirect-to-https
           ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy
         CacheBehaviors:
+          # /auth/* — BFF auth endpoints (cookie forwarding, no caching)
+          - AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+            CachedMethods: [HEAD, GET, OPTIONS]
+            Compress: false
+            PathPattern: "/auth/*"
+            TargetOriginId: api
+            CachePolicyId: !Ref CookieForwardingCachePolicy
+            OriginRequestPolicyId: !Ref CookieForwardingOriginRequestPolicy
+            ViewerProtocolPolicy: redirect-to-https
+            ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy
+          # /api/* — API endpoints (cookie forwarding for auth)
           - AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
             CachedMethods: [HEAD, GET, OPTIONS]
             Compress: false
             PathPattern: "/api/*"
             TargetOriginId: api
-            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
-            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
+            CachePolicyId: !Ref CookieForwardingCachePolicy
+            OriginRequestPolicyId: !Ref CookieForwardingOriginRequestPolicy
             ViewerProtocolPolicy: redirect-to-https
             ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy
         CustomErrorResponses:
@@ -174,13 +371,63 @@ Resources:
       StageName: !Ref Stage
       EndpointConfiguration: REGIONAL
       TracingEnabled: true
+      Auth:
+        ApiKeyRequired: true
+        DefaultAuthorizer: CookieAuthorizer
+        Authorizers:
+          CookieAuthorizer:
+            FunctionArn: !GetAtt AuthorizerFunction.Arn
+            FunctionPayloadType: REQUEST
+            Identity:
+              Headers:
+                - Cookie
+              ReauthorizeEvery: 300
       AccessLogSetting:
         DestinationArn: !GetAtt ApiGWLogGroup.Arn
-        Format: "$context.identity.sourceIp $context.requestTime $context.httpMethod $context.resourcePath $context.protocol $context.status $context.responseLength $context.requestId"
+        Format: "$context.identity.sourceIp $context.requestTime $context.httpMethod $context.resourcePath $context.protocol $context.status $context.responseLength $context.requestId $context.identity.apiKeyId"
       Cors:
         AllowMethods: "'DELETE,GET,HEAD,OPTIONS,PATCH,POST,PUT'"
-        AllowHeaders: "'Content-Type,X-Amz-Date,X-Amz-Security-Token,Authorization,X-Api-Key,X-Requested-With,Accept'"
+        AllowHeaders: "'Content-Type,X-Amz-Date,X-Amz-Security-Token,Authorization,X-Api-Key,X-Requested-With,Accept,Cookie'"
+        # CORS origin is enforced by CloudFront; API Gateway uses permissive origin
+        # to avoid circular dependency (CF domain not known at API creation time).
+        # The API key + cookie auth provide the real access control.
         AllowOrigin: "'*'"
+        AllowCredentials: false
+
+  # API key with explicit value so CloudFront can inject it as an origin header.
+  # The key never reaches the browser — CloudFront adds it server-side.
+  MarketLensApiKey:
+    Type: AWS::ApiGateway::ApiKey
+    Properties:
+      Name: !Sub marketlens-cf-key-${Stage}
+      Description: API key injected by CloudFront origin header (never exposed to browser)
+      Enabled: true
+      Value: !Ref ApiKeyValue
+      StageKeys:
+        - RestApiId: !Ref ApiGatewayApi
+          StageName: !Ref Stage
+
+  MarketLensUsagePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    Properties:
+      UsagePlanName: !Sub marketlens-plan-${Stage}
+      Description: !Sub "MarketLens ${Stage} — rate limits and quotas"
+      ApiStages:
+        - ApiId: !Ref ApiGatewayApi
+          Stage: !Ref Stage
+      Throttle:
+        BurstLimit: 20
+        RateLimit: 10
+      Quota:
+        Limit: 500
+        Period: DAY
+
+  MarketLensUsagePlanKey:
+    Type: AWS::ApiGateway::UsagePlanKey
+    Properties:
+      KeyId: !Ref MarketLensApiKey
+      KeyType: API_KEY
+      UsagePlanId: !Ref MarketLensUsagePlan
 
   ApiGWLogGroup:
     Type: AWS::Logs::LogGroup
@@ -222,6 +469,70 @@ Resources:
           Projection:
             ProjectionType: ALL
 
+  # ─── Lambda: BFF Auth ───
+  BffAuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.lambda_handler
+      CodeUri: infrastructure/lambda/bff/
+      Description: BFF auth endpoints — login, callback, refresh, logout, me
+      Timeout: 15
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ReportsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - cognito-idp:RevokeToken
+              Resource: !GetAtt CognitoUserPool.Arn
+      Environment:
+        Variables:
+          COGNITO_DOMAIN: !Sub marketlens-${Stage}-${AWS::AccountId}.auth.${AWS::Region}.amazoncognito.com
+          COGNITO_CLIENT_ID: !Ref CognitoUserPoolClient
+          COGNITO_CLIENT_SECRET: !GetAtt CognitoUserPoolClient.ClientSecret
+          COGNITO_USER_POOL_ID: !Ref CognitoUserPool
+          # CLOUDFRONT_DOMAIN and COGNITO_REDIRECT_URI are derived at runtime
+          # from the Host header to avoid circular dependency with CloudFront.
+      Events:
+        AuthAny:
+          Type: Api
+          Properties:
+            Path: /auth/{proxy+}
+            Method: ANY
+            RestApiId: !Ref ApiGatewayApi
+            Auth:
+              ApiKeyRequired: true
+              Authorizer: NONE
+
+  BffAuthLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${BffAuthFunction}
+      RetentionInDays: 90
+
+  # ─── Lambda: Authorizer ───
+  AuthorizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.lambda_handler
+      CodeUri: infrastructure/lambda/authorizer/
+      Description: Cookie-based JWT authorizer — validates ml_access cookie
+      MemorySize: 256
+      Timeout: 10
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref ReportsTable
+      Environment:
+        Variables:
+          COGNITO_CLIENT_ID: !Ref CognitoUserPoolClient
+          COGNITO_USER_POOL_ID: !Ref CognitoUserPool
+
+  AuthorizerFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${AuthorizerFunction}
+      RetentionInDays: 90
+
   # ─── Lambda: API ───
   ApiFunction:
     Type: AWS::Serverless::Function
@@ -249,6 +560,15 @@ Resources:
             Path: /api/{proxy+}
             Method: ANY
             RestApiId: !Ref ApiGatewayApi
+        HealthCheck:
+          Type: Api
+          Properties:
+            Path: /api/health
+            Method: GET
+            RestApiId: !Ref ApiGatewayApi
+            Auth:
+              ApiKeyRequired: false
+              Authorizer: NONE
 
   ApiFunctionLogGroup:
     Type: AWS::Logs::LogGroup
@@ -372,3 +692,15 @@ Outputs:
   ReportsTableName:
     Description: DynamoDB reports table name
     Value: !Ref ReportsTable
+
+  CognitoUserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref CognitoUserPool
+
+  CognitoUserPoolClientId:
+    Description: Cognito User Pool Client ID
+    Value: !Ref CognitoUserPoolClient
+
+  CognitoDomain:
+    Description: Cognito Hosted UI domain
+    Value: !Sub marketlens-${Stage}-${AWS::AccountId}.auth.${AWS::Region}.amazoncognito.com
