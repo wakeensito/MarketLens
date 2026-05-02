@@ -187,31 +187,40 @@ export function useAnalysis(): AnalysisState {
 
   const loadHistoricalReport = useCallback((id: string) => {
     stopAll();
+    const gen = generationRef.current;
     setError(null);
-    setReport(null);
     setFinalizing(false);
 
     if (USE_MOCK) {
       const item = MOCK_HISTORY.find(h => h.report_id === id);
       if (item?.result_json) {
+        if (generationRef.current !== gen) return;
         setQuery(item.idea_text);
         setReportId(id);
         setReport(adaptReport(item.result_json, item.idea_text));
         setScreen('report');
+      } else if (generationRef.current === gen) {
+        setError('Briefing not found.');
       }
       return;
     }
 
     getReport(id)
       .then(data => {
+        if (generationRef.current !== gen) return;
         if (data.status === 'complete' && data.result_json) {
           setQuery(data.idea_text);
           setReportId(id);
           setReport(adaptReport(data.result_json, data.idea_text));
           setScreen('report');
+        } else {
+          setError('Briefing is not ready yet.');
         }
       })
-      .catch(() => setError('Failed to load briefing.'));
+      .catch(() => {
+        if (generationRef.current !== gen) return;
+        setError('Failed to load briefing.');
+      });
   }, [stopAll]);
 
   const handleReset = useCallback(() => {

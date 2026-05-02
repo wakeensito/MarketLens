@@ -64,16 +64,30 @@ export default function RecentThreads({ isOpen, onClose, activeId, onSelect }: P
       : isOpen;
     if (!shouldLoad) return;
 
-    setLoading(true);
-    if (USE_MOCK) {
-      const t = setTimeout(() => { setReports(MOCK_HISTORY); setLoading(false); }, 350);
-      return () => clearTimeout(t);
-    }
-    listReports()
-      .then(r => setReports(r.slice().reverse()))
-      .catch(() => setReports([]))
-      .finally(() => setLoading(false));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      void (async () => {
+        setLoading(true);
+        try {
+          if (USE_MOCK) {
+            await new Promise<void>(resolve => { setTimeout(resolve, 350); });
+            if (cancelled) return;
+            setReports(MOCK_HISTORY);
+          } else {
+            const r = await listReports();
+            if (cancelled) return;
+            setReports(r.slice().reverse());
+          }
+        } catch {
+          if (!cancelled) setReports([]);
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+      })();
+    });
+
+    return () => { cancelled = true; };
   }, [isOpen]);
 
   return (
@@ -115,7 +129,7 @@ export default function RecentThreads({ isOpen, onClose, activeId, onSelect }: P
         </div>
 
         {/* Thread list */}
-        <div className="threads-list" role="listbox" aria-label="Recent analyses">
+        <div className="threads-list" aria-label="Recent analyses">
           {loading ? (
             <div className="threads-loading">
               {[0, 1, 2, 3].map(i => (
@@ -128,7 +142,8 @@ export default function RecentThreads({ isOpen, onClose, activeId, onSelect }: P
               <p className="threads-empty-sub">Your analyses will appear here once complete.</p>
             </div>
           ) : (
-            reports.map((r, i) => {
+            <div role="list">
+            {reports.map((r, i) => {
               const score  = r.result_json ? Number(r.result_json.saturation_score) : null;
               const active = r.report_id === activeId;
               const done   = r.status === 'complete';
@@ -136,13 +151,13 @@ export default function RecentThreads({ isOpen, onClose, activeId, onSelect }: P
               return (
                 <motion.button
                   key={r.report_id}
-                  role="option"
-                  aria-selected={active}
+                  type="button"
+                  role="listitem"
                   className={`thread-item${active ? ' thread-item--active' : ''}${!done ? ' thread-item--pending' : ''}`}
                   onClick={() => { if (done) onSelect(r.report_id); }}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: i * 0.04, duration: 0.26, ease: 'easeOut' as const }}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: i * 0.06, duration: 0.38, ease: 'easeOut' as const }}
                 >
                   <div className="thread-item-meta">
                     <span className="thread-item-date">{relativeDate(r.created_at)}</span>
@@ -158,7 +173,8 @@ export default function RecentThreads({ isOpen, onClose, activeId, onSelect }: P
                   )}
                 </motion.button>
               );
-            })
+            })}
+            </div>
           )}
         </div>
 
@@ -167,10 +183,10 @@ export default function RecentThreads({ isOpen, onClose, activeId, onSelect }: P
             {profileOpen && (
               <motion.div
                 className="profile-menu"
-                initial={{ opacity: 0, y: 6 }}
+                initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 4 }}
-                transition={{ duration: 0.15, ease: 'easeOut' as const }}
+                transition={{ duration: 0.36, ease: 'easeOut' as const }}
               >
                 {PROFILE_MENU_ITEMS.map((item) => {
                   const Icon = item.Icon;
