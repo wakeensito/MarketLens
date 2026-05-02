@@ -1,5 +1,12 @@
 """
 MarketLens API Lambda — REST endpoints for reports.
+
+Auth context is injected by the Lambda Authorizer via requestContext.
+All DynamoDB queries are scoped to ORG#{org_id}.
+
+Mixed mode:
+  - Anonymous users: can create 1 report (stored under ORG#anonymous)
+  - Authenticated users: 3 reports/day (free tier)
 """
 import os
 import json
@@ -7,7 +14,7 @@ import re
 import boto3
 from botocore.exceptions import ClientError
 from uuid import uuid4
-from datetime import datetime
+from datetime import datetime, timezone
 
 from aws_lambda_powertools import Logger, Tracer, Metrics
 from aws_lambda_powertools.event_handler import APIGatewayRestResolver
@@ -21,6 +28,8 @@ app = APIGatewayRestResolver(strip_prefixes=["/api"])
 
 _REPORT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{6,80}$")
 _MAX_IDEA_LEN = 2000
+FREE_TIER_DAILY_LIMIT = 3
+ANONYMOUS_LIMIT = 1
 
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(os.environ["REPORTS_TABLE"])
@@ -28,14 +37,107 @@ lambda_client = boto3.client("lambda")
 AI_FUNCTION_NAME = os.environ.get("AI_FUNCTION_NAME", "")
 
 
+def _get_auth_context(event=None) -> dict:
+    """Extract auth context injected by the Lambda Authorizer."""
+    raw_event = app.current_event.raw_event if event is None else event
+    authorizer = (
+        raw_event.get("requestContext", {})
+        .get("authorizer", {})
+    )
+    return {
+        "user_id": authorizer.get("user_id", "anonymous"),
+        "org_id": authorizer.get("org_id", "anonymous"),
+        "is_authenticated": authorizer.get("is_authenticated", "false") == "true",
+        "plan": authorizer.get("plan", "free"),
+        "email": authorizer.get("email", ""),
+    }
+
+
+def _atomic_check_and_increment(auth: dict) -> str | None:
+    """Atomically check rate limit and increment counter.
+
+    Uses a conditional UpdateItem so two concurrent requests cannot both pass.
+    Returns error message if rate limited, None if allowed.
+    """
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    if not auth["is_authenticated"]:
+        # Anonymous: count today's reports under ORG#anonymous via GSI
+        today_prefix = today  # ISO date prefix for gsi1sk
+        result = table.query(
+            IndexName="gsi1",
+            KeyConditionExpression="gsi1pk = :pk AND begins_with(gsi1sk, :today)",
+            ExpressionAttributeValues={
+                ":pk": "ORG#anonymous#REPORTS",
+                ":today": today_prefix,
+            },
+            Select="COUNT",
+        )
+        if result.get("Count", 0) >= ANONYMOUS_LIMIT:
+            return "Sign up for a free account to run more analyses."
+        return None
+
+    # Authenticated: atomic check-and-increment on user record
+    user_pk = f"USER#{auth['user_id']}"
+    try:
+        # Attempt to increment, but only if under the daily limit.
+        # If report_count_date != today, reset to 1 (new day).
+        # If report_count_date == today, increment only if < limit.
+        try:
+            # Case 1: Same day — increment if under limit
+            table.update_item(
+                Key={"pk": user_pk, "sk": user_pk},
+                UpdateExpression="SET report_count_today = report_count_today + :one",
+                ConditionExpression="report_count_date = :today AND report_count_today < :limit",
+                ExpressionAttributeValues={
+                    ":one": 1,
+                    ":today": today,
+                    ":limit": FREE_TIER_DAILY_LIMIT,
+                },
+            )
+            return None
+        except ClientError as e:
+            if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
+                raise
+
+            # Condition failed — either new day or limit reached.
+            # Try resetting for new day.
+            try:
+                table.update_item(
+                    Key={"pk": user_pk, "sk": user_pk},
+                    UpdateExpression="SET report_count_today = :one, report_count_date = :today",
+                    ConditionExpression="report_count_date <> :today",
+                    ExpressionAttributeValues={
+                        ":one": 1,
+                        ":today": today,
+                    },
+                )
+                return None
+            except ClientError as e2:
+                if e2.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                    # Same day AND limit reached
+                    return f"Daily limit reached ({FREE_TIER_DAILY_LIMIT} reports/day on free tier)."
+                raise
+    except Exception as e:
+        logger.warning("Rate limit check failed", extra={"error": str(e)})
+        # Fail open
+        return None
+
+
 @app.get("/reports")
 @tracer.capture_method
 def list_reports():
-    """List all reports."""
+    """List reports scoped to the user's org."""
+    auth = _get_auth_context()
+    org_id = auth["org_id"]
+
+    if not auth["is_authenticated"]:
+        return {"reports": []}
+
     result = table.query(
         IndexName="gsi1",
         KeyConditionExpression="gsi1pk = :pk",
-        ExpressionAttributeValues={":pk": "REPORTS"},
+        ExpressionAttributeValues={":pk": f"ORG#{org_id}#REPORTS"},
         ScanIndexForward=False,
     )
     reports = result.get("Items", [])
@@ -46,6 +148,9 @@ def list_reports():
 @tracer.capture_method
 def create_report():
     """Create a new report from a business idea."""
+    auth = _get_auth_context()
+    org_id = auth["org_id"]
+
     body = app.current_event.json_body
     if not isinstance(body, dict):
         return {"error": "Request body must be a JSON object"}, 400
@@ -56,22 +161,29 @@ def create_report():
     if len(idea_text) > _MAX_IDEA_LEN:
         idea_text = idea_text[:_MAX_IDEA_LEN]
 
+    # Atomic rate limit check + increment
+    rate_error = _atomic_check_and_increment(auth)
+    if rate_error:
+        return {"error": rate_error, "code": "RATE_LIMITED"}, 429
+
     report_id = str(uuid4())
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
 
     item = {
-        "pk": f"REPORT#{report_id}",
+        "pk": f"ORG#{org_id}#REPORT#{report_id}",
         "sk": f"REPORT#{report_id}",
-        "gsi1pk": "REPORTS",
+        "gsi1pk": f"ORG#{org_id}#REPORTS",
         "gsi1sk": now,
         "report_id": report_id,
+        "org_id": org_id,
+        "user_id": auth["user_id"],
         "idea_text": idea_text,
         "status": "pending",
         "created_at": now,
     }
     table.put_item(Item=item)
 
-    logger.info("Report created", extra={"report_id": report_id})
+    logger.info("Report created", extra={"report_id": report_id, "org_id": org_id, "user_id": auth["user_id"]})
 
     # Invoke AI Orchestration Lambda asynchronously (durable execution)
     if AI_FUNCTION_NAME:
@@ -82,10 +194,11 @@ def create_report():
                 Payload=json.dumps({
                     "report_id": report_id,
                     "idea_text": idea_text,
+                    "org_id": org_id,
                 }),
             )
             table.update_item(
-                Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
+                Key={"pk": f"ORG#{org_id}#REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
                 UpdateExpression="SET invoke_status = :s",
                 ExpressionAttributeValues={":s": "invoked"},
             )
@@ -93,7 +206,7 @@ def create_report():
         except Exception as e:
             logger.error("AI invoke failed", extra={"report_id": report_id, "error": str(e)})
             table.update_item(
-                Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
+                Key={"pk": f"ORG#{org_id}#REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
                 UpdateExpression="SET invoke_status = :s, invocation_failure = :m",
                 ExpressionAttributeValues={
                     ":s": "failed",
@@ -107,10 +220,16 @@ def create_report():
 @app.get("/reports/<report_id>")
 @tracer.capture_method
 def get_report(report_id: str):
-    """Get a single report by ID."""
+    """Get a single report by ID, scoped to the user's org."""
     if not _REPORT_ID_RE.match(report_id):
         return {"error": "Invalid report_id"}, 400
-    result = table.get_item(Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"})
+
+    auth = _get_auth_context()
+    org_id = auth["org_id"]
+
+    result = table.get_item(
+        Key={"pk": f"ORG#{org_id}#REPORT#{report_id}", "sk": f"REPORT#{report_id}"}
+    )
     item = result.get("Item")
 
     if not item:
@@ -122,18 +241,22 @@ def get_report(report_id: str):
 @app.delete("/reports/<report_id>")
 @tracer.capture_method
 def delete_report(report_id: str):
-    """Soft-delete a report."""
+    """Soft-delete a report, scoped to the user's org."""
     if not _REPORT_ID_RE.match(report_id):
         return {"error": "Invalid report_id"}, 400
+
+    auth = _get_auth_context()
+    org_id = auth["org_id"]
+
     try:
         table.update_item(
-            Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
+            Key={"pk": f"ORG#{org_id}#REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
             UpdateExpression="SET #s = :status, deleted_at = :now",
             ConditionExpression="attribute_exists(pk)",
             ExpressionAttributeNames={"#s": "status"},
             ExpressionAttributeValues={
                 ":status": "deleted",
-                ":now": datetime.utcnow().isoformat(),
+                ":now": datetime.now(timezone.utc).isoformat(),
             },
         )
     except ClientError as e:

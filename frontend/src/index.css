@@ -1940,3 +1940,182 @@ html { scroll-behavior: smooth; }
   .gap-row          { grid-template-columns: 1fr; }
   .gap-score        { flex-direction: row; gap: 6px; align-items: center; padding-top: 0; margin-top: 4px; }
 }
+
+/* ── Auth Gate Modal ──────────────────────────────────── */
+.auth-gate-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: color-mix(in oklch, var(--bg) 75%, transparent);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.auth-gate {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 40px 36px 32px;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  box-shadow:
+    0 24px 80px oklch(7% 0.032 245 / 0.6),
+    0 0 0 1px oklch(76% 0.22 215 / 0.08);
+}
+
+.auth-gate-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 10px;
+  letter-spacing: -0.01em;
+}
+
+.auth-gate-sub {
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: 28px;
+}
+
+.auth-gate-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.auth-gate-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 44px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  border: 1px solid var(--border-mid);
+}
+
+.auth-gate-btn--google {
+  background: oklch(100% 0 0);
+  color: oklch(25% 0 0);
+  border-color: oklch(85% 0 0);
+}
+
+.auth-gate-btn--google:hover {
+  background: oklch(96% 0 0);
+  box-shadow: 0 2px 12px oklch(0% 0 0 / 0.1);
+}
+
+.auth-gate-btn--google:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--border-focus);
+}
+
+.auth-gate-btn--github {
+  background: oklch(18% 0 0);
+  color: oklch(95% 0 0);
+  border-color: oklch(30% 0 0);
+}
+
+.auth-gate-btn--github:hover {
+  background: oklch(24% 0 0);
+  box-shadow: 0 2px 12px oklch(0% 0 0 / 0.2);
+}
+
+.auth-gate-btn--github:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--border-focus);
+}
+
+.auth-gate-dismiss {
+  font-size: 13px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px 16px;
+  transition: color 0.15s;
+}
+
+.auth-gate-dismiss:hover {
+  color: var(--text-secondary);
+}
+
+/* ── Auth error banner ───────────────────────────────── */
+.auth-error-banner {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: var(--danger-light);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-md);
+  z-index: 200;
+  max-width: min(480px, calc(100vw - 32px));
+}
+
+.auth-error-text {
+  font-size: 13px;
+  color: var(--text);
+  flex: 1;
+}
+
+.auth-error-dismiss {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  transition: color 0.15s;
+}
+
+.auth-error-dismiss:hover {
+  color: var(--text);
+}
+
+/* ── Landing auth prompt ─────────────────────────────── */
+.landing-auth-prompt {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 20px;
+}
+
+.landing-auth-text {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.landing-auth-link {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.15s;
+}
+
+.landing-auth-link:hover {
+  color: var(--accent-hover);
+}

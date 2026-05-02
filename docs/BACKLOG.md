@@ -26,6 +26,37 @@ Changes:
 
 ---
 
+## ✅ Authentication & User Identity (Completed)
+
+**Status:** Done — May 2026
+
+Implemented BFF (Backend-for-Frontend) auth pattern with Cognito, Google SSO, and GitHub SSO. All API traffic goes through a Lambda Authorizer that validates JWT cookies and injects auth context (`user_id`, `org_id`, `plan`, `email`) into every request. User and org records auto-created on first login. All DynamoDB queries org-scoped. Anonymous users get 1 free report; signed-in free tier users get 3/day.
+
+**What was built:**
+- Cognito User Pool with Google SSO (native) + GitHub SSO (OIDC), mandatory TOTP MFA, 30-day device remembering
+- BFF Auth Lambda: `/auth/login`, `/auth/callback`, `/auth/refresh`, `/auth/logout`, `/auth/me`
+- Lambda Authorizer (REQUEST type, 300s cache): JWT validation, DynamoDB user lookup, auth context injection
+- HttpOnly/Secure/SameSite=Strict cookies (`ml_access`, `ml_refresh`, `ml_logged_in`) — tokens never touch JavaScript
+- CloudFront cookie forwarding on `/api/*` and `/auth/*` paths
+- Org-scoped DynamoDB key schema: `PK: ORG#{org_id}#REPORT#{report_id}`
+- Frontend: `useAuth` hook, `AuthProvider` context, auth gate modal, silent token refresh every 50 min
+- Application-level rate limiting (anonymous: 1 total, free tier: 3/day)
+
+**Deferred to post-beta:**
+- ECS Fargate Auth Service (using BFF Lambda instead)
+- Permission Engine / RBAC (single role for now — free tier user)
+- Org & User Service (user/org records created inline by BFF callback, no invite flow or team management)
+- RDS Postgres (still DynamoDB only)
+- ElastiCache / Redis (no session cache — stateless JWT via cookies)
+- WAF per-tenant rate limiting (application-level only)
+- DynamoDB sessions table (stateless cookies instead)
+- API key auth for developers
+- SAML/OIDC enterprise SSO
+- Team/role management UI
+- Scoped CORS (using `AllowOrigin: '*'` — acceptable because all traffic is same-origin via CloudFront)
+
+---
+
 ## Persona-Based Reports
 
 **Priority:** High (post-MVP)

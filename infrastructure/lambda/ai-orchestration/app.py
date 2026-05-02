@@ -86,10 +86,13 @@ def _brave_search(query: str, count: int = 20) -> list[dict]:
         return []
 
 
-def _set_stage(report_id: str, stage: str) -> None:
+def _set_stage(report_id: str, stage: str, org_id: str) -> None:
+    if not org_id:
+        raise ValueError(f"_set_stage called without org_id for report {report_id}")
+    pk = f"ORG#{org_id}#REPORT#{report_id}"
     try:
         table.update_item(
-            Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
+            Key={"pk": pk, "sk": f"REPORT#{report_id}"},
             UpdateExpression="SET current_stage = :stage",
             ExpressionAttributeValues={":stage": stage},
         )
@@ -822,13 +825,17 @@ def handler(event: dict, context: DurableContext) -> dict:
     """
     report_id = event.get("report_id")
     idea_text = event.get("idea_text")
+    org_id = event.get("org_id", "anonymous")
 
-    logger.info("Pipeline started", extra={"report_id": report_id})
+    pk = f"ORG#{org_id}#REPORT#{report_id}"
+    sk = f"REPORT#{report_id}"
+
+    logger.info("Pipeline started", extra={"report_id": report_id, "org_id": org_id})
 
     try:
         # Update status to running
         table.update_item(
-            Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
+            Key={"pk": pk, "sk": sk},
             UpdateExpression="SET #s = :status",
             ExpressionAttributeNames={"#s": "status"},
             ExpressionAttributeValues={":status": "running"},
@@ -836,39 +843,39 @@ def handler(event: dict, context: DurableContext) -> dict:
 
         # Stage 1: Sanitize
         sanitized = context.step(lambda _: sanitize(idea_text), name="sanitize")
-        _set_stage(report_id, "sanitize")
+        _set_stage(report_id, "sanitize", org_id)
 
         # Stage 2: Parse  (Nova Micro)
         parsed = context.step(lambda _: parse(sanitized["cleaned_idea"]), name="parse")
-        _set_stage(report_id, "parse")
+        _set_stage(report_id, "parse", org_id)
 
         # Stage 3: Search  (Brave Search API + Nova Micro)
         search_results = context.step(lambda _: search(parsed), name="search")
-        _set_stage(report_id, "search")
+        _set_stage(report_id, "search", org_id)
 
         # Stage 4: Analyse  (DeepSeek V3.2)
         analysis = context.step(lambda _: analyse(parsed, search_results), name="analyse")
-        _set_stage(report_id, "analyse")
+        _set_stage(report_id, "analyse", org_id)
 
         # Stage 5: Score  (deterministic)
         scores = context.step(lambda _: score(parsed, analysis, search_results), name="score")
-        _set_stage(report_id, "score")
+        _set_stage(report_id, "score", org_id)
 
         # Stage 6: Summarise  (Claude 3 Haiku)
         summary = context.step(lambda _: summarise(analysis, scores, parsed, search_results), name="summarise")
-        _set_stage(report_id, "summarise")
+        _set_stage(report_id, "summarise", org_id)
 
         # Stage 7: Assemble
         result = context.step(
             lambda _: assemble(parsed, search_results, analysis, scores, summary),
             name="assemble",
         )
-        _set_stage(report_id, "assemble")
+        _set_stage(report_id, "assemble", org_id)
 
         # Write final result to DynamoDB
         now = datetime.utcnow().isoformat()
         table.update_item(
-            Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
+            Key={"pk": pk, "sk": sk},
             UpdateExpression="SET #s = :status, result_json = :result, completed_at = :now",
             ExpressionAttributeNames={"#s": "status"},
             ExpressionAttributeValues={
@@ -878,14 +885,14 @@ def handler(event: dict, context: DurableContext) -> dict:
             },
         )
 
-        logger.info("Pipeline completed", extra={"report_id": report_id})
+        logger.info("Pipeline completed", extra={"report_id": report_id, "org_id": org_id})
         return {"report_id": report_id, "status": "complete"}
     except Exception as e:
         logger.exception("Pipeline failed", extra={"report_id": report_id})
         if report_id:
             now = datetime.utcnow().isoformat()
             table.update_item(
-                Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
+                Key={"pk": pk, "sk": sk},
                 UpdateExpression="SET #s = :status, error_message = :error_message, completed_at = :now",
                 ExpressionAttributeNames={"#s": "status"},
                 ExpressionAttributeValues={
