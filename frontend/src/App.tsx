@@ -35,7 +35,13 @@ export default function App() {
     typeof window !== 'undefined' && sessionStorage.getItem('ml_anon_used') === '1'
   );
 
-  const [authError, setAuthError] = useState<string | null>(null);
+  const [authError, setAuthError] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const params = new URLSearchParams(window.location.search);
+    const err = params.get('auth_error');
+    if (err) window.history.replaceState({}, '', window.location.pathname);
+    return err;
+  });
 
   useEffect(() => {
     const id = setInterval(() => setPhIdx(i => (i + 1) % EXAMPLE_QUERIES.length), 3200);
@@ -51,14 +57,6 @@ export default function App() {
     return () => mq.removeEventListener('change', sync);
   }, []);
 
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const err = params.get('auth_error');
-    if (err) {
-      setAuthError(err);
-      window.history.replaceState({}, '', window.location.pathname);
-    }
-  }, []);
 
   const mouseX = useMotionValue(0.5);
   const mouseY = useMotionValue(0.5);

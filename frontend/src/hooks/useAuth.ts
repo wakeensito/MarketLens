@@ -120,6 +120,8 @@ export function useAuth(): AuthState {
     };
   }, [isAuthenticated, refresh]);
 
+  // checkAuth is async — all setState calls happen after await, not synchronously.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { void checkAuth(); }, [checkAuth]);
 
   return { loading, isAuthenticated, user, login, logout, refresh };
