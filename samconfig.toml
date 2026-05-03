@@ -7,7 +7,18 @@ s3_prefix = "marketlens-dev"
 region = "us-east-1"
 confirm_changeset = false
 capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
-parameter_overrides = "Stage=\"dev\" ApiKeyValue=\"UBa92w4rAWm1JPSurcc4otfE7SPKKLXOlaqycEhx168\" SenderEmail=\"wakeenproduction@gmail.com\" GoogleClientId=\"placeholder-not-configured\" GoogleClientSecret=\"placeholder-not-configured\" CognitoCallbackDomain=\"d3qv7k78vm3pjm.cloudfront.net\""
+# Secrets must be passed at deploy time — never commit them here.
+# Deploy with:
+#   sam deploy --parameter-overrides \
+#     "ApiKeyValue=$ML_API_KEY" \
+#     "SenderEmail=$ML_SENDER_EMAIL" \
+#     "GoogleClientId=$ML_GOOGLE_CLIENT_ID" \
+#     "GoogleClientSecret=$ML_GOOGLE_CLIENT_SECRET"
+#
+# Or set them in environment variables and use:
+#   sam deploy --parameter-overrides \
+#     "ApiKeyValue=$(aws ssm get-parameter --name /marketlens/dev/api-key --with-decryption --query Parameter.Value --output text)"
+parameter_overrides = "Stage=\"dev\" GoogleClientId=\"placeholder-not-configured\" GoogleClientSecret=\"placeholder-not-configured\" CognitoCallbackDomain=\"d3qv7k78vm3pjm.cloudfront.net\""
 image_repositories = []
 
 [default.global.parameters]
