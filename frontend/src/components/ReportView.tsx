@@ -95,7 +95,7 @@ function MetricCol({ colLabel, score, statusLabel, invert = false }: {
   }, [inView, score]);
 
   return (
-    <div className="metric-col" ref={ref}>
+    <div className="metric-col" ref={ref} style={{ '--metric-color': color } as React.CSSProperties}>
       <div className="metric-col-label">{colLabel}</div>
       <div className="metric-number">
         {displayed}<span className="metric-denom">/100</span>
