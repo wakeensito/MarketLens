@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Clock, X, PanelLeftClose, Zap, Palette, User, Settings2, HelpCircle, LogOut, SquarePen, Sun, Moon } from 'lucide-react';
+import { Clock, X, PanelLeftClose, Zap, Palette, User, Settings2, HelpCircle, LogOut, SquarePen, Sun, Moon, Circle } from 'lucide-react';
 import type { ApiReport } from '../api';
 import { listReports } from '../api';
 import { useAuthContext } from '../hooks/useAuth';
@@ -58,7 +58,9 @@ export default function RecentThreads({ isOpen, onClose, onOpen, onNewChat, acti
   const resolvedTheme = getResolved(themePref);
 
   const toggleTheme = () => {
-    const next: ThemePreference = resolvedTheme === 'dark' ? 'light' : 'dark';
+    const next: ThemePreference =
+      resolvedTheme === 'light' ? 'dark' :
+      resolvedTheme === 'dark'  ? 'stealth' : 'light';
     setThemePref(next);
     setLocalPref(next);
   };
@@ -209,13 +211,12 @@ export default function RecentThreads({ isOpen, onClose, onOpen, onNewChat, acti
                 type="button"
                 className="sidebar-icon-btn"
                 onClick={toggleTheme}
-                title={resolvedTheme === 'dark' ? 'Switch to light' : 'Switch to dark'}
-                aria-label={resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+                title={resolvedTheme === 'light' ? 'Switch to dark' : resolvedTheme === 'dark' ? 'Switch to stealth' : 'Switch to light'}
+                aria-label={resolvedTheme === 'light' ? 'Switch to dark mode' : resolvedTheme === 'dark' ? 'Switch to stealth mode' : 'Switch to light mode'}
               >
-                {resolvedTheme === 'dark'
-                  ? <Sun size={14} strokeWidth={1.8} />
-                  : <Moon size={14} strokeWidth={1.8} />
-                }
+                {resolvedTheme === 'light'   ? <Moon size={14} strokeWidth={1.8} /> :
+                 resolvedTheme === 'dark'    ? <Circle size={14} strokeWidth={1.8} /> :
+                                              <Sun size={14} strokeWidth={1.8} />}
               </button>
               <button
                 type="button"

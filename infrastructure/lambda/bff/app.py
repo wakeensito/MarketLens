@@ -269,6 +269,14 @@ def initiate():
                 UserPoolId=USER_POOL_ID,
                 Username=email,
             )
+            # Mark email as verified (OTP proves ownership)
+            cognito_client.admin_update_user_attributes(
+                UserPoolId=USER_POOL_ID,
+                Username=email,
+                UserAttributes=[
+                    {"Name": "email_verified", "Value": "true"},
+                ],
+            )
             logger.info("Auto-created Cognito user", extra={"email_domain": email.split("@")[-1]})
         except cognito_client.exceptions.UsernameExistsException:
             pass  # Race condition — another request created them

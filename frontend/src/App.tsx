@@ -9,6 +9,7 @@ import RecentThreads from './components/RecentThreads';
 import SignInModal from './components/SignInModal';
 import PricingSection from './components/PricingSection';
 import { BrandWordmarkInner } from './components/BrandWordmark';
+import { ThemePicker } from './components/ThemePicker';
 import { useAnalysis } from './hooks/useAnalysis';
 import { useAuthContext } from './hooks/useAuth';
 import { EXAMPLE_QUERIES } from './mockData';
@@ -106,8 +107,6 @@ export default function App() {
   const mouseY = useMotionValue(0.5);
   const rotateX = useSpring(useTransform(mouseY, [0, 1], [8, -8]), { stiffness: 80, damping: 18 });
   const rotateY = useSpring(useTransform(mouseX, [0, 1], [-8, 8]), { stiffness: 80, damping: 18 });
-  const glowX   = useSpring(useTransform(mouseX, [0, 1], [-30, 30]), { stiffness: 60, damping: 20 });
-  const glowY   = useSpring(useTransform(mouseY, [0, 1], [-30, 30]), { stiffness: 60, damping: 20 });
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!isLanding) return;
@@ -153,9 +152,6 @@ export default function App() {
   if (auth.loading) {
     return (
       <div className="shell shell--landing">
-        <div className="orb orb-1" />
-        <div className="orb orb-2" />
-        <div className="orb orb-3" />
         <motion.div className="lnd-wordmark" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
           <span className="lnd-wm-inner">
             <BrandWordmarkInner variant="landing" />
@@ -169,9 +165,6 @@ export default function App() {
   if (showPricing) {
     return (
       <div className="shell shell--pricing">
-        <div className="orb orb-1" style={{ position: 'fixed' }} />
-        <div className="orb orb-2" style={{ position: 'fixed' }} />
-        <div className="orb orb-3" style={{ position: 'fixed' }} />
         <PricingSection
           onBack={() => {
             setShowSignIn(false);
@@ -195,23 +188,6 @@ export default function App() {
       onMouseMove={handleMouseMove}
       onMouseLeave={() => { mouseX.set(0.5); mouseY.set(0.5); }}
     >
-      <div className="orb orb-1" />
-      <div className="orb orb-2" />
-      <div className="orb orb-3" />
-
-      {/* Cursor glow — landing only, non-touch only */}
-      <AnimatePresence>
-        {isLanding && !isTouchDevice && (
-          <motion.div
-            className="cursor-glow"
-            style={{ x: glowX, y: glowY }}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0, transition: { duration: 0.25 } }}
-          />
-        )}
-      </AnimatePresence>
-
       {/* ── Auth error banner ──────────────────────────────── */}
       <AnimatePresence>
         {authError && (
@@ -231,17 +207,19 @@ export default function App() {
       {/* ── Landing ────────────────────────────────────────── */}
       {isLanding && (
         <>
-          {/* Top nav — sign in + pricing, top-right */}
+          {/* Top nav — pricing + theme + sign-in, right-aligned */}
           {!auth.isAuthenticated && (
             <motion.nav
               className="lnd-nav"
-              initial={landingEntryInitial}
-              animate={landingEntryAnimate(0.28)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.28, duration: 0.35, ease: 'easeOut' as const }}
             >
               <div className="lnd-nav-right">
                 <button className="lnd-nav-pricing" onClick={() => setShowPricing(true)}>
                   Pricing
                 </button>
+                <ThemePicker />
                 <button className="lnd-nav-signin" onClick={() => setShowSignIn(true)}>
                   Sign in
                 </button>

@@ -123,6 +123,70 @@
   --danger-light:    oklch(66%   0.22   23 / 0.14);
 }
 
+/* ── Stealth theme — midnight neutral, greyscale logo ─────
+   Pure neutral hue (chroma 0) = no warm or cool tint.
+   Logo mark shifts from amber to light grey.
+   ──────────────────────────────────────────────────────── */
+
+/* ── Stealth theme — blended dark, cool-neutral undertone ──
+   All foundation values carry a whisper of blue-grey (#0E0F10
+   has R=14 G=15 B=16) rather than pure black, which is what
+   makes surfaces feel blended instead of cut-out.
+   ──────────────────────────────────────────────────────── */
+
+:root[data-theme="stealth"] {
+  color-scheme: dark;
+
+  /* Foundation — blended near-black scale */
+  --bg:              #0E0F10;   /* page canvas  */
+  --surface:         #1A1B1C;   /* cards, panels */
+  --surface-alt:     #212223;   /* elevated surface within card */
+  --surface-hover:   #2A2B2C;   /* hover state, input bg */
+
+  /* Borders — whisper-quiet separators */
+  --border:          #2E2F31;   /* default divider */
+  --border-mid:      #3B3C3F;   /* slightly stronger */
+  --border-strong:   #4A4B4E;   /* emphasis */
+  --border-focus:    rgb(231 231 231 / 0.20);
+
+  /* Text hierarchy */
+  --text:            #E7E7E7;   /* primary off-white */
+  --text-secondary:  #B8B8B8;   /* supporting */
+  --text-muted:      #8E8E8E;   /* metadata / disabled */
+  --text-inverse:    #0E0F10;
+
+  /* Accent — off-white for all interactions */
+  --accent:          #E7E7E7;
+  --accent-light:    rgb(231 231 231 / 0.07);
+  --accent-border:   rgb(231 231 231 / 0.12);
+  --accent-hover:    #F2F2F2;
+
+  /* Signal — desaturated blue, readable on dark */
+  --signal:          oklch(58%   0.07 240);
+  --signal-light:    oklch(58%   0.07 240 / 0.12);
+  --signal-border:   oklch(58%   0.07 240 / 0.20);
+
+  /* Logo — amber is the one colour that carries across all three themes */
+  --logo-accent:     oklch(60% 0.17 47);
+  --logo-accent-mid: oklch(65% 0.16 50);
+  --logo-accent-ink: oklch(48% 0.15 47);
+
+  /* plinths wordmark title */
+  --brand-plinths-title: #E7E7E7;
+
+  /* Micro-detail */
+  --gloss:           rgb(255 255 255 / 0.04);
+  --warning-border:  oklch(70%   0.15 67 / 0.18);
+
+  /* Semantic */
+  --success:         oklch(56%   0.14 152);
+  --success-light:   oklch(56%   0.14 152 / 0.12);
+  --warning:         oklch(68%   0.15  67);
+  --warning-light:   oklch(68%   0.15  67 / 0.12);
+  --danger:          oklch(60%   0.18  23);
+  --danger-light:    oklch(60%   0.18  23 / 0.12);
+}
+
 /* ── Component-specific dark overrides ───────────────────
    Tokens cover 95% of components automatically.
    These patches fix hardcoded literal values.
@@ -155,6 +219,43 @@
 /* Modal backdrop: heavier overlay so dark bg still recedes */
 :root[data-theme="dark"] .signin-modal-backdrop {
   background: oklch(0% 0 0 / 0.70);
+}
+
+/* Stealth — orbs: #B8B8B8 (secondary text) at trace opacity */
+:root[data-theme="stealth"] .orb-1 {
+  background: radial-gradient(circle, rgb(184 184 184 / 0.05) 0%, transparent 70%);
+}
+:root[data-theme="stealth"] .orb-2 {
+  background: radial-gradient(circle, rgb(184 184 184 / 0.03) 0%, transparent 70%);
+}
+:root[data-theme="stealth"] .orb-3 {
+  background: radial-gradient(circle, rgb(184 184 184 / 0.02) 0%, transparent 70%);
+}
+:root[data-theme="stealth"] .cursor-glow {
+  background: radial-gradient(circle, rgb(184 184 184 / 0.07) 0%, transparent 65%);
+}
+:root[data-theme="stealth"] .ai-input {
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.55);
+  border-left-color: var(--border-mid);
+}
+:root[data-theme="stealth"] .ai-input:focus-within {
+  border-left-color: var(--accent);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.55), 0 0 0 3px var(--accent-light);
+}
+:root[data-theme="stealth"] .signin-modal-backdrop {
+  background: rgb(14 15 16 / 0.85);   /* #0E0F10 at 85% — uses the bg colour itself */
+}
+
+/* Stealth: amber avatar — the one warm accent in an otherwise neutral UI */
+:root[data-theme="stealth"] .sidebar-profile-avatar {
+  background: var(--logo-accent);
+  color: #0E0F10;
+}
+
+/* Logo mark bars — CSS fill overrides the SVG presentation attribute,
+   so the colour follows --logo-accent and responds to all three themes */
+.brand-mark-bar {
+  fill: var(--logo-accent);
 }
 
 html, body, #root {
@@ -199,13 +300,14 @@ html { scroll-behavior: smooth; }
   align-items: center;
   justify-content: center;
   min-height: 100svh;
-  padding: 60px 24px;
+  /* top = nav height (52px) + breathing room (36px) */
+  padding: 88px 24px 60px;
   text-align: center;
   overflow-y: auto;
 }
 
-/* All landing children above orbs (exclude fixed overlays — e.g. sign-in modal backdrop) */
-.shell--landing > *:not(.orb):not(.cursor-glow):not(.signin-modal-backdrop) {
+/* All landing children above orbs (exclude fixed overlays) */
+.shell--landing > *:not(.orb):not(.cursor-glow):not(.signin-modal-backdrop):not(.lnd-nav):not(.auth-error-banner) {
   position: relative;
 }
 
@@ -1880,9 +1982,9 @@ html { scroll-behavior: smooth; }
   padding: 24px;
 }
 
-.score-card--low  { border-top: 3px solid var(--success); padding-top: 22px; }
-.score-card--mid  { border-top: 3px solid var(--warning); padding-top: 22px; }
-.score-card--high { border-top: 3px solid var(--danger);  padding-top: 22px; }
+.score-card--low  { border-top: 3px solid var(--success); padding-top: 20px; }
+.score-card--mid  { border-top: 3px solid var(--warning); padding-top: 20px; }
+.score-card--high { border-top: 3px solid var(--danger);  padding-top: 20px; }
 
 .score-card-label {
   font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
@@ -2063,13 +2165,12 @@ html { scroll-behavior: smooth; }
 .gap-row {
   display: grid; grid-template-columns: 1fr 60px;
   gap: 20px; align-items: start;
-  padding: 18px 0; border-bottom: 1px solid var(--border);
+  padding: 18px 0 18px 12px; border-bottom: 1px solid var(--border);
   border-left: 2px solid transparent;
-  padding-left: 0;
   transition: background 0.15s, border-color 0.15s;
 }
 
-.gap-row:hover { background: var(--surface-alt); border-left-color: var(--accent-border); padding-left: 12px; }
+.gap-row:hover { background: var(--surface-alt); border-left-color: var(--accent-border); }
 .gap-row:last-child { border-bottom: none; }
 
 .gap-index { font-family: var(--font-mono); font-size: 10px; font-weight: 500; color: var(--text-muted); margin-bottom: 5px; letter-spacing: 0.05em; }
@@ -2097,14 +2198,13 @@ html { scroll-behavior: smooth; }
 
 .roadmap-phase {
   display: grid; grid-template-columns: 200px 1fr;
-  gap: 24px; padding: 18px 0; border-bottom: 1px solid var(--border);
+  gap: 24px; padding: 18px 0 18px 12px; border-bottom: 1px solid var(--border);
   align-items: start;
   border-left: 2px solid transparent;
-  padding-left: 0;
   transition: background 0.15s, border-color 0.15s;
 }
 
-.roadmap-phase:hover { background: var(--surface-alt); border-left-color: var(--accent-border); padding-left: 12px; }
+.roadmap-phase:hover { background: var(--surface-alt); border-left-color: var(--accent-border); }
 .roadmap-phase:last-child { border-bottom: none; }
 
 .roadmap-phase-num   { font-family: var(--font-mono); font-size: 10px; font-weight: 500; color: var(--text-muted); letter-spacing: 0.06em; margin-bottom: 4px; text-transform: uppercase; }
@@ -2325,8 +2425,8 @@ html { scroll-behavior: smooth; }
   .comp-table-desktop { display: none; }
   .comp-cards         { display: flex; }
 
-  /* Landing */
-  .shell--landing     { padding: 48px 20px; }
+  /* Landing — nav is 52px; top padding keeps content clear of it */
+  .shell--landing     { padding: 76px 20px 48px; }
   .lnd-input-wrap     { max-width: 100%; }
   .landing-pill       { height: 36px; }
 
@@ -2394,7 +2494,7 @@ html { scroll-behavior: smooth; }
   }
   .lnd-headline     { font-size: clamp(19px, 5.5vw, 26px); margin-bottom: 12px; }
   .lnd-sub          { font-size: 15px; margin-bottom: 32px; }
-  .shell--landing   { padding: 40px 16px; }
+  .shell--landing   { padding: 68px 16px 40px; }
   .gap-row          { grid-template-columns: 1fr; }
   .gap-score        { flex-direction: row; gap: 6px; align-items: center; padding-top: 0; margin-top: 4px; }
 }
@@ -2519,7 +2619,7 @@ html { scroll-behavior: smooth; }
   padding: 10px 16px;
   background: var(--danger-light);
   border: 1px solid var(--danger);
-  border-radius: var(--radius-md);
+  border-radius: 8px;
   z-index: 200;
   max-width: min(480px, calc(100vw - 32px));
 }
@@ -2583,19 +2683,27 @@ html { scroll-behavior: smooth; }
   left: 0;
   right: 0;
   height: 52px;
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  padding: 0 24px;
+  padding: env(safe-area-inset-top, 0px) 20px 0;
   z-index: 100;
+  /* Ensure Framer Motion transforms can't visually drop the bar */
+  transform: none !important;
+  /* rail transparent so hero content below receives mouse events */
   pointer-events: none;
 }
 
 .lnd-nav-right {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   pointer-events: auto;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: none;
 }
 
 .lnd-nav-pricing {
@@ -2625,24 +2733,73 @@ html { scroll-behavior: smooth; }
 
 .lnd-nav-signin {
   height: 32px;
-  padding: 0 16px;
+  padding: 0 14px;
   border-radius: var(--radius-md);
-  border: 1px solid var(--border-mid);
-  background: var(--surface);
-  color: var(--text);
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--text-inverse);
   font-size: 13px;
   font-weight: 500;
   font-family: var(--font-body);
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
 
 .lnd-nav-signin:hover {
-  border-color: var(--border-strong);
-  background: var(--surface-alt);
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+  box-shadow: 0 2px 8px oklch(13% 0.008 245 / 0.18);
 }
 
 .lnd-nav-signin:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--border-focus);
+}
+
+/* ── Theme picker ────────────────────────────────────────
+   Three icon-buttons in a compact segmented control.
+   ──────────────────────────────────────────────────────── */
+.theme-picker {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 3px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.theme-picker-btn {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: calc(var(--radius-md) - 1px);
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.12s, background 0.12s;
+  flex-shrink: 0;
+}
+
+.theme-picker-btn:hover {
+  color: var(--text-secondary);
+  background: var(--surface-alt);
+}
+
+.theme-picker-btn--active {
+  color: var(--accent);
+  background: var(--accent-light);
+}
+
+.theme-picker-btn--active:hover {
+  color: var(--accent);
+  background: var(--accent-light);
+}
+
+.theme-picker-btn:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--border-focus);
 }
@@ -2981,6 +3138,32 @@ html { scroll-behavior: smooth; }
   line-height: 1.45;
 }
 
+.pricing-feature-item--excluded {
+  color: var(--text-muted);
+  opacity: 0.75;
+}
+
+.pricing-feature-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pricing-feature-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.pricing-feature-value {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 .pricing-check-icon {
   width: 16px; height: 16px;
   border-radius: 50%;
@@ -2992,6 +3175,12 @@ html { scroll-behavior: smooth; }
   color: var(--accent);
   flex-shrink: 0;
   margin-top: 1px;
+}
+
+.pricing-feature-item--excluded .pricing-check-icon {
+  background: var(--danger-light);
+  border-color: oklch(62% 0.19 25 / 0.25);
+  color: var(--danger);
 }
 
 .pricing-footer {

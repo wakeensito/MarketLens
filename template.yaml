@@ -570,6 +570,7 @@ Resources:
                 - cognito-idp:SignUp
                 - cognito-idp:AdminGetUser
                 - cognito-idp:AdminConfirmSignUp
+                - cognito-idp:AdminUpdateUserAttributes
               Resource: !GetAtt CognitoUserPool.Arn
       Environment:
         Variables:
