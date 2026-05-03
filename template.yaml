@@ -261,7 +261,7 @@ Resources:
             HeaderBehavior: none
           QueryStringsConfig:
             QueryStringBehavior: none
-          EnableAcceptEncodingGzip: true
+          EnableAcceptEncodingGzip: false
 
   CookieForwardingOriginRequestPolicy:
     Type: AWS::CloudFront::OriginRequestPolicy

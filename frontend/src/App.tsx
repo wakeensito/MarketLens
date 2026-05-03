@@ -85,6 +85,16 @@ export default function App() {
     return () => cancelAnimationFrame(id);
   }, [auth.isAuthenticated]);
 
+  // On logout, reset the analysis screen so the landing page is shown.
+  // Track previous value to only fire on true→false transitions, not on initial load.
+  const prevIsAuthRef = useRef(auth.isAuthenticated);
+  useEffect(() => {
+    if (prevIsAuthRef.current && !auth.isAuthenticated) {
+      handleReset();
+    }
+    prevIsAuthRef.current = auth.isAuthenticated;
+  }, [auth.isAuthenticated, handleReset]);
+
   // Show "save report" prompt after free analysis completes (anonymous users only)
   useEffect(() => {
     if (screen !== 'report' || auth.isAuthenticated) return;

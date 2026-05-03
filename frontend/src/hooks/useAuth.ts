@@ -61,7 +61,7 @@ export function useAuth(): AuthState {
   const [user, setUser] = useState<AuthUser | null>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const checkAuth = useCallback(async () => {
+  const checkAuth = useCallback(async (force = false) => {
     // Mock mode: skip backend, start unauthenticated so sign-in flow can be tested
     if (IS_MOCK) {
       setIsAuthenticated(false);
@@ -70,7 +70,7 @@ export function useAuth(): AuthState {
       return;
     }
 
-    if (!hasLoginCookie()) {
+    if (!force && !hasLoginCookie()) {
       setIsAuthenticated(false);
       setUser(null);
       setLoading(false);
@@ -205,8 +205,9 @@ export function useAuth(): AuthState {
         throw err;
       }
 
-      // Success — cookies are set, check auth
-      await checkAuth();
+      // Success — cookies are set; bypass the sentinel-cookie gate since we
+      // know authentication just succeeded and cookies may not be readable yet.
+      await checkAuth(true);
     },
     [checkAuth],
   );
