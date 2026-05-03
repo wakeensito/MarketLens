@@ -61,20 +61,20 @@ export function useAuth(): AuthState {
   const [user, setUser] = useState<AuthUser | null>(null);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const checkAuth = useCallback(async (force = false) => {
+  const checkAuth = useCallback(async (force = false): Promise<boolean> => {
     // Mock mode: skip backend, start unauthenticated so sign-in flow can be tested
     if (IS_MOCK) {
       setIsAuthenticated(false);
       setUser(null);
       setLoading(false);
-      return;
+      return false;
     }
 
     if (!force && !hasLoginCookie()) {
       setIsAuthenticated(false);
       setUser(null);
       setLoading(false);
-      return;
+      return false;
     }
 
     try {
@@ -87,13 +87,15 @@ export function useAuth(): AuthState {
       if (data.authenticated && data.user) {
         setIsAuthenticated(true);
         setUser(data.user);
-      } else {
-        setIsAuthenticated(false);
-        setUser(null);
+        return true;
       }
+      setIsAuthenticated(false);
+      setUser(null);
+      return false;
     } catch {
       setIsAuthenticated(false);
       setUser(null);
+      return false;
     } finally {
       setLoading(false);
     }
@@ -207,7 +209,10 @@ export function useAuth(): AuthState {
 
       // Success — cookies are set; bypass the sentinel-cookie gate since we
       // know authentication just succeeded and cookies may not be readable yet.
-      await checkAuth(true);
+      const authed = await checkAuth(true);
+      if (!authed) {
+        throw new Error('Sign-in succeeded but your session could not be confirmed. Please refresh and try again.');
+      }
     },
     [checkAuth],
   );

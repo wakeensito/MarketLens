@@ -159,7 +159,10 @@ export default function SignInModal({ isOpen, onClose, auth, onShowPricing, vari
     setOtpBusy(true);
     try {
       await auth.verifyCode(otpEmail, trimmed, otpSession);
-      closeModal();
+      // Modal is closed by the useEffect on auth.isAuthenticated (line 85).
+      // If verifyCode resolves without throwing, auth state is true and that
+      // effect fires. Do NOT call closeModal() here — it would fire before
+      // React commits the state change, dropping the user back unsigned in.
     } catch (err) {
       if (err instanceof Error) {
         // Update session if a new one was provided
