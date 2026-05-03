@@ -123,18 +123,26 @@ def lambda_handler(event: dict, context) -> dict:
     try:
         jwks_client = _get_jwks_client()
         signing_key = jwks_client.get_signing_key_from_jwt(access_token)
+        # Cognito access tokens have no `aud` claim — they carry `client_id`.
+        # Skip aud verification and validate client_id manually below.
         claims = jwt.decode(
             access_token,
             signing_key.key,
             algorithms=["RS256"],
-            audience=CLIENT_ID,
             issuer=EXPECTED_ISSUER,
-            options={"verify_exp": True},
+            options={"verify_exp": True, "verify_aud": False},
         )
 
-        # Cognito access tokens have token_use=access; reject ID tokens
         if claims.get("token_use") != "access":
             logger.warning("Token is not an access token", extra={"token_use": claims.get("token_use")})
+            return _generate_policy("anonymous", "Deny", method_arn, {
+                "user_id": "anonymous",
+                "org_id": "anonymous",
+                "is_authenticated": "false",
+            })
+
+        if claims.get("client_id") != CLIENT_ID:
+            logger.warning("Access token client_id mismatch")
             return _generate_policy("anonymous", "Deny", method_arn, {
                 "user_id": "anonymous",
                 "org_id": "anonymous",

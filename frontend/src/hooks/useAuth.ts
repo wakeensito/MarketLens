@@ -44,7 +44,7 @@ const IS_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 
 const MOCK_USER: AuthUser = {
   user_id: 'mock-user-001',
-  email: 'demo@marketlens.ai',
+  email: 'demo@plinths.ai',
   name: 'Demo User',
   org_id: 'mock-org',
   plan: 'analyst',

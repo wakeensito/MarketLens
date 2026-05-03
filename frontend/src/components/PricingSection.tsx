@@ -273,7 +273,7 @@ export default function PricingSection({ onBack, onSignIn }: Props) {
           </p>
           <p className="pricing-footer-sub">
             Questions?{' '}
-            <a href="mailto:hello@marketlens.ai" className="pricing-footer-link">
+            <a href="mailto:hello@plinths.ai" className="pricing-footer-link">
               Contact us
             </a>
           </p>

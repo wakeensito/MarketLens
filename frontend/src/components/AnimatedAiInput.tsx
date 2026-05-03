@@ -10,18 +10,29 @@ import {
 import { AnimatePresence, motion } from 'framer-motion';
 import { ArrowRight, Check, ChevronDown, Paperclip } from 'lucide-react';
 import { AnthropicIcon, GeminiIcon, OpenAiIcon } from './model-brand-icons';
+import { PlinthsMark } from './BrandWordmark';
+import { SoonPill } from './SoonPill';
 
 type BrandIcon = ComponentType<{ className?: string }>;
 
+interface ModelDef {
+  id:        string;
+  label:     string;
+  Icon:      BrandIcon;
+  /** Active means selectable + actually wired through the backend pipeline. */
+  active:    boolean;
+  /** Ribbon next to the label in the menu. */
+  badge?:    'Beta' | null;
+}
+
 const AI_MODELS = [
-  { id: 'claude-3-haiku', label: 'Claude 3 Haiku', Icon: AnthropicIcon },
-  { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', Icon: AnthropicIcon },
-  { id: 'claude-opus-4-7', label: 'Claude Opus 4.7', Icon: AnthropicIcon },
-  { id: 'gpt-4-1-mini', label: 'GPT-4.1 Mini', Icon: OpenAiIcon },
-  { id: 'gpt-4-1', label: 'GPT-4.1', Icon: OpenAiIcon },
-  { id: 'gemini-3-1-pro', label: 'Gemini 3.1 Pro', Icon: GeminiIcon },
-  { id: 'o3-mini', label: 'o3-mini', Icon: OpenAiIcon },
-] as const satisfies readonly { id: string; label: string; Icon: BrandIcon }[];
+  { id: 'plinths-research', label: 'plinths',          Icon: PlinthsMark,  active: true,  badge: 'Beta' },
+  { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', Icon: AnthropicIcon, active: false, badge: null },
+  { id: 'claude-opus-4-7',  label: 'Claude Opus 4.7',  Icon: AnthropicIcon, active: false, badge: null  },
+  { id: 'gpt-5-5',          label: 'GPT-5.5',          Icon: OpenAiIcon,    active: false, badge: null  },
+  { id: 'gpt-5-4-pro',      label: 'GPT-5.4 pro',      Icon: OpenAiIcon,    active: false, badge: null  },
+  { id: 'gemini-3-1-pro',   label: 'Gemini 3.1 Pro',   Icon: GeminiIcon,    active: false, badge: null  },
+] as const satisfies readonly ModelDef[];
 
 type ModelId = (typeof AI_MODELS)[number]['id'];
 
@@ -130,7 +141,7 @@ const AnimatedAiInput = forwardRef<HTMLTextAreaElement, AnimatedAiInputProps>(
               adjustHeight();
             }}
             onKeyDown={onKeyDown}
-            autoFocus={autoFocusProp ?? !compact}
+            autoFocus={autoFocusProp === true}
             spellCheck
           />
         </div>
@@ -150,41 +161,48 @@ const AnimatedAiInput = forwardRef<HTMLTextAreaElement, AnimatedAiInputProps>(
                   >
                     <SelectedIcon className="ai-input__model-icon" aria-hidden />
                     <span className="ai-input__model-label">{selected.label}</span>
+                    {selected.badge && (
+                      <span className="ai-input__model-badge">{selected.badge}</span>
+                    )}
                     <ChevronDown className="ai-input__chevron" aria-hidden />
                   </motion.span>
                 </AnimatePresence>
               </summary>
-              <ul className="ai-input__menu" role="listbox" aria-label="Models">
-                {AI_MODELS.map(m => {
-                  const Icon = m.Icon;
-                  const active = m.id === selectedId;
-                  return (
-                    <li key={m.id} role="presentation">
-                      <button
-                        type="button"
-                        role="option"
-                        aria-selected={active}
-                        className="ai-input__menu-item"
-                        data-active={active ? '' : undefined}
-                        onClick={() => {
-                          setSelectedId(m.id);
-                          closeModelDropdown();
-                        }}
-                      >
-                        <Icon className="ai-input__model-icon" aria-hidden />
-                        <span>{m.label}</span>
-                        {active && <Check className="ai-input__check" aria-hidden />}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+              <div className="ai-input__menu-wrap">
+                <ul className="ai-input__menu" role="listbox" aria-label="Available models">
+                  {AI_MODELS.map(m => {
+                    const Icon = m.Icon;
+                    const isSelected = m.id === selectedId;
+                    return (
+                      <li key={m.id} role="presentation">
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={isSelected}
+                          className={`ai-input__menu-item${m.active ? '' : ' is-soon'}`}
+                          data-active={isSelected ? '' : undefined}
+                          onClick={() => {
+                            setSelectedId(m.id);
+                            closeModelDropdown();
+                          }}
+                        >
+                          <Icon className="ai-input__model-icon" aria-hidden />
+                          <span className="ai-input__menu-item-label">{m.label}</span>
+                          {m.badge && <span className="ai-input__menu-item-badge">{m.badge}</span>}
+                          {!m.active && <SoonPill inline />}
+                          {isSelected && <Check className="ai-input__check" aria-hidden />}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             </details>
 
             <span className="ai-input__sep" aria-hidden />
 
-            <label className="ai-input__attach" title="Attach (coming soon)">
-              <input type="file" className="ai-input__file" tabIndex={-1} />
+            <label className="ai-input__attach is-soon" title="Attachments coming soon">
+              <input type="file" className="ai-input__file" tabIndex={-1} disabled />
               <Paperclip className="ai-input__attach-icon" aria-hidden />
             </label>
           </div>

@@ -70,3 +70,4 @@ export function AnthropicIcon({ className, ...props }: IconProps) {
     </svg>
   );
 }
+

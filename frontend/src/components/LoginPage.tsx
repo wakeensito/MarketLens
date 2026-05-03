@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthContext } from '../hooks/useAuth';
+import { BrandWordmarkInner } from './BrandWordmark';
 
 const ENV_BASE = (import.meta.env.VITE_API_BASE_URL ?? '').trim();
 const BASE = ENV_BASE ? ENV_BASE.replace(/\/$/, '') : '';
@@ -104,14 +105,9 @@ export default function LoginPage() {
 
   return (
     <div className="login-page">
-      <div className="orb orb-1" />
-      <div className="orb orb-2" />
-      <div className="orb orb-3" />
-
       <div className="login-card">
         <div className="login-wordmark">
-          <span className="lnd-wm-primary" style={{ fontSize: 28 }}>Market</span>
-          <span className="lnd-wm-accent" style={{ fontSize: 28 }}>Lens</span>
+          <BrandWordmarkInner variant="signin-hero" />
         </div>
 
         <AnimatePresence mode="wait">
@@ -125,8 +121,8 @@ export default function LoginPage() {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.38, ease: 'easeOut' as const }}
             >
-              <p className="login-heading">Sign in to MarketLens</p>
-              <p className="login-sub">Enter your email — we'll send you a sign-in code.</p>
+              <p className="login-heading">Sign in to plinths</p>
+              <p className="login-sub">Enter your email. We'll send you a sign-in code.</p>
 
               <input
                 type="email"

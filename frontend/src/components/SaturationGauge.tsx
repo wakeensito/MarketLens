@@ -58,7 +58,7 @@ export default function SaturationGauge({ score, label, animate = true }: Props)
         <div className="score-bar-track">
           <div
             className="score-bar-fill"
-            style={{ width: `${barWidth}%`, background: color }}
+            style={{ transform: `scaleX(${barWidth / 100})`, background: color }}
           />
         </div>
       </motion.div>

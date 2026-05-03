@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
-import { PlinthsMark } from './BrandWordmark';
+import { BrandWordmarkInner } from './BrandWordmark';
 import type { AuthState } from '../hooks/useAuth';
 import { LANDING_ENTRY_Y } from '../motion';
 
@@ -26,14 +26,6 @@ function GoogleIcon() {
       <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z" />
       <path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z" />
       <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571l6.19 5.238C42.022 35.026 44 30.038 44 24c0-2.641-.21-5.236-.611-7.743z" />
-    </svg>
-  );
-}
-
-function GitHubIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="signin-modal-btn-icon">
-      <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.221 0 4.605-2.805 5.624-5.475 5.921.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z" />
     </svg>
   );
 }
@@ -208,10 +200,10 @@ export default function SignInModal({ isOpen, onClose, auth, onShowPricing, vari
             </button>
 
             <div className="signin-modal-header">
-              <PlinthsMark className="signin-modal-mark" />
+              <BrandWordmarkInner variant="signin-hero" />
               <span className="signin-modal-badge">
                 <span className="signin-modal-badge-dot" />
-                {isSaveReport ? 'Save report · Unlock 3/day' : '3 analyses/day · Roadmaps · Exports'}
+                {isSaveReport ? 'Save report · Three a day' : 'Three a day · Roadmaps · Exports'}
               </span>
             </div>
 
@@ -220,8 +212,8 @@ export default function SignInModal({ isOpen, onClose, auth, onShowPricing, vari
             </h2>
             <p className="signin-modal-desc">
               {isSaveReport
-                ? 'Sign in to keep this analysis and unlock 3 more per day.'
-                : 'Sign in to unlock your full intelligence suite'}
+                ? 'Sign in to keep this analysis and run two more today.'
+                : 'Sign in to keep your reports and run three a day.'}
             </p>
 
             <div className="signin-modal-actions signin-modal-actions--top">
@@ -232,14 +224,6 @@ export default function SignInModal({ isOpen, onClose, auth, onShowPricing, vari
               >
                 <GoogleIcon />
                 Continue with Google
-              </button>
-              <button
-                type="button"
-                className="signin-modal-btn signin-modal-btn--github"
-                onClick={() => auth.login()}
-              >
-                <GitHubIcon />
-                Continue with GitHub
               </button>
             </div>
 

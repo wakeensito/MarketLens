@@ -46,7 +46,7 @@ function StageRow({ stage }: { stage: PipelineStage }) {
         <div className="stage-desc">{stage.description}</div>
         {isRunning && (
           <div className="stage-progress">
-            <div className="stage-progress-fill" style={{ width: `${progress}%` }} />
+            <div className="stage-progress-fill" style={{ transform: `scaleX(${progress / 100})` }} />
           </div>
         )}
       </div>
@@ -97,7 +97,7 @@ function ParallelBlock({ stages }: { stages: PipelineStage[] }) {
               <div className="mini-card-desc">{stage.description}</div>
               {sr && (
                 <div className="stage-progress mini-card-progress">
-                  <div className="stage-progress-fill" style={{ width: `${progress}%` }} />
+                  <div className="stage-progress-fill" style={{ transform: `scaleX(${progress / 100})` }} />
                 </div>
               )}
             </div>
@@ -132,7 +132,7 @@ export default function PipelineTracker({ stages, query, finalizing, error, onRe
       transition={{ duration: 0.3, ease: 'easeOut' as const }}
     >
       <div className="pipeline-header">
-        <h2 className="pipeline-title">Generating intelligence report…</h2>
+        <h2 className="pipeline-title">Researching your idea</h2>
         <div className="pipeline-query-row">
           Analysing <span className="pipeline-query-text pipeline-query-gap">"{query}"</span>
         </div>
@@ -155,7 +155,7 @@ export default function PipelineTracker({ stages, query, finalizing, error, onRe
           {finalizing && (
             <div className="pipeline-finalizing">
               <Loader2 size={13} strokeWidth={2} color="var(--accent)" className="spin" />
-              Generating final report…
+              Drafting the brief
             </div>
           )}
         </>

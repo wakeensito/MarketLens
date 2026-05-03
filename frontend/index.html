@@ -4,11 +4,11 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/plinths-mark.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <!-- Resolves theme before first paint — prevents flash of wrong theme -->
+    <!-- Resolves theme before first paint to prevent flash of wrong theme -->
     <script>
-      (function(){var t=localStorage.getItem('plinths-theme')||'system';var d=t==='system'?(window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):t;document.documentElement.setAttribute('data-theme',d);})();
+      (function(){var t=localStorage.getItem('plinths-theme')||'system';if(t==='dark')t='stealth';var d=t==='system'?(window.matchMedia('(prefers-color-scheme: dark)').matches?'stealth':'light'):t;document.documentElement.setAttribute('data-theme',d);})();
     </script>
-    <title>plinths — AI Market Intelligence</title>
+    <title>plinths</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Serif:wght@400;500;600;700&family=Syne:wght@700&display=swap" rel="stylesheet" />
