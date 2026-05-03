@@ -2,13 +2,41 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/plinths-mark.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <!-- Icons: SVG for modern browsers, PNG fallbacks for iOS/Android/legacy -->
+    <link rel="icon" type="image/svg+xml" href="/plinths-mark.svg" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/plinths-mark-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+
+    <title>plinths — AI market intelligence</title>
+    <meta name="description" content="Type a business idea, get the brief: competitive landscape, saturation score, entry roadmap." />
+    <meta name="theme-color" content="#f0ede7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1a1814" media="(prefers-color-scheme: dark)" />
+
+    <!-- Open Graph (Facebook, LinkedIn, iMessage, Slack, Discord) -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="plinths" />
+    <meta property="og:url" content="https://plinths.net/" />
+    <meta property="og:title" content="plinths — AI market intelligence" />
+    <meta property="og:description" content="Type a business idea, get the brief: competitive landscape, saturation score, entry roadmap." />
+    <meta property="og:image" content="https://plinths.net/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="plinths — The brief, calmly delivered." />
+
+    <!-- Twitter / X -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://plinths.net/" />
+    <meta name="twitter:title" content="plinths — AI market intelligence" />
+    <meta name="twitter:description" content="Type a business idea, get the brief: competitive landscape, saturation score, entry roadmap." />
+    <meta name="twitter:image" content="https://plinths.net/og-image.png" />
+    <meta name="twitter:image:alt" content="plinths — The brief, calmly delivered." />
+
     <!-- Resolves theme before first paint to prevent flash of wrong theme -->
     <script>
       (function(){var t=localStorage.getItem('plinths-theme')||'system';if(t==='dark')t='stealth';var d=t==='system'?(window.matchMedia('(prefers-color-scheme: dark)').matches?'stealth':'light'):t;document.documentElement.setAttribute('data-theme',d);})();
     </script>
-    <title>plinths</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Serif:wght@400;500;600;700&family=Syne:wght@700&display=swap" rel="stylesheet" />

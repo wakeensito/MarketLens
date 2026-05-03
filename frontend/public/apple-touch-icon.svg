@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180">
+  <!-- Warm parchment background, rounded by iOS automatically -->
+  <rect width="180" height="180" fill="#f0ede7"/>
+  <!-- Centered pyramid mark — 36x36 viewBox scaled 3.4x = 122.4, centered -->
+  <g transform="translate(28.8, 28.8) scale(3.4)">
+    <rect x="0"  y="28" width="36" height="6" rx="1.5" fill="#c9965a"/>
+    <rect x="4"  y="19" width="28" height="6" rx="1.5" fill="#c9965a" opacity="0.85"/>
+    <rect x="9"  y="10" width="18" height="6" rx="1.5" fill="#c9965a" opacity="0.65"/>
+    <rect x="14" y="1"  width="8"  height="6" rx="1.5" fill="#c9965a" opacity="0.45"/>
+  </g>
+</svg>

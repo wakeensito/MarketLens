@@ -18,7 +18,7 @@ capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
 # Or set them in environment variables and use:
 #   sam deploy --parameter-overrides \
 #     "ApiKeyValue=$(aws ssm get-parameter --name /marketlens/dev/api-key --with-decryption --query Parameter.Value --output text)"
-parameter_overrides = "Stage=\"dev\" GoogleClientId=\"placeholder-not-configured\" GoogleClientSecret=\"placeholder-not-configured\" CognitoCallbackDomain=\"d3qv7k78vm3pjm.cloudfront.net\""
+parameter_overrides = "Stage=\"dev\" GoogleClientId=\"placeholder-not-configured\" GoogleClientSecret=\"placeholder-not-configured\" CognitoCallbackDomain=\"plinths.net\""
 image_repositories = []
 
 [default.global.parameters]
