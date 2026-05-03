@@ -128,55 +128,55 @@
    Logo mark shifts from amber to light grey.
    ──────────────────────────────────────────────────────── */
 
-/* ── Stealth theme — blended dark, cool-neutral undertone ──
-   All foundation values carry a whisper of blue-grey (#0E0F10
-   has R=14 G=15 B=16) rather than pure black, which is what
-   makes surfaces feel blended instead of cut-out.
+/* ── Stealth theme — neutral near-black, amber signature ──
+   Pure neutral surfaces (no blue or warm tint — just clean
+   dark), with #c9965a amber as the only colour in the UI.
+   Scores, callouts, logo accent, and signals all use amber.
    ──────────────────────────────────────────────────────── */
 
 :root[data-theme="stealth"] {
   color-scheme: dark;
 
-  /* Foundation — blended near-black scale */
-  --bg:              oklch(8.5% 0.003 250);   /* page canvas  */
-  --surface:         oklch(12% 0.003 250);   /* cards, panels */
-  --surface-alt:     oklch(15% 0.003 250);   /* elevated surface within card */
-  --surface-hover:   oklch(19% 0.003 250);   /* hover state, input bg */
+  /* Foundation — neutral dark scale (≈ Perplexity #1c1c1c baseline) */
+  --bg:              oklch(14% 0 0);   /* page canvas  ~#1c1c1c */
+  --surface:         oklch(18% 0 0);   /* cards, panels ~#232323 */
+  --surface-alt:     oklch(22% 0 0);   /* elevated surface ~#2a2a2a */
+  --surface-hover:   oklch(26% 0 0);   /* hover state, input bg ~#323232 */
 
   /* Borders — whisper-quiet separators */
-  --border:          oklch(22% 0.003 250);   /* default divider */
-  --border-mid:      oklch(27% 0.003 250);   /* slightly stronger */
-  --border-strong:   oklch(33% 0.003 250);   /* emphasis */
-  --border-focus:    oklch(92% 0.001 0 / 0.20);
+  --border:          oklch(27% 0 0);   /* default divider */
+  --border-mid:      oklch(32% 0 0);   /* slightly stronger */
+  --border-strong:   oklch(38% 0 0);   /* emphasis */
+  --border-focus:    #c9965a40;
 
   /* Text hierarchy */
-  --text:            oklch(92% 0.001 0);   /* primary off-white */
-  --text-secondary:  oklch(76% 0.001 0);   /* supporting */
-  --text-muted:      oklch(61% 0.001 0);   /* metadata / disabled */
-  --text-inverse:    oklch(8.5% 0.003 250);
+  --text:            oklch(93% 0 0);   /* primary off-white */
+  --text-secondary:  oklch(76% 0 0);   /* supporting */
+  --text-muted:      oklch(60% 0 0);   /* metadata / disabled */
+  --text-inverse:    oklch(14% 0 0);
 
   /* Accent — off-white for all interactions */
-  --accent:          oklch(92% 0.001 0);
-  --accent-light:    oklch(92% 0.001 0 / 0.07);
-  --accent-border:   oklch(92% 0.001 0 / 0.12);
-  --accent-hover:    oklch(96% 0.001 0);
+  --accent:          oklch(93% 0 0);
+  --accent-light:    oklch(93% 0 0 / 0.07);
+  --accent-border:   oklch(93% 0 0 / 0.12);
+  --accent-hover:    oklch(97% 0 0);
 
-  /* Signal — desaturated blue, readable on dark */
-  --signal:          oklch(58%   0.07 240);
-  --signal-light:    oklch(58%   0.07 240 / 0.12);
-  --signal-border:   oklch(58%   0.07 240 / 0.20);
+  /* Signal — amber is the intelligence / data colour in stealth */
+  --signal:          #c9965a;
+  --signal-light:    #c9965a1e;
+  --signal-border:   #c9965a33;
 
-  /* Logo — amber is the one colour that carries across all three themes */
-  --logo-accent:     oklch(68% 0.12 65);
-  --logo-accent-mid: oklch(73% 0.11 65);
-  --logo-accent-ink: oklch(57% 0.10 65);
+  /* Logo — amber, exact brand colour */
+  --logo-accent:     #c9965a;
+  --logo-accent-mid: #d4a76e;
+  --logo-accent-ink: #a87a3f;
 
   /* plinths wordmark title */
-  --brand-plinths-title: oklch(92% 0.001 0);
+  --brand-plinths-title: oklch(93% 0 0);
 
   /* Micro-detail */
   --gloss:           oklch(100% 0 0 / 0.04);
-  --warning-border:  oklch(70%   0.15 67 / 0.18);
+  --warning-border:  #c9965a2e;
 
   /* Semantic */
   --success:         oklch(56%   0.14 152);
@@ -243,13 +243,13 @@
   box-shadow: 0 1px 4px rgb(0 0 0 / 0.55), 0 0 0 3px var(--accent-light);
 }
 :root[data-theme="stealth"] .signin-modal-backdrop {
-  background: rgb(14 15 16 / 0.85);   /* #0E0F10 at 85% — uses the bg colour itself */
+  background: oklch(14% 0 0 / 0.85);
 }
 
 /* Stealth: amber avatar — the one warm accent in an otherwise neutral UI */
 :root[data-theme="stealth"] .sidebar-profile-avatar {
   background: var(--logo-accent);
-  color: #0E0F10;
+  color: var(--text-inverse);
 }
 
 /* Logo mark bars — CSS fill overrides the SVG presentation attribute,
@@ -1964,7 +1964,7 @@ html { scroll-behavior: smooth; }
   color: var(--text-secondary);
   line-height: 1.65;
   max-width: 640px;
-  margin-bottom: 28px;
+  margin-bottom: 16px;
 }
 
 .report-hero {
@@ -2051,7 +2051,7 @@ html { scroll-behavior: smooth; }
   padding-bottom: 12px; border-bottom: 1px solid var(--border); margin-bottom: 20px;
 }
 
-.brief-section-num { font-family: var(--font-mono); font-size: 10px; font-weight: 700; color: var(--accent); letter-spacing: 0.06em; flex-shrink: 0; }
+.brief-section-num { font-family: var(--font-mono); font-size: 10px; font-weight: 700; color: var(--signal); letter-spacing: 0.06em; flex-shrink: 0; }
 .brief-section-dash { font-family: var(--font-mono); font-size: 11px; color: var(--border-strong); flex-shrink: 0; }
 .brief-section-name { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-secondary); flex: 1; }
 .brief-section-count { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); margin-left: auto; white-space: nowrap; }
@@ -2239,7 +2239,7 @@ html { scroll-behavior: smooth; }
 .bottom-card-text { font-size: 13px; color: var(--text-secondary); line-height: 1.65; }
 
 /* ── Verdict badge ────────────────────────────────────── */
-.verdict-row { margin: 16px 0 12px; }
+.verdict-row { margin: 0 0 16px; }
 
 .verdict-badge {
   display: inline-flex;
@@ -2269,16 +2269,16 @@ html { scroll-behavior: smooth; }
 .reco-block {
   padding: 16px 18px;
   background: var(--surface-alt);
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--signal);
   border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
-  margin: 0 0 24px;
+  margin: 0 0 20px;
 }
 .reco-eyebrow {
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.09em;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: var(--signal);
   font-family: var(--font-body);
   margin-bottom: 7px;
 }
@@ -2292,6 +2292,7 @@ html { scroll-behavior: smooth; }
 .hero-metrics {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
+  background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   overflow: hidden;
@@ -2316,7 +2317,7 @@ html { scroll-behavior: smooth; }
   font-weight: 600;
   line-height: 1;
   font-family: var(--font-mono);
-  color: var(--text);
+  color: var(--metric-color, var(--text));
   display: flex;
   align-items: baseline;
   gap: 2px;
@@ -2408,7 +2409,7 @@ html { scroll-behavior: smooth; }
 }
 .first-move-item::before {
   content: '→';
-  color: var(--accent);
+  color: var(--signal);
   font-weight: 700;
   flex-shrink: 0;
   font-size: 12px;
@@ -2421,10 +2422,10 @@ html { scroll-behavior: smooth; }
   align-items: flex-start;
   gap: 10px;
   padding: 16px 18px;
-  background: var(--accent-light);
-  border: 1px solid var(--accent-border);
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  color: var(--accent);
+  color: var(--signal);
 }
 .trend-text {
   font-size: 13px;

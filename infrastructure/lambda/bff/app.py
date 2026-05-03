@@ -626,7 +626,10 @@ def me():
         return {"authenticated": False}, 200
 
     try:
-        result = reports_table.get_item(Key={"pk": f"USER#{sub}", "sk": f"USER#{sub}"})
+        result = reports_table.get_item(
+            Key={"pk": f"USER#{sub}", "sk": f"USER#{sub}"},
+            ConsistentRead=True,
+        )
         user = result.get("Item")
         if not user:
             return {"authenticated": False}, 200
