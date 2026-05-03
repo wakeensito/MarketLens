@@ -22,6 +22,7 @@ export function PlinthsMark(props: Omit<SVGProps<SVGSVGElement>, 'viewBox' | 'ch
 export type BrandWordmarkVariant =
   | 'landing'
   | 'workspace'
+  | 'sidebar'
   | 'signin-hero'
   | 'signin-topbar'
   | 'pricing-nav'

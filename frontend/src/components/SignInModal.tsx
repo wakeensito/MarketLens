@@ -3,8 +3,12 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { PlinthsMark } from './BrandWordmark';
 import type { AuthState } from '../hooks/useAuth';
+import { LANDING_ENTRY_Y } from '../motion';
 
 const SHOW_DEV_MOCK = import.meta.env.DEV && import.meta.env.VITE_USE_MOCK === 'true';
+
+const TERMS_URL = (import.meta.env.VITE_LEGAL_TERMS_URL as string | undefined)?.trim();
+const PRIVACY_URL = (import.meta.env.VITE_LEGAL_PRIVACY_URL as string | undefined)?.trim();
 
 function GoogleIcon() {
   return (
@@ -30,9 +34,11 @@ interface SignInModalProps {
   onClose: () => void;
   auth: AuthState;
   onShowPricing?: () => void;
+  variant?: 'default' | 'save-report';
 }
 
-export default function SignInModal({ isOpen, onClose, auth, onShowPricing }: SignInModalProps) {
+export default function SignInModal({ isOpen, onClose, auth, onShowPricing, variant = 'default' }: SignInModalProps) {
+  const isSaveReport = variant === 'save-report';
   const backdropRef = useRef<HTMLDivElement>(null);
   const emailFieldId = useId();
   const [emailBusy, setEmailBusy] = useState(false);
@@ -52,10 +58,10 @@ export default function SignInModal({ isOpen, onClose, auth, onShowPricing }: Si
   }, [isOpen, closeModal]);
 
   useEffect(() => {
-    if (!auth.isAuthenticated || !isOpen) return;
+    if (!auth.isAuthenticated) return;
     const t = window.setTimeout(() => closeModal(), 0);
     return () => clearTimeout(t);
-  }, [auth.isAuthenticated, isOpen, closeModal]);
+  }, [auth.isAuthenticated, closeModal]);
 
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === backdropRef.current) closeModal();
@@ -95,10 +101,10 @@ export default function SignInModal({ isOpen, onClose, auth, onShowPricing }: Si
         >
           <motion.div
             className="signin-modal-card"
-            initial={{ opacity: 0, y: 28, scale: 0.94 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 16, scale: 0.97 }}
-            transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] as const }}
+            initial={{ opacity: 0, y: LANDING_ENTRY_Y }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: LANDING_ENTRY_Y }}
+            transition={{ duration: 0.35, ease: 'easeOut' as const }}
             role="dialog"
             aria-modal="true"
             aria-label="Sign in to plinths"
@@ -112,12 +118,18 @@ export default function SignInModal({ isOpen, onClose, auth, onShowPricing }: Si
               <PlinthsMark className="signin-modal-mark" />
               <span className="signin-modal-badge">
                 <span className="signin-modal-badge-dot" />
-                3 analyses/day · Roadmaps · Exports
+                {isSaveReport ? 'Save report · Unlock 3/day' : '3 analyses/day · Roadmaps · Exports'}
               </span>
             </div>
 
-            <h2 className="signin-modal-title">Welcome to plinths</h2>
-            <p className="signin-modal-desc">Sign in to unlock your full intelligence suite</p>
+            <h2 className="signin-modal-title">
+              {isSaveReport ? 'Save your free report' : 'Welcome to plinths'}
+            </h2>
+            <p className="signin-modal-desc">
+              {isSaveReport
+                ? 'Sign in to keep this analysis and unlock 3 more per day.'
+                : 'Sign in to unlock your full intelligence suite'}
+            </p>
 
             <div className="signin-modal-actions signin-modal-actions--top">
               <button
@@ -190,9 +202,21 @@ export default function SignInModal({ isOpen, onClose, auth, onShowPricing }: Si
 
             <p className="signin-modal-legal">
               By continuing you agree to our{' '}
-              <a href="#" onClick={e => e.preventDefault()}>Terms</a>
+              {TERMS_URL ? (
+                <a href={TERMS_URL} target="_blank" rel="noopener noreferrer">
+                  Terms
+                </a>
+              ) : (
+                <span className="signin-modal-legal-plain">Terms</span>
+              )}
               {' '}and{' '}
-              <a href="#" onClick={e => e.preventDefault()}>Privacy Policy</a>
+              {PRIVACY_URL ? (
+                <a href={PRIVACY_URL} target="_blank" rel="noopener noreferrer">
+                  Privacy Policy
+                </a>
+              ) : (
+                <span className="signin-modal-legal-plain">Privacy Policy</span>
+              )}
             </p>
           </motion.div>
         </motion.div>

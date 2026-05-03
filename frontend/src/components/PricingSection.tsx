@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Check, ArrowLeft } from 'lucide-react';
 import NumberFlow from '@number-flow/react';
 import { BrandWordmarkInner } from './BrandWordmark';
+import { LANDING_ENTRY_Y, landingFadeUpTransition } from '../motion';
 
 interface Plan {
   id: string;
@@ -97,10 +98,10 @@ export default function PricingSection({ onBack, onSignIn }: Props) {
     <AnimatePresence>
       <motion.div
         className="pricing-wrap"
-        initial={{ opacity: 0, y: 16 }}
+        initial={{ opacity: 0, y: LANDING_ENTRY_Y }}
         animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: 16 }}
-        transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] as const }}
+        exit={{ opacity: 0, y: LANDING_ENTRY_Y }}
+        transition={landingFadeUpTransition}
       >
         {/* Nav */}
         <nav className="pricing-nav">

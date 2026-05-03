@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
-import { History, PanelLeft, ArrowRight } from 'lucide-react';
+import { PanelLeft } from 'lucide-react';
 import PipelineTracker from './components/PipelineTracker';
 import ReportView from './components/ReportView';
 import AnimatedAiInput from './components/AnimatedAiInput';
@@ -18,7 +18,7 @@ export default function App() {
   const auth = useAuthContext();
   const {
     screen, query, stages, report, error, reportId, finalizing,
-    startAnalysis, loadHistoricalReport, handleReset, handleRetry,
+    startAnalysis, loadHistoricalReport, handleReset, handleRetry, startNewChat,
   } = useAnalysis();
 
   const [sidebarOpen, setSidebarOpen] = useState(() =>
@@ -28,8 +28,9 @@ export default function App() {
   const [phIdx, setPhIdx] = useState(0);
   const [showSignIn, setShowSignIn] = useState(false);
   const [showPricing, setShowPricing] = useState(false);
+  const [showSavePrompt, setShowSavePrompt] = useState(false);
   const shellRef = useRef<HTMLDivElement>(null);
-  const isLanding = screen === 'landing';
+
   const [isTouchDevice] = useState(() =>
     typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches
   );
@@ -46,6 +47,13 @@ export default function App() {
     return err;
   });
 
+  // Landing = unauthenticated on 'landing' screen only
+  const isLanding = screen === 'landing' && !auth.isAuthenticated;
+  // Workspace shows whenever we're not on the landing page
+  const inWorkspace = !isLanding;
+  // Empty workspace state (signed-in new chat, or signed-in on initial load)
+  const isWorkspaceEmpty = screen === 'workspace-empty' || (screen === 'landing' && auth.isAuthenticated);
+
   useEffect(() => {
     const id = setInterval(() => setPhIdx(i => (i + 1) % EXAMPLE_QUERIES.length), 3200);
     return () => clearInterval(id);
@@ -60,15 +68,25 @@ export default function App() {
     return () => mq.removeEventListener('change', sync);
   }, []);
 
-  // After login, close pricing + sign-in overlay so the user returns to the main shell.
+  /** Sign-in modal visibility: intent flag + must be signed out (no duplicate close effect). */
+  const signInModalOpen = showSignIn && !auth.isAuthenticated;
+
+  // After login, leave pricing / save-report overlays (sign-in hides via `signInModalOpen`)
   useEffect(() => {
     if (!auth.isAuthenticated) return;
     const id = requestAnimationFrame(() => {
-      setShowSignIn(false);
       setShowPricing(false);
+      setShowSavePrompt(false);
     });
     return () => cancelAnimationFrame(id);
   }, [auth.isAuthenticated]);
+
+  // Show "save report" prompt after free analysis completes (anonymous users only)
+  useEffect(() => {
+    if (screen !== 'report' || auth.isAuthenticated) return;
+    const t = setTimeout(() => setShowSavePrompt(true), 900);
+    return () => clearTimeout(t);
+  }, [screen, auth.isAuthenticated]);
 
   const mouseX = useMotionValue(0.5);
   const mouseY = useMotionValue(0.5);
@@ -85,12 +103,19 @@ export default function App() {
     mouseY.set((e.clientY - rect.top) / rect.height);
   }, [isLanding, mouseX, mouseY]);
 
-  const onReset = useCallback(() => {
-    handleReset();
+  // New analysis: signed-in → workspace-empty, anon → back to landing
+  const onNewChat = useCallback(() => {
+    if (auth.isAuthenticated) {
+      startNewChat();
+    } else if (anonUsed) {
+      setShowSignIn(true);
+    } else {
+      handleReset();
+    }
     setInputValue('');
-    setShowSignIn(false);
-    setShowPricing(false);
-  }, [handleReset]);
+    setShowSavePrompt(false);
+  }, [auth.isAuthenticated, anonUsed, startNewChat, handleReset]);
+
 
   const onSubmit = useCallback((val: string) => {
     if (val.trim().length <= 4) return;
@@ -102,6 +127,7 @@ export default function App() {
 
     startAnalysis(val.trim());
     setInputValue('');
+    setShowSavePrompt(false);
 
     if (!auth.isAuthenticated) {
       setAnonUsed(true);
@@ -140,7 +166,7 @@ export default function App() {
           onSignIn={() => setShowSignIn(true)}
         />
         <SignInModal
-          isOpen={showSignIn}
+          isOpen={signInModalOpen}
           onClose={() => setShowSignIn(false)}
           auth={auth}
         />
@@ -191,7 +217,24 @@ export default function App() {
       {/* ── Landing ────────────────────────────────────────── */}
       {isLanding && (
         <>
-          {/* Wordmark */}
+          {/* Top nav — sign in + pricing, top-right */}
+          {!auth.isAuthenticated && (
+            <motion.nav
+              className="lnd-nav"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1, transition: { delay: 0.05, duration: 0.4, ease: 'easeOut' as const } }}
+            >
+              <div className="lnd-nav-right">
+                <button className="lnd-nav-pricing" onClick={() => setShowPricing(true)}>
+                  Pricing
+                </button>
+                <button className="lnd-nav-signin" onClick={() => setShowSignIn(true)}>
+                  Sign in
+                </button>
+              </div>
+            </motion.nav>
+          )}
+
           <motion.div layoutId="ml-wordmark" className="lnd-wordmark" transition={SPRING}>
             <motion.span
               style={isTouchDevice ? undefined : { rotateX, rotateY, transformStyle: 'preserve-3d' as const }}
@@ -201,7 +244,6 @@ export default function App() {
             </motion.span>
           </motion.div>
 
-          {/* Free tier badge — only for anonymous users */}
           {!auth.isAuthenticated && (
             <motion.div
               className="lnd-free-badge"
@@ -228,7 +270,6 @@ export default function App() {
             Drop ideas. Get roadmaps.
           </motion.p>
 
-          {/* Input */}
           <motion.div layoutId="ml-input" className="lnd-input-wrap" transition={SPRING}>
             <AnimatedAiInput
               value={inputValue}
@@ -252,90 +293,125 @@ export default function App() {
             ))}
           </motion.div>
 
-          {/* CTA row — sign in + pricing, only for anonymous users */}
-          {!auth.isAuthenticated && (
-            <motion.div
-              className="lnd-cta-row"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1, transition: { delay: 0.28, duration: 0.35 } }}
-            >
-              <button
-                className="lnd-cta-signin"
-                onClick={() => setShowSignIn(true)}
-              >
-                Sign in for 3/day
-                <ArrowRight size={13} aria-hidden="true" />
-              </button>
-              <button className="lnd-cta-pricing" onClick={() => setShowPricing(true)}>
-                View pricing
-              </button>
-            </motion.div>
-          )}
         </>
       )}
 
-      {/* ── Floating sign-in modal ────────────────────────── */}
+      {/* ── Floating sign-in modal (landing / anon gate) ──── */}
       <SignInModal
-        isOpen={showSignIn}
+        isOpen={signInModalOpen && !showSavePrompt}
         onClose={() => setShowSignIn(false)}
         auth={auth}
         onShowPricing={() => setShowPricing(true)}
       />
 
+      {/* ── Save-report sign-in prompt ─────────────────────── */}
+      <SignInModal
+        isOpen={showSavePrompt && !auth.isAuthenticated}
+        onClose={() => setShowSavePrompt(false)}
+        auth={auth}
+        variant="save-report"
+      />
+
       {/* ── Workspace ──────────────────────────────────────── */}
-      {!isLanding && (
+      {inWorkspace && (
         <>
           <RecentThreads
             isOpen={sidebarOpen}
             onClose={() => setSidebarOpen(false)}
+            onOpen={() => setSidebarOpen(true)}
+            onNewChat={onNewChat}
             activeId={reportId}
             onSelect={id => {
               loadHistoricalReport(id);
               if (window.innerWidth <= 680) setSidebarOpen(false);
               setInputValue('');
+              setShowSavePrompt(false);
             }}
           />
 
           <div className={`workspace-body${sidebarOpen ? '' : ' workspace-body--sidebar-closed'}`}>
             <header className="ws-header">
+              {/* Mobile hamburger */}
               <button
                 type="button"
                 className="ws-sidebar-toggle"
                 onClick={() => setSidebarOpen(o => !o)}
                 aria-label="Toggle sidebar"
               >
-                {sidebarOpen
-                  ? <History size={15} strokeWidth={2} />
-                  : <PanelLeft size={15} strokeWidth={2} />}
+                <PanelLeft size={15} strokeWidth={2} />
               </button>
-
-              <motion.button
-                type="button"
-                layoutId="ml-wordmark"
-                className="ws-logo"
-                onClick={onReset}
-                transition={SPRING}
-              >
-                <BrandWordmarkInner variant="workspace" />
-              </motion.button>
 
               <motion.div
                 className="ws-header-meta"
                 initial={{ opacity: 0 }}
-                animate={{ opacity: 1, transition: { delay: 0.28, duration: 0.3 } }}
+                animate={{ opacity: 1, transition: { delay: 0.18, duration: 0.3 } }}
               >
-                {query && <div className="ws-query-label">"{query}"</div>}
+                {query && !isWorkspaceEmpty && <div className="ws-query-label">"{query}"</div>}
                 <div className="ws-header-spacer" />
                 <span className="nav-badge">Beta</span>
-                <button type="button" className="header-btn-ghost" onClick={onReset}>
-                  + New analysis
-                </button>
               </motion.div>
             </header>
 
             <main className="ws-main">
               <AnimatePresence mode="wait">
-                {screen === 'analysis' ? (
+
+                {isWorkspaceEmpty ? (
+                  /* ── Workspace empty state ── */
+                  <motion.div
+                    key="empty"
+                    className="ws-empty-state"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1, transition: { duration: 0.3 } }}
+                    exit={{ opacity: 0, transition: { duration: 0.15 } }}
+                  >
+                    <div className="ws-empty-inner">
+                      <motion.p
+                        className="ws-empty-greeting"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0, transition: { delay: 0.08, duration: 0.38, ease: 'easeOut' as const } }}
+                      >
+                        new analysis
+                      </motion.p>
+
+                      <motion.h1
+                        className="ws-empty-headline"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0, transition: { delay: 0.14, duration: 0.38, ease: 'easeOut' as const } }}
+                      >
+                        Drop your next idea.
+                      </motion.h1>
+
+                      <motion.div
+                        layoutId="ml-input"
+                        className="ws-empty-input-wrap"
+                        transition={SPRING}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0, transition: { delay: 0.2, duration: 0.38, ease: 'easeOut' as const } }}
+                      >
+                        <AnimatedAiInput
+                          value={inputValue}
+                          onChange={setInputValue}
+                          onSubmit={onSubmit}
+                          placeholder={EXAMPLE_QUERIES[phIdx]}
+                          autoFocus={!isTouchDevice}
+                        />
+                      </motion.div>
+
+                      <motion.div
+                        className="ws-empty-chips"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1, transition: { delay: 0.28, duration: 0.3 } }}
+                      >
+                        {EXAMPLE_QUERIES.map(ex => (
+                          <button key={ex} className="landing-pill" onClick={() => setInputValue(ex)}>
+                            {ex}
+                          </button>
+                        ))}
+                      </motion.div>
+                    </div>
+                  </motion.div>
+
+                ) : screen === 'analysis' ? (
                   <motion.div
                     key="pipeline"
                     initial={{ opacity: 0, y: 8 }}
@@ -362,21 +438,24 @@ export default function App() {
               </AnimatePresence>
             </main>
 
-            <motion.div
-              layoutId="ml-input"
-              className="ws-input-wrap"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1, transition: { duration: 0.2 } }}
-              transition={SPRING}
-            >
-              <AnimatedAiInput
-                value={inputValue}
-                onChange={setInputValue}
-                onSubmit={onSubmit}
-                placeholder="Ask a follow-up or start a new analysis…"
-                compact
-              />
-            </motion.div>
+            {/* Fixed bottom input — only during analysis / report */}
+            {!isWorkspaceEmpty && (
+              <motion.div
+                layoutId="ml-input"
+                className="ws-input-wrap"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1, transition: { duration: 0.2 } }}
+                transition={SPRING}
+              >
+                <AnimatedAiInput
+                  value={inputValue}
+                  onChange={setInputValue}
+                  onSubmit={onSubmit}
+                  placeholder="Ask a follow-up or start a new analysis…"
+                  compact
+                />
+              </motion.div>
+            )}
           </div>
         </>
       )}

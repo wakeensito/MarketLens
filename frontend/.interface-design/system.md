@@ -1,9 +1,9 @@
-# MarketLens — Interface Design System
+# plinths — Interface Design System
 
 ## Intent
-A founder about to make a real bet on an idea. They need a trusted verdict fast. The interface must feel electric and premium — decisive, authoritative, and visually addictive. Gen Z professional energy, not corporate dashboard.
+A founder about to make a real bet on an idea. They need a trusted verdict fast. The interface must feel authoritative, calm, and premium — decisive without noise. Professional SaaS clarity: think Perplexity, Claude, Linear.
 
-## Direction: Night Sky Aurora
+## Direction: Pale Intelligence
 
 ### Who
 Founders, product people, early-stage entrepreneurs. Sitting between meetings, excited about an idea. They want a verdict, not data.
@@ -12,56 +12,63 @@ Founders, product people, early-stage entrepreneurs. Sitting between meetings, e
 Type an idea → get a competitive landscape, saturation score, and entry roadmap.
 
 ### Feel
-Deep space intelligence terminal. Aurora borealis meets premium SaaS. Dark, electric, alive.
+Warm parchment intelligence. Light mode. IBM Plex type family. Single amber accent on the logo only. Everything else is charcoal on warm white.
 
 ---
 
 ## Palette
 
-### Foundation — deep midnight blue
+### Foundation — pale parchment
 ```
---bg:              oklch(7%  0.032 245)    deep space blue-black
---surface:         oklch(12% 0.030 244)    midnight navy
---surface-alt:     oklch(17% 0.028 242)
---surface-hover:   oklch(22% 0.026 240)
-```
-
-### Borders — blue-tinted
-```
---border:          oklch(22% 0.028 242)
---border-mid:      oklch(32% 0.024 240)
---border-strong:   oklch(46% 0.020 238)
+--bg:              oklch(98.5% 0.004 80)   barely-warm white
+--surface:         oklch(97%   0.006 80)   slightly warmer white
+--surface-alt:     oklch(94%   0.009 80)   hover / grouped surfaces
+--surface-hover:   oklch(91%   0.011 80)
 ```
 
-### Text — cool near-white
+### Borders — warm parchment
 ```
---text:            oklch(95% 0.006 220)
---text-secondary:  oklch(68% 0.012 230)
---text-muted:      oklch(48% 0.012 235)
-```
-
-### Accent — electric sky blue (all interactions)
-```
---accent:          oklch(76% 0.22 215)
---accent-light:    oklch(76% 0.22 215 / 0.10)
---accent-border:   oklch(76% 0.22 215 / 0.25)
---accent-hover:    oklch(82% 0.20 215)
+--border:          oklch(88% 0.006 80)
+--border-mid:      oklch(80% 0.008 80)
+--border-strong:   oklch(68% 0.010 80)
+--border-focus:    oklch(13% 0.008 245 / 0.35)
 ```
 
-### Signal — electric violet ("pay attention to this")
+### Text — warm charcoal
 ```
---signal:          oklch(74% 0.28 300)
---signal-light:    oklch(74% 0.28 300 / 0.12)
---signal-border:   oklch(74% 0.28 300 / 0.30)
+--text:            oklch(13% 0.008 245)    primary
+--text-secondary:  oklch(44% 0.006 245)    secondary / labels
+--text-muted:      oklch(62% 0.005 245)    disabled / meta
+--text-inverse:    oklch(98.5% 0.004 80)   on dark surfaces
 ```
-Used on: gap opportunity scores, briefing reference IDs.
-NOT used on: interactive elements (that's sky blue).
+
+### Accent — charcoal (all interactive elements)
+```
+--accent:          oklch(13% 0.008 245)    same as --text; ink dark
+--accent-light:    oklch(13% 0.008 245 / 0.06)
+--accent-border:   oklch(13% 0.008 245 / 0.14)
+--accent-hover:    oklch(7%  0.006 245)
+```
+
+### Signal — slate blue (data scores, distinct from body text)
+```
+--signal:          oklch(36% 0.10 240)
+--signal-light:    oklch(36% 0.10 240 / 0.08)
+--signal-border:   oklch(36% 0.10 240 / 0.18)
+```
+Used on: gap opportunity scores. NOT on interactive elements (that's charcoal).
+
+### Logo accent — single warm amber
+```
+--logo-accent:     oklch(60% 0.17 47)
+```
+Applied ONLY to the PlinthsMark SVG fills. Never on interactive elements.
 
 ### Semantic
 ```
---success:         oklch(72% 0.20 168)    cyan-teal
---warning:         oklch(80% 0.18 68)     amber
---danger:          oklch(68% 0.22 22)     coral-red
+--success:         oklch(50% 0.15 152)    green (low saturation ≤40)
+--warning:         oklch(60% 0.16 67)     amber (moderate 41–65)
+--danger:          oklch(54% 0.20 23)     coral-red (high >65)
 ```
 
 ---
@@ -70,64 +77,65 @@ NOT used on: interactive elements (that's sky blue).
 
 | Role | Font | Weight | Usage |
 |------|------|--------|-------|
-| Display | IBM Plex Serif | 600, italic | Verdict statements, report titles |
-| Body | IBM Plex Sans | 400–600 | All UI, labels, body |
-| Mono | IBM Plex Mono | 400–700 | Metrics, brief codes, elapsed time, reference IDs |
+| Display | IBM Plex Serif | 600 | Verdict statements, hero headlines, report section titles |
+| Body | IBM Plex Sans | 400–600 | All UI, labels, body text |
+| Mono | IBM Plex Mono | 500–700 | Metrics, brief codes, timestamps, reference IDs, badges |
+| Brand | Syne | 700 | "plinths" wordmark only |
 
 ### Size scale
 ```
-10px / 700 / tracking 0.08–0.1em  — uppercase labels, section headers, eyebrows, badges
-11px / 500–600                    — mono metadata, taglines, strength labels, mini-card text
-12px / 400–500                    — secondary descriptors, stage descriptions, elapsed
-13px / 400–600                    — primary body, table content, stage labels, pill text
-14px / 400–600                    — main body paragraphs, gap descriptions, body text
-20px / 600                        — stat card values, pipeline title sub
-52px / 600                        — saturation score number (display)
-clamp(20–28px) / 600 italic       — verdict statement (display)
-clamp(72–140px) / 300 + 600       — wordmark (display)
+10px / 700 / 0.08–0.12em uppercase  — mono labels, badges, eyebrows, section headers
+11px / 500–600                      — mono metadata, taglines, mini-card text
+12px / 400–600                      — secondary descriptors, elapsed, stage descriptions
+13px / 400–600                      — primary body, table content, pill text, nav buttons
+14px / 400–600                      — main body paragraphs, gap descriptions
+20px / 600                          — stat card values
+22–28px / 600 (display)             — report verdict statement
+clamp(22–52px) / 600 (display)      — landing headline
+clamp(28–52px) / 700 (Syne)         — wordmark
 ```
 
-### Letter-spacing scale
+### Letter-spacing scale (all positive — never negative)
 ```
-0.06em  — light label tracking (section nums, roadmap badges)
-0.08em  — standard label tracking (nav badge, stat labels, comp mono)
-0.10em  — heavier eyebrow tracking (score card label, report overline)
+0.06em  — light mono label tracking (section nums, mono meta)
+0.08em  — standard label tracking (nav badge, stat labels)
+0.10em  — heavier eyebrow (score card label, report overline)
 0.12em  — section name tracking (brief-section-name)
 0.18em  — maximum loose (landing eyebrow only)
 ```
+**Do not use negative letter-spacing.** Never use values outside this scale on mono/label text.
 
 ---
 
 ## Transitions
 
 ```
-0.12s               — table row background hover (fastest, content-level)
+0.13s               — icon button hover bg (fastest)
 0.15s               — border-color, color, background (standard interactive)
-0.20s               — border-color, background, box-shadow (state changes: running→done)
-0.25s               — transform + box-shadow (3D card hover)
-0.08s linear        — progress bar fill (real-time data)
-1.2s cubic-bezier(0.22,1,0.36,1) — score bar reveal (dramatic, one-shot)
+0.20s               — state change borders, background (running→done)
+0.22s cubic-bezier(0.22,1,0.36,1)   — sidebar width / layout collapse
+0.28s cubic-bezier(0.22,1,0.36,1)   — mobile sidebar slide-in
+0.35–0.40s easeOut  — page-level entry animations
+spring stiffness 280 damping 36     — shared element (layoutId) transitions
 ```
-
-Never mix speeds within a single element's transition. Slower feels heavier; faster feels instant. 0.15s is the baseline — only go slower when the state change is meaningful (score reveal, stage completion).
 
 ---
 
 ## Radius Scale
 
 ```
---radius-sm    3px      table header corners, category tags, gap/accent tags
---radius-md    4px      ghost/export/retry buttons, stat cards, mini pipeline cards
+--radius-sm    3px      category tags, gap tags
+--radius-md    4px      buttons, stat cards, mini pipeline cards, icon buttons
 --radius-lg    6px      score card, error strip, bottom tinted cards
---radius-full  9999px   nav badge, landing pills, scrollbar thumb
+--radius-full  9999px   nav badge, landing pills, free-badge pill
 ```
 
-**Input system uses intentionally larger values** — do not apply to other UI:
+**Input system uses intentionally larger radii — do not apply elsewhere:**
 ```
 16px   main AI input container
 12px   compact AI input
 10px   send/submit button
-8px    model selector trigger, dropdown menu items, attach button
+8px    model selector trigger, dropdown menu items
 ```
 
 ---
@@ -135,101 +143,123 @@ Never mix speeds within a single element's transition. Slower feels heavier; fas
 ## Button Patterns
 
 ```
-Primary (send/CTA)
-  height 36px  |  padding 0 16px 0 18px  |  radius 10px
-  bg --accent  |  color --text-inverse  |  font-body 12px/700 uppercase 0.08em
-  hover: --accent-hover + box-shadow 0 0 28px --accent/0.35
-  disabled: opacity 0.32
+Ghost (nav actions — "Sign in", "New analysis", header actions)
+  height 32px  |  padding 0 12–16px  |  radius --radius-md
+  border 1px --border-mid  |  bg --surface  |  color --text  |  font 13px/500
+  hover: --border-strong + --surface-alt
 
-Ghost (header actions, "New analysis")
-  height 32px  |  padding 0 12px  |  radius --radius-md
-  border 1px --border  |  color --text-secondary  |  font-body 12px/500
-  hover: --border-mid border, --text color, --surface-alt bg
+Ghost text-only (secondary nav links — "Pricing")
+  height 32px  |  padding 0 12px  |  radius --radius-md  |  no border
+  color --text-secondary  |  font 13px/500
+  hover: --surface-alt bg + --text color
 
-Action (export, retry, secondary)
-  height 32px  |  padding 0 14px  |  radius --radius-md
-  uses surface or accent-light bg depending on context  |  font 12px/500–600
+Icon button (sidebar collapse, new-chat)
+  width 28px  |  height 28px  |  radius --radius-md
+  color --text-muted  |  bg none
+  hover: --text + --surface-alt
 
 Landing pill (example suggestions)
   height 30px  |  padding 0 12px  |  radius --radius-full
   border 1px --border-mid  |  bg --surface  |  color --text-secondary
   hover: accent-border + accent color + accent-light bg
 
-Badge (nav, metadata labels)
+Badge (nav, metadata)
   padding 4px 8px  |  radius --radius-full  |  font-mono 10px/500 uppercase
-  uses accent color on accent-light bg
 ```
 
 ---
 
-## Status Encoding
+## Depth Strategy: Borders-only
 
-Used consistently across pipeline stages, strength indicators, score states, and semantic feedback:
-
-```
-done / success / low saturation (≤40)    --success   cyan-teal
-running / active / focus                 --accent    electric blue
-warning / moderate saturation (41–65)    --warning   amber
-error / failed / high saturation (>65)   --danger    coral-red
-pending / neutral / disabled             --text-muted + --border-mid
-special signal / gap score / brief ID    --signal    violet
-```
-
----
-
-## Depth Strategy: Borders-only + Glow
-
-- No box-shadows on cards or surfaces
-- Left-rail accent (2px `--accent` border-left) for active/running states
-- Running stage indicators: `box-shadow: 0 0 14px oklch(76% 0.22 215 / 0.40)`
-- Command field focus: outer glow `0 0 50px oklch(76% 0.22 215 / 0.12)`
-- Stat cards: 3D perspective hover only (no persistent shadow)
+- No drop shadows on cards or surfaces
+- Ring shadows OK: `box-shadow: 0 0 0 Npx color` — focus rings only
+- No `1px 3px` or `2px 8px` offset shadows on interactive elements
+- Active/running states: `border-left: 2px solid --accent`
+- Sidebar separator: `border-right: 1px solid --border`
 
 ---
 
 ## Spacing Base: 4px
 
-Scale: 4, 8, 12, 14, 16, 18, 20, 24, 28, 32, 40, 60
+Scale: 4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 52, 60
 
 ```
-4px   micro — dots, small gaps within a component
+4px   micro — icon gaps, dot sizes
 8px   tight — icon-to-label, inline gaps
-12px  compact — tag padding, small section gaps
-14px  standard — stage row gaps, section gaps
-18px  card — primary row/card padding (top/bottom)
-20px  card wide — card side padding, section margin
-24px  loose — larger padding, pipeline header
+12px  compact — tag padding, small gaps
+16px  standard — card side padding, header padding
+20px  card — primary card section margin
+24px  loose — header padding (desktop), larger card gaps
 28px  page — horizontal page padding (desktop)
-32px  section — between major report sections
-40px  page-top — landing, report top padding
+32px  section — between major sections, header heights (sidebar sub-header)
+40px  page-top — content top padding
+48–52px  chrome height — sidebar header, workspace header, top nav
 60px  hero — landing vertical padding
 ```
 
-### Interactive element heights (3-tier)
+### Interactive element heights
 ```
-62px  — command-submit (primary CTA, command field height)
-32px  — header-btn-ghost (standard nav actions)
-30px  — landing-pill (chip / example suggestion buttons)
+52px  — workspace header, sidebar brand header, top nav bar
+32px  — ghost button, icon label button, nav actions
+30px  — landing pill (chip / example suggestion)
+28px  — icon-only button (sidebar collapse, icon btn)
 ```
 
 ---
 
-## Signature: The Landing Aurora + 3D Wordmark
+## Shell Layout
 
-**Three animated orbs** create aurora depth behind the hero:
-- Orb 1: sky blue radial, bottom-left, `orb-drift` 16s
-- Orb 2: violet radial, top-right, `orb-drift` 20s reverse
-- Orb 3: indigo radial, center-right, `orb-drift` 13s 5s delay
+```
+Landing:    flex-col center  |  shell--landing  |  no sidebar
+Workspace:  flex-row         |  shell--workspace  |  sidebar + workspace-body
+```
 
-**3D mouse-tracking wordmark**: Framer Motion `useMotionValue` tracks normalized mouse position across the landing container. `useSpring` (stiffness 80, damping 18) feeds `rotateX/Y` on the `<h1>`, max ±8°. Cursor glow blob also tracks via `x/y` spring transforms.
+**Sidebar states (desktop):**
+- Expanded: 260px — brand header + threads sub-header + thread list + profile
+- Rail: 52px — logo mark + new-chat icon + thread dots + profile avatar
+- Transition: `width 0.22s cubic-bezier(0.22, 1, 0.36, 1)`
 
-**"Lens" aurora gradient**: sky blue → indigo → violet, with `drop-shadow` glow.
+**Sidebar states (mobile):**
+- Open: fixed overlay, `transform: translateX(0)`, backdrop
+- Closed: `transform: translateX(-100%)`
+
+**`ws-input-wrap` left offset:**
+- Sidebar expanded: `left: 260px`
+- Sidebar rail (desktop): `left: 52px`
+- Sidebar closed (mobile): `left: 0`
+
+---
+
+## Workspace Empty State
+
+When signed-in user opens a new analysis (no active report), the workspace main area shows a centered empty state:
+- `ws-empty-greeting`: mono 13px, `0.06em` tracking, `--text-muted`
+- `ws-empty-headline`: IBM Plex Serif 600, `clamp(20–28px)`, `--text`
+- Input: `layoutId="ml-input"` inline (not fixed at bottom)
+- Example chips: same `.landing-pill` pattern
+
+---
+
+## Landing Top Nav
+
+Fixed 52px bar, transparent (no border/bg), `pointer-events: none` container:
+- Right side only: "Pricing" ghost-text + "Sign in" ghost button
+- Anonymous users only — hides after sign-in
+- Same height as workspace header (52px) for visual rhythm
+
+---
+
+## Signature: The Landing Wordmark
+
+3D mouse-tracking wordmark in landing center. `useMotionValue` normalizes mouse position; `useSpring` (stiffness 80, damping 18) feeds `rotateX/Y`, max ±8°. Cursor glow blob tracks via x/y spring transforms (touch devices: disabled).
+
+Wordmark uses `layoutId="ml-wordmark"` — animates to sidebar brand header on first analysis.
 
 ---
 
 ## Signature: The Typographic Verdict
 
-Every report opens with a `VerdictDeclaration` — IBM Plex Serif italic, large, in the semantic color. NOT a card or banner:
+Every report opens with a `VerdictDeclaration` — IBM Plex Serif, large, in the semantic saturation color:
 
 > *"This market has meaningful whitespace."*
 
@@ -239,56 +269,35 @@ Preceded by `FINDING` eyebrow label (mono uppercase), followed by supporting sen
 
 ## Component Patterns
 
-### Command Field (landing search)
-```
-background:      oklch(12% 0.030 244 / 0.78) — glass
-backdrop-filter: blur(24px) saturate(160%)
-border-left:     3px solid var(--accent)
-border:          1px solid oklch(76% 0.22 215 / 0.22)
-.command-prompt: › symbol in mono, sky blue, 0.6 opacity
-.command-submit: full-height flush button, sky blue bg, uppercase label
-```
-
 ### Brief-Coded Section Headers
 ```
 01 — COMPETITIVE LANDSCAPE        5 companies identified
 ```
-- `brief-section-num`: sky blue mono 10px
-- `brief-section-dash`: `--border-strong` color
+- `brief-section-num`: charcoal mono 10px
 - `brief-section-name`: `--text-secondary` uppercase 10px tracking 0.12em
 - `brief-section-count`: `--text-muted` mono, right-aligned
 
-### Briefing Metadata Strip
-```
-MS-2026-XXXX  |  April 28, 2026  |  Full Spectrum Analysis
-```
-Mono 10px, violet (`--signal`) for ref ID, separator bars.
-
-### Competitor Table
-Avatar colors cycle through 6 OKLCH presets (indigo, amber, emerald, coral, violet, blue).
-30×30px circles with 2-letter initials, dark text overlay.
-
-### Pipeline — Active State
-Running stage: `border-left: 2px solid --accent`, sky blue bg wash `oklch(76% 0.22 215 / 0.05)`.
-`.pipeline-stages::before`: vertical connecting line at `left: 11px`.
-
 ### Score Card
 `score-card--low/mid/high`: 3px top border in success/warning/danger.
-Score number color via `scoreColor()` in `SaturationGauge.tsx` — not `--text`.
+Score number color via `scoreColor()` — not `--text`.
 
 ### Interactive Row (left-accent-on-hover)
-Used on gap rows and roadmap phases. Do not use on table rows (they use bg only).
+Used on gap rows and roadmap phases:
 ```css
-border-left: 2px solid transparent;
-padding-left: 0;
+border-left: 2px solid transparent; padding-left: 0;
 transition: background 0.15s, border-color 0.15s;
 :hover { background: --surface-alt; border-left-color: --accent-border; padding-left: 12px; }
 ```
+
+### Pipeline — Active Stage
+Running stage: `border-left: 2px solid --accent`.
 
 ---
 
 ## File Notes
 
-- `LandingScreen.tsx` — deleted. The landing screen is rendered inline in `App.tsx`.
-  All landing CSS lives in `index.css` under `.lnd-*`, `.orb-*`, and `.cursor-glow` classes.
-  Do not recreate `LandingScreen.tsx` as a separate component.
+- Landing screen is rendered inline in `App.tsx`. Do not create `LandingScreen.tsx`.
+- All landing CSS lives in `index.css` under `.lnd-*`, `.orb-*`, `.cursor-glow`.
+- `AppState` = `'landing' | 'analysis' | 'report' | 'workspace-empty'`
+- `'workspace-empty'` = signed-in blank chat (no return to landing for authenticated users).
+- `BrandWordmarkVariant` includes `'sidebar'` for the expanded sidebar header.
