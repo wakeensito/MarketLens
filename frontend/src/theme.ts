@@ -1,4 +1,5 @@
-export type ThemePreference = 'light' | 'dark' | 'system';
+export type ThemePreference = 'light' | 'dark' | 'stealth' | 'system';
+export type ResolvedTheme = 'light' | 'dark' | 'stealth';
 
 const KEY = 'plinths-theme';
 
@@ -12,8 +13,9 @@ export function getThemePref(): ThemePreference {
   return (localStorage.getItem(KEY) as ThemePreference | null) ?? 'system';
 }
 
-export function getResolved(pref: ThemePreference = getThemePref()): 'light' | 'dark' {
-  return pref === 'system' ? getSystemResolved() : pref;
+export function getResolved(pref: ThemePreference = getThemePref()): ResolvedTheme {
+  if (pref === 'system') return getSystemResolved();
+  return pref;
 }
 
 export function setThemePref(pref: ThemePreference): void {

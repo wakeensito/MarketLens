@@ -49,6 +49,8 @@ export interface MarketReport {
   oneliner: string;
   saturationScore: number;
   saturationLabel: string;
+  difficultyScore:  number;
+  opportunityScore: number;
   keyStats: MarketStat[];
   competitors: Competitor[];
   gaps: MarketGap[];

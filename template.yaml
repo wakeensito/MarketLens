@@ -570,12 +570,24 @@ Resources:
                 - cognito-idp:SignUp
                 - cognito-idp:AdminGetUser
                 - cognito-idp:AdminConfirmSignUp
+                - cognito-idp:AdminUpdateUserAttributes
               Resource: !GetAtt CognitoUserPool.Arn
+            - Effect: Allow
+              Action: ssm:GetParameter
+              Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/marketlens/${Stage}/cognito-client-secret
       Environment:
         Variables:
           COGNITO_DOMAIN: !Sub marketlens-${Stage}-${AWS::AccountId}.auth.${AWS::Region}.amazoncognito.com
           COGNITO_CLIENT_ID: !Ref CognitoUserPoolClient
-          COGNITO_CLIENT_SECRET: !GetAtt CognitoUserPoolClient.ClientSecret
+          # Secret is in SSM SecureString — not stored as a plaintext env var.
+          # After first deploy, populate with:
+          #   aws ssm put-parameter \
+          #     --name /marketlens/<stage>/cognito-client-secret \
+          #     --type SecureString \
+          #     --value $(aws cognito-idp describe-user-pool-client \
+          #                --user-pool-id <pool-id> --client-id <client-id> \
+          #                --query UserPoolClient.ClientSecret --output text)
+          COGNITO_CLIENT_SECRET_PARAM: !Sub /marketlens/${Stage}/cognito-client-secret
           COGNITO_USER_POOL_ID: !Ref CognitoUserPool
           APP_DOMAIN: !Sub "https://${CognitoCallbackDomain}"
       Events:

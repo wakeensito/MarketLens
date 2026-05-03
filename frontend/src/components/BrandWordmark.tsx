@@ -11,10 +11,10 @@ export function PlinthsMark(props: Omit<SVGProps<SVGSVGElement>, 'viewBox' | 'ch
       className={className}
       {...rest}
     >
-      <rect x="0" y="28" width="36" height="6" rx="1.5" fill="#c9965a" />
-      <rect x="4" y="19" width="28" height="6" rx="1.5" fill="#c9965a" opacity={0.85} />
-      <rect x="9" y="10" width="18" height="6" rx="1.5" fill="#c9965a" opacity={0.65} />
-      <rect x="14" y="1" width="8" height="6" rx="1.5" fill="#c9965a" opacity={0.45} />
+      <rect className="brand-mark-bar" x="0" y="28" width="36" height="6" rx="1.5" />
+      <rect className="brand-mark-bar" x="4" y="19" width="28" height="6" rx="1.5" opacity={0.85} />
+      <rect className="brand-mark-bar" x="9" y="10" width="18" height="6" rx="1.5" opacity={0.65} />
+      <rect className="brand-mark-bar" x="14" y="1" width="8" height="6" rx="1.5" opacity={0.45} />
     </svg>
   );
 }

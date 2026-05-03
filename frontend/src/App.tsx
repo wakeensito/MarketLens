@@ -9,6 +9,7 @@ import RecentThreads from './components/RecentThreads';
 import SignInModal from './components/SignInModal';
 import PricingSection from './components/PricingSection';
 import { BrandWordmarkInner } from './components/BrandWordmark';
+import { ThemePicker } from './components/ThemePicker';
 import { useAnalysis } from './hooks/useAnalysis';
 import { useAuthContext } from './hooks/useAuth';
 import { EXAMPLE_QUERIES } from './mockData';
@@ -37,9 +38,7 @@ export default function App() {
     typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches
   );
 
-  const [anonUsed, setAnonUsed] = useState(() =>
-    typeof window !== 'undefined' && sessionStorage.getItem('ml_anon_used') === '1'
-  );
+  const pendingQueryRef = useRef<string | null>(null);
 
   const [authError, setAuthError] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
@@ -81,9 +80,16 @@ export default function App() {
     const id = requestAnimationFrame(() => {
       setShowPricing(false);
       setShowSavePrompt(false);
+      // Auto-submit pending query after sign-in
+      if (pendingQueryRef.current) {
+        const q = pendingQueryRef.current;
+        pendingQueryRef.current = null;
+        startAnalysis(q);
+        setInputValue('');
+      }
     });
     return () => cancelAnimationFrame(id);
-  }, [auth.isAuthenticated]);
+  }, [auth.isAuthenticated, startAnalysis]);
 
   // On logout, reset the analysis screen so the landing page is shown.
   // Track previous value to only fire on true→false transitions, not on initial load.
@@ -106,8 +112,6 @@ export default function App() {
   const mouseY = useMotionValue(0.5);
   const rotateX = useSpring(useTransform(mouseY, [0, 1], [8, -8]), { stiffness: 80, damping: 18 });
   const rotateY = useSpring(useTransform(mouseX, [0, 1], [-8, 8]), { stiffness: 80, damping: 18 });
-  const glowX   = useSpring(useTransform(mouseX, [0, 1], [-30, 30]), { stiffness: 60, damping: 20 });
-  const glowY   = useSpring(useTransform(mouseY, [0, 1], [-30, 30]), { stiffness: 60, damping: 20 });
 
   const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     if (!isLanding) return;
@@ -121,20 +125,20 @@ export default function App() {
   const onNewChat = useCallback(() => {
     if (auth.isAuthenticated) {
       startNewChat();
-    } else if (anonUsed) {
-      setShowSignIn(true);
     } else {
-      handleReset();
+      setShowSignIn(true);
     }
     setInputValue('');
     setShowSavePrompt(false);
-  }, [auth.isAuthenticated, anonUsed, startNewChat, handleReset]);
+  }, [auth.isAuthenticated, startNewChat]);
 
 
   const onSubmit = useCallback((val: string) => {
     if (val.trim().length <= 4) return;
 
-    if (!auth.isAuthenticated && anonUsed) {
+    if (!auth.isAuthenticated) {
+      // Store the query so we can auto-submit after sign-in
+      pendingQueryRef.current = val.trim();
       setShowSignIn(true);
       return;
     }
@@ -142,20 +146,12 @@ export default function App() {
     startAnalysis(val.trim());
     setInputValue('');
     setShowSavePrompt(false);
-
-    if (!auth.isAuthenticated) {
-      setAnonUsed(true);
-      sessionStorage.setItem('ml_anon_used', '1');
-    }
-  }, [startAnalysis, auth.isAuthenticated, anonUsed]);
+  }, [startAnalysis, auth.isAuthenticated]);
 
   // ── Loading ─────────────────────────────────────────────
   if (auth.loading) {
     return (
       <div className="shell shell--landing">
-        <div className="orb orb-1" />
-        <div className="orb orb-2" />
-        <div className="orb orb-3" />
         <motion.div className="lnd-wordmark" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
           <span className="lnd-wm-inner">
             <BrandWordmarkInner variant="landing" />
@@ -169,9 +165,6 @@ export default function App() {
   if (showPricing) {
     return (
       <div className="shell shell--pricing">
-        <div className="orb orb-1" style={{ position: 'fixed' }} />
-        <div className="orb orb-2" style={{ position: 'fixed' }} />
-        <div className="orb orb-3" style={{ position: 'fixed' }} />
         <PricingSection
           onBack={() => {
             setShowSignIn(false);
@@ -195,23 +188,6 @@ export default function App() {
       onMouseMove={handleMouseMove}
       onMouseLeave={() => { mouseX.set(0.5); mouseY.set(0.5); }}
     >
-      <div className="orb orb-1" />
-      <div className="orb orb-2" />
-      <div className="orb orb-3" />
-
-      {/* Cursor glow — landing only, non-touch only */}
-      <AnimatePresence>
-        {isLanding && !isTouchDevice && (
-          <motion.div
-            className="cursor-glow"
-            style={{ x: glowX, y: glowY }}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0, transition: { duration: 0.25 } }}
-          />
-        )}
-      </AnimatePresence>
-
       {/* ── Auth error banner ──────────────────────────────── */}
       <AnimatePresence>
         {authError && (
@@ -231,17 +207,19 @@ export default function App() {
       {/* ── Landing ────────────────────────────────────────── */}
       {isLanding && (
         <>
-          {/* Top nav — sign in + pricing, top-right */}
+          {/* Top nav — pricing + theme + sign-in, right-aligned */}
           {!auth.isAuthenticated && (
             <motion.nav
               className="lnd-nav"
-              initial={landingEntryInitial}
-              animate={landingEntryAnimate(0.28)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.28, duration: 0.35, ease: 'easeOut' as const }}
             >
               <div className="lnd-nav-right">
                 <button className="lnd-nav-pricing" onClick={() => setShowPricing(true)}>
                   Pricing
                 </button>
+                <ThemePicker />
                 <button className="lnd-nav-signin" onClick={() => setShowSignIn(true)}>
                   Sign in
                 </button>
@@ -265,7 +243,7 @@ export default function App() {
               animate={{ opacity: 1, y: 0, transition: { delay: 0.08, duration: 0.32, ease: 'easeOut' as const } }}
             >
               <span className="lnd-free-badge-dot" />
-              1 free analysis · No account needed
+              Free: 3 reports/day · Account required
             </motion.div>
           )}
 

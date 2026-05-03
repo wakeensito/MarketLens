@@ -1,9 +1,15 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check, ArrowLeft } from 'lucide-react';
+import { Check, X, ArrowLeft } from 'lucide-react';
 import NumberFlow from '@number-flow/react';
 import { BrandWordmarkInner } from './BrandWordmark';
 import { LANDING_ENTRY_Y, landingFadeUpTransition } from '../motion';
+
+interface PlanFeature {
+  label: string;
+  value?: string;
+  included: boolean;
+}
 
 interface Plan {
   id: string;
@@ -16,73 +22,78 @@ interface Plan {
   highlight: boolean;
   badge?: string;
   includesLabel: string;
-  features: string[];
+  features: PlanFeature[];
   limit: string;
 }
 
 const PLANS: Plan[] = [
   {
-    id: 'scout',
-    name: 'Scout',
-    tagline: 'Explore the landscape',
+    id: 'free',
+    name: 'Free',
+    tagline: 'Try Plinths',
     price: 0,
     yearlyPrice: 0,
     cta: 'Start free',
     ctaStyle: 'ghost',
     highlight: false,
-    includesLabel: 'Free includes:',
+    includesLabel: 'Includes:',
     features: [
-      '1 analysis per session',
-      'Competitive landscape mapping',
-      'Saturation score (0–100)',
-      '3-phase entry roadmap',
-      'Key market statistics',
-      'PDF export',
+      { label: 'Reports', value: '3/day', included: true },
+      { label: 'Chat', included: false },
+      { label: 'Exports (CSV, PDF, MD)', value: 'MD only', included: true },
+      { label: 'History', value: '7 days', included: true },
+      { label: 'Model selection', value: 'Default', included: true },
+      { label: 'Perplexity search', included: false },
+      { label: 'Sharing', included: false },
+      { label: 'Seats', value: '1', included: true },
     ],
-    limit: 'No account required',
+    limit: 'Account required',
   },
   {
-    id: 'analyst',
-    name: 'Analyst',
-    tagline: 'For serious operators',
-    price: 29,
-    yearlyPrice: 279,
+    id: 'pro',
+    name: 'Pro',
+    tagline: 'For solo builders',
+    price: 20,
+    yearlyPrice: 192,
     cta: 'Get started',
     ctaStyle: 'primary',
     highlight: true,
     badge: 'Most popular',
-    includesLabel: 'Everything in Scout, plus:',
+    includesLabel: 'Includes:',
     features: [
-      '5 analyses per day',
-      'Real-time Brave Search data',
-      'Full competitor deep-dive',
-      'Gap opportunity scoring',
-      'Trend signal alerts',
-      'CSV export + full history',
+      { label: 'Reports', value: '15/day', included: true },
+      { label: 'Chat', value: 'Included', included: true },
+      { label: 'Exports (CSV, PDF, MD)', value: 'All formats', included: true },
+      { label: 'History', value: 'Unlimited', included: true },
+      { label: 'Model selection', included: true },
+      { label: 'Perplexity search', included: false },
+      { label: 'Sharing', included: true },
+      { label: 'Seats', value: '1', included: true },
     ],
     limit: 'Cancel anytime',
   },
   {
-    id: 'intelligence',
-    name: 'Intelligence',
-    tagline: 'For enterprise teams',
-    price: 99,
-    yearlyPrice: 899,
-    cta: 'Contact sales',
+    id: 'team',
+    name: 'Team',
+    tagline: 'For teams that ship',
+    price: 100,
+    yearlyPrice: 960,
+    cta: 'Start Team',
     ctaStyle: 'ghost',
     highlight: false,
-    badge: 'Enterprise',
-    includesLabel: 'Everything in Analyst, plus:',
+    badge: 'Teams',
+    includesLabel: 'Includes:',
     features: [
-      'Unlimited analyses',
-      'Team workspace & sharing',
-      'API access',
-      'Custom data source integrations',
-      'SSO / SAML',
-      'Dedicated support + SLA',
-      'White-label report exports',
+      { label: 'Reports', value: '50/day per seat', included: true },
+      { label: 'Chat', value: 'Unlimited', included: true },
+      { label: 'Exports (CSV, PDF, MD)', value: 'All formats', included: true },
+      { label: 'History', value: 'Unlimited', included: true },
+      { label: 'Model selection', included: true },
+      { label: 'Perplexity search', included: true },
+      { label: 'Sharing', included: true },
+      { label: 'Seats', value: '5 included', included: true },
     ],
-    limit: 'Custom pricing available',
+    limit: 'Per seat limits apply',
   },
 ];
 
@@ -236,11 +247,17 @@ export default function PricingSection({ onBack, onSignIn }: Props) {
                 <div className="pricing-includes-label">{plan.includesLabel}</div>
                 <ul className="pricing-feature-list">
                   {plan.features.map(feat => (
-                    <li key={feat} className="pricing-feature-item">
+                    <li
+                      key={`${feat.label}:${feat.value ?? ''}`}
+                      className={`pricing-feature-item${!feat.included ? ' pricing-feature-item--excluded' : ''}`}
+                    >
                       <span className="pricing-check-icon">
-                        <Check size={10} strokeWidth={3} />
+                        {feat.included ? <Check size={10} strokeWidth={3} /> : <X size={10} strokeWidth={3} />}
                       </span>
-                      {feat}
+                      <span className="pricing-feature-text">
+                        <span className="pricing-feature-label">{feat.label}</span>
+                        {feat.value ? <span className="pricing-feature-value">{feat.value}</span> : null}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -252,7 +269,7 @@ export default function PricingSection({ onBack, onSignIn }: Props) {
         {/* Footer */}
         <footer className="pricing-footer">
           <p className="pricing-footer-text">
-            All plans include our AI pipeline: AWS Bedrock · Brave Search · Claude AI · DynamoDB
+            All plans include our AI pipeline: AWS Bedrock · Brave Search · Claude AI
           </p>
           <p className="pricing-footer-sub">
             Questions?{' '}
