@@ -41,6 +41,11 @@ Parameters:
       CloudFront domain for Cognito callback URLs (e.g. d111111abcdef8.cloudfront.net).
       First deploy: leave as default. After deploy, copy CloudFrontDomainName from
       stack outputs, set this parameter, and redeploy.
+  SenderEmail:
+    Type: String
+    Description: >-
+      Verified SES email address for sending OTP codes (e.g. noreply@yourdomain.com).
+      Must be verified in SES before deploy. In SES sandbox, recipient must also be verified.
 
 Globals:
   Function:
@@ -69,9 +74,9 @@ Resources:
         - email
       UsernameAttributes:
         - email
-      MfaConfiguration: "ON"
-      EnabledMfas:
-        - SOFTWARE_TOKEN_MFA
+      # MFA is OFF — authentication is handled by custom challenge (email OTP).
+      # The OTP itself serves as the second factor (possession of email).
+      MfaConfiguration: "OFF"
       Schema:
         - Name: email
           Required: true
@@ -81,6 +86,8 @@ Resources:
           Mutable: true
       Policies:
         PasswordPolicy:
+          # Password is set to a random value on signup (user never sees it).
+          # Custom auth flow bypasses password entirely.
           MinimumLength: 12
           RequireLowercase: true
           RequireUppercase: true
@@ -95,6 +102,10 @@ Resources:
         DeviceOnlyRememberedOnUserPrompt: true
       UserPoolAddOns:
         AdvancedSecurityMode: AUDIT
+      LambdaConfig:
+        DefineAuthChallenge: !GetAtt AuthDefineFunction.Arn
+        CreateAuthChallenge: !GetAtt AuthCreateFunction.Arn
+        VerifyAuthChallengeResponse: !GetAtt AuthVerifyFunction.Arn
 
   CognitoUserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
@@ -146,6 +157,7 @@ Resources:
       SupportedIdentityProviders:
         - Google
       ExplicitAuthFlows:
+        - ALLOW_CUSTOM_AUTH
         - ALLOW_REFRESH_TOKEN_AUTH
       AccessTokenValidity: 1
       IdTokenValidity: 1
@@ -442,6 +454,102 @@ Resources:
           Projection:
             ProjectionType: ALL
 
+  # ─── Lambda: Cognito Auth Triggers (passwordless email OTP) ───
+  AuthDefineFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.lambda_handler
+      CodeUri: infrastructure/lambda/auth-define/
+      Description: Cognito DefineAuthChallenge — controls custom auth flow
+      MemorySize: 128
+      Timeout: 5
+      # Override Globals to remove REPORTS_TABLE dependency (not needed by triggers)
+      Environment:
+        Variables:
+          STAGE: !Ref Stage
+          POWERTOOLS_SERVICE_NAME: MarketLens
+          POWERTOOLS_METRICS_NAMESPACE: MarketLens
+
+  AuthDefineFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${AuthDefineFunction}
+      RetentionInDays: 90
+
+  AuthDefinePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt AuthDefineFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt CognitoUserPool.Arn
+
+  AuthCreateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.lambda_handler
+      CodeUri: infrastructure/lambda/auth-create/
+      Description: Cognito CreateAuthChallenge — generates OTP and sends via SES
+      MemorySize: 128
+      Timeout: 10
+      Environment:
+        Variables:
+          STAGE: !Ref Stage
+          SENDER_EMAIL: !Ref SenderEmail
+          POWERTOOLS_SERVICE_NAME: MarketLens
+          POWERTOOLS_METRICS_NAMESPACE: MarketLens
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendEmail
+              Resource: "*"
+              Condition:
+                StringEquals:
+                  "ses:FromAddress": !Ref SenderEmail
+
+  AuthCreateFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${AuthCreateFunction}
+      RetentionInDays: 90
+
+  AuthCreatePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt AuthCreateFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt CognitoUserPool.Arn
+
+  AuthVerifyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.lambda_handler
+      CodeUri: infrastructure/lambda/auth-verify/
+      Description: Cognito VerifyAuthChallengeResponse — checks OTP answer
+      MemorySize: 128
+      Timeout: 5
+      Environment:
+        Variables:
+          STAGE: !Ref Stage
+          POWERTOOLS_SERVICE_NAME: MarketLens
+          POWERTOOLS_METRICS_NAMESPACE: MarketLens
+
+  AuthVerifyFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${AuthVerifyFunction}
+      RetentionInDays: 90
+
+  AuthVerifyPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt AuthVerifyFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: cognito-idp.amazonaws.com
+      SourceArn: !GetAtt CognitoUserPool.Arn
+
   # ─── Lambda: BFF Auth ───
   BffAuthFunction:
     Type: AWS::Serverless::Function
@@ -457,6 +565,11 @@ Resources:
             - Effect: Allow
               Action:
                 - cognito-idp:RevokeToken
+                - cognito-idp:InitiateAuth
+                - cognito-idp:RespondToAuthChallenge
+                - cognito-idp:SignUp
+                - cognito-idp:AdminGetUser
+                - cognito-idp:AdminConfirmSignUp
               Resource: !GetAtt CognitoUserPool.Arn
       Environment:
         Variables:

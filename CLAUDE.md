@@ -113,6 +113,8 @@ Scores are STRING numbers (e.g. `"10"` not `10`). The adapter in `frontend/src/a
 - `src/adapter.ts` — transforms `ResultJson` → `MarketReport` (frontend type)
 - `src/hooks/useAnalysis.ts` — state machine: create report → poll → adapt → display
 - `src/types.ts` — frontend-only types (`MarketReport`, `PipelineStage`, etc.)
+- `src/motion.ts` — shared Framer Motion presets (`landingEntryInitial`, `landingEntryAnimate`)
+- `src/theme.ts` — theme preference helpers (`getThemePref`, `setThemePref`, `initTheme`)
 
 **State machine** (`useAnalysis.ts`): `'landing' | 'analysis' | 'report'`
 - On search: POST `/api/reports` → get `report_id` → poll GET `/api/reports/{id}` every 3s
@@ -124,21 +126,40 @@ Scores are STRING numbers (e.g. `"10"` not `10`). The adapter in `frontend/src/a
 - `frontend/.env` sets `VITE_API_BASE_URL` for local dev (points to API Gateway)
 - On CloudFront: `VITE_API_BASE_URL` is empty, so requests go to `/api/*` which CloudFront proxies to API Gateway
 
+## Auth System (Cognito)
+
+`src/hooks/useAuth.ts` — React hook wrapping Cognito Hosted UI + BFF token exchange.
+`src/AuthContext.tsx` — provides `AuthState` to the tree; wrap app root to access via `useContext(AuthContext)`.
+
+**Key methods on `AuthState`**:
+- `login()` — redirect to Cognito Hosted UI
+- `loginWithEmail(email, password, intent)` — email/password via BFF; mock signs in locally
+- `logout()` — clears cookies via BFF
+- `refresh()` — silent token refresh
+
+**Dev shortcut**: set `VITE_USE_MOCK=true` in `.env` to enable `mockLogin()` — instant auth bypass.
+No real Cognito call is made; `AuthUser` fields are stubbed.
+
 ## TypeScript Rules (verbatimModuleSyntax is ON)
 
 - Use `import type { Foo }` or `import { type Foo }` for all type-only imports.
 - Framer Motion `ease` values must be string literals: `'easeOut' as const`.
 
-## Design System — Night Sky Aurora
+## Design System — Pale Intelligence
 
-Dark mode. Deep midnight blue + electric sky blue accent + violet signal.
+Light mode by default. Warm parchment backgrounds, dark ink interactions, single amber logo accent.
+Theme toggle (light/dark/system) via `src/theme.ts`; persisted in localStorage key `'plinths-theme'`;
+applied as `data-theme` attribute on `<html>`.
 
 **Color tokens** (OKLCH) in `src/index.css`:
-- `--bg`: deep space blue-black
-- `--surface`: midnight navy
-- `--accent`: electric sky blue (interactions)
-- `--signal`: electric violet (gap scores, brief ID)
-- `--success/warning/danger`: cyan-teal / amber / coral-red
+- `--bg / --surface / --surface-alt`: warm parchment scale
+- `--text / --text-secondary / --text-muted`: warm charcoal scale
+- `--accent`: dark ink (all interactive elements)
+- `--signal`: slate blue (scores, data highlights)
+- `--logo-accent`: warm amber — **restricted to "Lens" wordmark only**
+- `--success/warning/danger`: green / amber / coral
+
+**Fonts**: IBM Plex Serif (`--font-display`), IBM Plex Sans (`--font-body`), IBM Plex Mono (`--font-mono`)
 
 **Saturation score color**: ≤40 → `--success`, ≤65 → `--warning`, >65 → `--danger`
 

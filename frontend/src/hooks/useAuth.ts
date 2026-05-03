@@ -31,8 +31,10 @@ export interface AuthState {
     credentials: { email: string; password: string },
     intent: EmailAuthIntent,
   ) => Promise<void>;
-  /** Email-only step (magic link / Cognito custom auth) — mock signs in locally */
-  continueWithEmail: (email: string) => Promise<void>;
+  /** Email-only step (passwordless OTP) — initiates custom auth, returns session for code step */
+  continueWithEmail: (email: string) => Promise<{ session: string; emailHint: string }>;
+  /** Verify the 6-digit OTP code */
+  verifyCode: (email: string, code: string, session: string) => Promise<void>;
 }
 
 const ENV_BASE = (import.meta.env.VITE_API_BASE_URL ?? '').trim();
@@ -142,9 +144,40 @@ export function useAuth(): AuthState {
   );
 
   const continueWithEmail = useCallback(
-    async (email: string) => {
+    async (email: string): Promise<{ session: string; emailHint: string }> => {
       const trimmed = email.trim();
       if (!trimmed) throw new Error('Enter your email.');
+
+      if (IS_MOCK) {
+        const localPart = trimmed.split('@')[0] ?? '';
+        const displayName = localPart.replace(/[.+_-]/g, ' ').trim() || MOCK_USER.name;
+        setIsAuthenticated(true);
+        setUser({
+          ...MOCK_USER,
+          email: trimmed,
+          name: displayName,
+        });
+        return { session: 'mock-session', emailHint: trimmed };
+      }
+
+      const res = await fetch(`${BASE}/auth/initiate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ email: trimmed }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Could not send code (${res.status})`);
+
+      return { session: data.session, emailHint: data.email_hint || trimmed };
+    },
+    [],
+  );
+
+  const verifyCode = useCallback(
+    async (email: string, code: string, session: string) => {
+      const trimmed = email.trim();
+      if (!trimmed || !code || !session) throw new Error('Missing required fields.');
 
       if (IS_MOCK) {
         const localPart = trimmed.split('@')[0] ?? '';
@@ -158,28 +191,22 @@ export function useAuth(): AuthState {
         return;
       }
 
-      const res = await fetch(`${BASE}/auth/email/start`, {
+      const res = await fetch(`${BASE}/auth/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ email: trimmed }),
+        body: JSON.stringify({ email: trimmed, code, session }),
       });
-      if (!res.ok) throw new Error(`Could not continue (${res.status})`);
-
-      const ct = res.headers.get('content-type');
-      let authChecked = false;
-      if (ct?.includes('application/json')) {
-        try {
-          const data = (await res.json()) as { authenticated?: boolean };
-          if (data?.authenticated) {
-            await checkAuth();
-            authChecked = true;
-          }
-        } catch {
-          /* ignore malformed JSON */
-        }
+      const data = await res.json();
+      if (!res.ok) {
+        const err = new Error(data.error || `Verification failed (${res.status})`);
+        // Attach new session if provided (for retry)
+        if (data.session) (err as Error & { session?: string }).session = data.session;
+        throw err;
       }
-      if (!authChecked) await checkAuth();
+
+      // Success — cookies are set, check auth
+      await checkAuth();
     },
     [checkAuth],
   );
@@ -247,6 +274,7 @@ export function useAuth(): AuthState {
     mockLogin,
     loginWithEmail,
     continueWithEmail,
+    verifyCode,
   };
 }
 
