@@ -35,9 +35,9 @@
   --signal-border:   oklch(36% 0.10 240 / 0.18);
 
   /* Logo accent — warm amber, applied ONLY to the "Lens" wordmark */
-  --logo-accent:     oklch(60% 0.17 47);
-  --logo-accent-mid: oklch(65% 0.16 50);
-  --logo-accent-ink: oklch(48% 0.15 47);
+  --logo-accent:     #c9965a;
+  --logo-accent-mid: #d4a46a;
+  --logo-accent-ink: #a37440;
 
   /* plinths wordmark — cream title on dark surfaces (e.g. sign-in hero); light UI uses --text via scoped rules */
   --brand-plinths-title: #f2ede6;
@@ -105,7 +105,7 @@
   --signal-border:   oklch(66%   0.13  240 / 0.25);
 
   /* Logo accent — unchanged; amber reads beautifully on dark */
-  --logo-accent:     oklch(60%   0.17   47);
+  --logo-accent:     #c9965a;
 
   /* plinths wordmark title on dark surfaces */
   --brand-plinths-title: #f2ede6;
@@ -167,9 +167,9 @@
   --signal-border:   oklch(58%   0.07 240 / 0.20);
 
   /* Logo — amber is the one colour that carries across all three themes */
-  --logo-accent:     oklch(60% 0.17 47);
-  --logo-accent-mid: oklch(65% 0.16 50);
-  --logo-accent-ink: oklch(48% 0.15 47);
+  --logo-accent:     #c9965a;
+  --logo-accent-mid: #d4a46a;
+  --logo-accent-ink: #a37440;
 
   /* plinths wordmark title */
   --brand-plinths-title: #E7E7E7;
