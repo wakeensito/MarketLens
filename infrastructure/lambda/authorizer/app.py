@@ -101,18 +101,19 @@ def _generate_policy(principal_id: str, effect: str, resource: str, context: dic
 @metrics.log_metrics
 def lambda_handler(event: dict, context) -> dict:
     """
-    Authorizer handler. Always allows the request through (mixed mode),
-    but sets context differently for authenticated vs anonymous users.
+    Authorizer handler. Denies anonymous requests — sign-in is required.
+    Authenticated requests get full context with user_id, org_id, plan.
+    The /auth/* and /api/health endpoints bypass this authorizer (Authorizer: NONE in SAM).
     """
     method_arn = event.get("methodArn", "")
     cookie_header = _extract_cookie_header(event)
     cookies = _parse_cookies(cookie_header)
     access_token = cookies.get("ml_access", "")
 
-    # No token → anonymous context
+    # No token → deny
     if not access_token:
-        logger.info("Anonymous request (no token)")
-        return _generate_policy("anonymous", "Allow", method_arn, {
+        logger.info("Anonymous request denied (no token)")
+        return _generate_policy("anonymous", "Deny", method_arn, {
             "user_id": "anonymous",
             "org_id": "anonymous",
             "is_authenticated": "false",
@@ -134,24 +135,24 @@ def lambda_handler(event: dict, context) -> dict:
         # Cognito access tokens have token_use=access; reject ID tokens
         if claims.get("token_use") != "access":
             logger.warning("Token is not an access token", extra={"token_use": claims.get("token_use")})
-            return _generate_policy("anonymous", "Allow", method_arn, {
+            return _generate_policy("anonymous", "Deny", method_arn, {
                 "user_id": "anonymous",
                 "org_id": "anonymous",
                 "is_authenticated": "false",
             })
     except jwt.ExpiredSignatureError:
-        logger.info("Expired access token")
+        logger.info("Expired access token — denied")
         metrics.add_metric(name="AuthTokenExpired", unit=MetricUnit.Count, value=1)
-        return _generate_policy("anonymous", "Allow", method_arn, {
+        return _generate_policy("anonymous", "Deny", method_arn, {
             "user_id": "anonymous",
             "org_id": "anonymous",
             "is_authenticated": "false",
             "token_expired": "true",
         })
     except Exception as e:
-        logger.warning("JWT validation failed", extra={"error": str(e)})
+        logger.warning("JWT validation failed — denied", extra={"error": str(e)})
         metrics.add_metric(name="AuthTokenInvalid", unit=MetricUnit.Count, value=1)
-        return _generate_policy("anonymous", "Allow", method_arn, {
+        return _generate_policy("anonymous", "Deny", method_arn, {
             "user_id": "anonymous",
             "org_id": "anonymous",
             "is_authenticated": "false",
@@ -167,7 +168,7 @@ def lambda_handler(event: dict, context) -> dict:
         if not user:
             logger.warning("Authenticated user not found in DB", extra={"sub": sub})
             metrics.add_metric(name="AuthUserNotFound", unit=MetricUnit.Count, value=1)
-            return _generate_policy(sub, "Allow", method_arn, {
+            return _generate_policy(sub, "Deny", method_arn, {
                 "user_id": sub,
                 "org_id": "anonymous",
                 "is_authenticated": "false",
@@ -187,7 +188,7 @@ def lambda_handler(event: dict, context) -> dict:
     except Exception as e:
         logger.error("User lookup failed", extra={"error": str(e), "sub": sub})
         metrics.add_metric(name="AuthDbError", unit=MetricUnit.Count, value=1)
-        return _generate_policy(sub, "Allow", method_arn, {
+        return _generate_policy(sub, "Deny", method_arn, {
             "user_id": sub,
             "org_id": "anonymous",
             "is_authenticated": "false",

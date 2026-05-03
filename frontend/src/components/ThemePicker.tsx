@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { getResolved, setThemePref, type ResolvedTheme } from '../theme';
 
 const THEMES: { id: ResolvedTheme; label: string }[] = [
@@ -9,10 +9,6 @@ const THEMES: { id: ResolvedTheme; label: string }[] = [
 
 export function ThemePicker() {
   const [current, setCurrent] = useState<ResolvedTheme>(() => getResolved());
-
-  useEffect(() => {
-    setCurrent(getResolved());
-  }, []);
 
   const handleSelect = (theme: ResolvedTheme) => {
     setThemePref(theme);

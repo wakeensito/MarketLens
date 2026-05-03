@@ -38,9 +38,7 @@ export default function App() {
     typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches
   );
 
-  const [anonUsed, setAnonUsed] = useState(() =>
-    typeof window !== 'undefined' && sessionStorage.getItem('ml_anon_used') === '1'
-  );
+  const pendingQueryRef = useRef<string | null>(null);
 
   const [authError, setAuthError] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
@@ -82,9 +80,16 @@ export default function App() {
     const id = requestAnimationFrame(() => {
       setShowPricing(false);
       setShowSavePrompt(false);
+      // Auto-submit pending query after sign-in
+      if (pendingQueryRef.current) {
+        const q = pendingQueryRef.current;
+        pendingQueryRef.current = null;
+        startAnalysis(q);
+        setInputValue('');
+      }
     });
     return () => cancelAnimationFrame(id);
-  }, [auth.isAuthenticated]);
+  }, [auth.isAuthenticated, startAnalysis]);
 
   // On logout, reset the analysis screen so the landing page is shown.
   // Track previous value to only fire on true→false transitions, not on initial load.
@@ -120,20 +125,20 @@ export default function App() {
   const onNewChat = useCallback(() => {
     if (auth.isAuthenticated) {
       startNewChat();
-    } else if (anonUsed) {
-      setShowSignIn(true);
     } else {
-      handleReset();
+      setShowSignIn(true);
     }
     setInputValue('');
     setShowSavePrompt(false);
-  }, [auth.isAuthenticated, anonUsed, startNewChat, handleReset]);
+  }, [auth.isAuthenticated, startNewChat]);
 
 
   const onSubmit = useCallback((val: string) => {
     if (val.trim().length <= 4) return;
 
-    if (!auth.isAuthenticated && anonUsed) {
+    if (!auth.isAuthenticated) {
+      // Store the query so we can auto-submit after sign-in
+      pendingQueryRef.current = val.trim();
       setShowSignIn(true);
       return;
     }
@@ -141,12 +146,7 @@ export default function App() {
     startAnalysis(val.trim());
     setInputValue('');
     setShowSavePrompt(false);
-
-    if (!auth.isAuthenticated) {
-      setAnonUsed(true);
-      sessionStorage.setItem('ml_anon_used', '1');
-    }
-  }, [startAnalysis, auth.isAuthenticated, anonUsed]);
+  }, [startAnalysis, auth.isAuthenticated]);
 
   // ── Loading ─────────────────────────────────────────────
   if (auth.loading) {

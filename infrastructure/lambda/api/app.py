@@ -29,7 +29,6 @@ app = APIGatewayRestResolver(strip_prefixes=["/api"])
 _REPORT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{6,80}$")
 _MAX_IDEA_LEN = 2000
 FREE_TIER_DAILY_LIMIT = 3
-ANONYMOUS_LIMIT = 1
 
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(os.environ["REPORTS_TABLE"])
@@ -58,26 +57,24 @@ def _atomic_check_and_increment(auth: dict) -> str | None:
 
     Uses a conditional UpdateItem so two concurrent requests cannot both pass.
     Returns error message if rate limited, None if allowed.
+    Sign-in is required — anonymous requests are blocked by the authorizer.
     """
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     if not auth["is_authenticated"]:
-        # Anonymous: count today's reports under ORG#anonymous via GSI
-        today_prefix = today  # ISO date prefix for gsi1sk
-        result = table.query(
-            IndexName="gsi1",
-            KeyConditionExpression="gsi1pk = :pk AND begins_with(gsi1sk, :today)",
-            ExpressionAttributeValues={
-                ":pk": "ORG#anonymous#REPORTS",
-                ":today": today_prefix,
-            },
-            Select="COUNT",
-        )
-        if result.get("Count", 0) >= ANONYMOUS_LIMIT:
-            return "Sign up for a free account to run more analyses."
-        return None
+        return "Sign in to run analyses."
 
-    # Authenticated: atomic check-and-increment on user record
+    # Plan-based daily limits
+    plan = auth.get("plan", "free")
+    plan_limits = {
+        "free": FREE_TIER_DAILY_LIMIT,
+        "pro": 15,
+        "team": 50,
+        "admin": 9999,
+    }
+    daily_limit = plan_limits.get(plan, FREE_TIER_DAILY_LIMIT)
+
+    # Atomic check-and-increment on user record
     user_pk = f"USER#{auth['user_id']}"
     try:
         # Attempt to increment, but only if under the daily limit.
@@ -92,7 +89,7 @@ def _atomic_check_and_increment(auth: dict) -> str | None:
                 ExpressionAttributeValues={
                     ":one": 1,
                     ":today": today,
-                    ":limit": FREE_TIER_DAILY_LIMIT,
+                    ":limit": daily_limit,
                 },
             )
             return None
@@ -116,7 +113,7 @@ def _atomic_check_and_increment(auth: dict) -> str | None:
             except ClientError as e2:
                 if e2.response["Error"]["Code"] == "ConditionalCheckFailedException":
                     # Same day AND limit reached
-                    return f"Daily limit reached ({FREE_TIER_DAILY_LIMIT} reports/day on free tier)."
+                    return f"Daily limit reached ({daily_limit} reports/day on your plan)."
                 raise
     except Exception as e:
         logger.warning("Rate limit check failed", extra={"error": str(e)})

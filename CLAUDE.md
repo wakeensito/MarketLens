@@ -192,3 +192,44 @@ All IAM policies follow the principle of least privilege. When adding new permis
 - **Lambda invoke**: scope to the exact function ARN, not `*`
 
 Never use wildcard (`*`) resources in IAM statements. If a new external API key or parameter is added, create a dedicated SSM parameter and add a scoped IAM permission for only that parameter.
+
+## Security Rules — Lambda Authorizer
+
+The authorizer (`infrastructure/lambda/authorizer/app.py`) must **always Deny** when auth state is uncertain. Never return `Allow` on an error path. Concretely:
+
+- Wrong or missing `token_use` → **Deny**
+- User record not found in DynamoDB → **Deny**
+- DynamoDB lookup throws (throttle, transient error) → **Deny**
+- JWT validation fails for any reason → **Deny** (already correct)
+
+The pattern is: only return `Allow` when you have confirmed a valid JWT *and* a found user record with an `org_id`. Every other branch is `Deny`.
+
+## Security Rules — Secrets in Lambda
+
+**Never** put secret values directly in Lambda environment variables via `!GetAtt` or `!Ref` of a secret-bearing resource. Environment variables are visible in plaintext in the Lambda console and CloudFormation stack state.
+
+Instead: store secrets in SSM SecureString and read them at Lambda cold start:
+
+```python
+_SECRET_CACHE: str | None = None
+
+def _get_secret() -> str:
+    global _SECRET_CACHE
+    if _SECRET_CACHE is None:
+        ssm = boto3.client("ssm")
+        _SECRET_CACHE = ssm.get_parameter(
+            Name=os.environ["MY_SECRET_PARAM"],
+            WithDecryption=True,
+        )["Parameter"]["Value"]
+    return _SECRET_CACHE
+```
+
+The SSM parameter itself is populated manually after the first deploy (since CloudFormation cannot write SecureString from a resource attribute). Add an `ssm:GetParameter` IAM permission scoped to the exact parameter ARN.
+
+## Security Rules — DynamoDB Consistency
+
+When a `TransactWriteItems` call raises `TransactionCanceledException` (concurrent write won), the fallback `get_item` to read the winning write **must** use `ConsistentRead=True`. Without it, eventual consistency can cause the read to miss the item that was just written, causing an unhandled exception to bubble up.
+
+```python
+result = table.get_item(Key={...}, ConsistentRead=True)
+```

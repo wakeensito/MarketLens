@@ -38,7 +38,18 @@ app = APIGatewayRestResolver(strip_prefixes=["/auth"])
 # ── Config from environment ──
 COGNITO_DOMAIN = os.environ["COGNITO_DOMAIN"]
 CLIENT_ID = os.environ["COGNITO_CLIENT_ID"]
-CLIENT_SECRET = os.environ["COGNITO_CLIENT_SECRET"]
+_CLIENT_SECRET: str | None = None
+
+
+def _get_client_secret() -> str:
+    global _CLIENT_SECRET
+    if _CLIENT_SECRET is None:
+        ssm = boto3.client("ssm")
+        _CLIENT_SECRET = ssm.get_parameter(
+            Name=os.environ["COGNITO_CLIENT_SECRET_PARAM"],
+            WithDecryption=True,
+        )["Parameter"]["Value"]
+    return _CLIENT_SECRET
 USER_POOL_ID = os.environ["COGNITO_USER_POOL_ID"]
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 APP_DOMAIN = os.environ["APP_DOMAIN"].rstrip("/")
@@ -182,8 +193,9 @@ def _ensure_user_record(sub: str, email: str, name: str) -> dict:
         logger.info("New user created", extra={"user_id": sub, "org_id": org_id})
         return user_item
     except client.exceptions.TransactionCanceledException:
-        # Race condition: another concurrent login already created the user
-        result = reports_table.get_item(Key={"pk": user_pk, "sk": user_pk})
+        # Race condition: another concurrent login already created the user.
+        # ConsistentRead ensures we see the item written by the winning transaction.
+        result = reports_table.get_item(Key={"pk": user_pk, "sk": user_pk}, ConsistentRead=True)
         existing = result.get("Item")
         if existing:
             return existing
@@ -222,7 +234,7 @@ cognito_client = boto3.client("cognito-idp")
 
 def _compute_secret_hash(username: str) -> str:
     msg = username + CLIENT_ID
-    dig = hmac.new(CLIENT_SECRET.encode("utf-8"), msg.encode("utf-8"), hashlib.sha256).digest()
+    dig = hmac.new(_get_client_secret().encode("utf-8"), msg.encode("utf-8"), hashlib.sha256).digest()
     return base64.b64encode(dig).decode("utf-8")
 
 
@@ -458,7 +470,7 @@ def callback():
                 "code": code,
                 "redirect_uri": _get_redirect_uri(),
                 "client_id": CLIENT_ID,
-                "client_secret": CLIENT_SECRET,
+                "client_secret": _get_client_secret(),
             },
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             timeout=10,
@@ -535,7 +547,7 @@ def refresh():
                 "grant_type": "refresh_token",
                 "refresh_token": refresh_token,
                 "client_id": CLIENT_ID,
-                "client_secret": CLIENT_SECRET,
+                "client_secret": _get_client_secret(),
             },
             headers={"Content-Type": "application/x-www-form-urlencoded"},
             timeout=10,
@@ -577,7 +589,7 @@ def logout():
             cognito.revoke_token(
                 Token=refresh_token,
                 ClientId=CLIENT_ID,
-                ClientSecret=CLIENT_SECRET,
+                ClientSecret=_get_client_secret(),
             )
         except Exception as e:
             logger.warning("Token revocation failed", extra={"error": str(e)})
