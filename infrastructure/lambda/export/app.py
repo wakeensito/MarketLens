@@ -104,7 +104,7 @@ def export_report(report_id: str):
     result = table.get_item(Key={"pk": f"ORG#{org_id}#REPORT#{report_id}", "sk": f"REPORT#{report_id}"})
     item = result.get("Item")
 
-    if not item:
+    if not item or item.get("status") == "deleted":
         return {"error": "Report not found"}, 404
 
     if item.get("status") != "complete":

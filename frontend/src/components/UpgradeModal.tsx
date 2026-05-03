@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Zap } from 'lucide-react';
 
@@ -28,6 +28,15 @@ export default function UpgradeModal({ isOpen, onClose, onViewPlans, variant = '
   const isRateLimit = variant === 'rate-limit';
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const [resetIn, setResetIn] = useState<string>(() => timeUntilReset());
+
+  // Tick the countdown while the modal is open so it doesn't go stale.
+  useEffect(() => {
+    if (!isOpen || !isRateLimit) return;
+    setResetIn(timeUntilReset());
+    const id = setInterval(() => setResetIn(timeUntilReset()), 60_000);
+    return () => clearInterval(id);
+  }, [isOpen, isRateLimit]);
 
   // Trap focus + restore on close
   useEffect(() => {
@@ -100,7 +109,7 @@ export default function UpgradeModal({ isOpen, onClose, onViewPlans, variant = '
             <p id="upgrade-modal-desc" className="upgrade-modal-desc">
               {isRateLimit ? (
                 <>
-                  The free plan resets in <span className="upgrade-modal-reset">{timeUntilReset()}</span>.
+                  The free plan resets in <span className="upgrade-modal-reset">{resetIn}</span>.
                   Upgrade to keep researching now, with higher limits and full export.
                 </>
               ) : (

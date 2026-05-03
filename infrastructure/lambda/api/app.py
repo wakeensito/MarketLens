@@ -234,7 +234,7 @@ def get_report(report_id: str):
     )
     item = result.get("Item")
 
-    if not item:
+    if not item or item.get("status") == "deleted":
         return {"error": "Report not found"}, 404
 
     return item

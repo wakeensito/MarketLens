@@ -315,8 +315,8 @@ Going up one layer means going up one level of importance. Don't skip layers, do
 
 Three roles: primary, ghost, pill.
 
-- **Primary (Send / Analyse / sign-in CTA).** `--accent` background, `--text-inverse` foreground, 36px height, 10px radius, 13px Plex Sans 600. On hover: `--accent-hover` background plus the send-button hover lift shadow. Disabled: 40% opacity, cursor not-allowed.
-- **Ghost (secondary actions, top-nav buttons).** Transparent background, 1px `--border-mid`, `--text-secondary` foreground, 32px height, 10px radius. On hover: `--surface-alt` fill, `--text` foreground.
+- **Primary (Send / Analyse / sign-in CTA).** `--accent` background, `--text-inverse` foreground, 36px height, 6px radius (`{rounded.lg}`), 13px Plex Sans 600. On hover: `--accent-hover` background plus the send-button hover lift shadow. Disabled: 40% opacity, cursor not-allowed.
+- **Ghost (secondary actions, top-nav buttons).** Transparent background, 1px `--border-mid`, `--text-secondary` foreground, 32px height, 6px radius (`{rounded.lg}`). On hover: `--surface-alt` fill, `--text` foreground.
 - **Pill / Chip (example queries, suggestions).** `--surface-alt` background, 1px `--border`, `--text-secondary` foreground, 30px height, full radius. On hover: `--accent-light` background, `--text` foreground, `--accent-border` border.
 
 ### AI Input (signature component)
@@ -334,7 +334,7 @@ Visual treatment: `--surface` background, 1px `--border`, 16px radius. On focus-
 
 Every report section opens with a row that reads like an appendix index entry:
 
-```
+```text
 01 · COMPETITIVE LANDSCAPE · 8 COMPANIES IDENTIFIED
 ```
 

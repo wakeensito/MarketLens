@@ -378,7 +378,7 @@ export default function App() {
                           onChange={setInputValue}
                           onSubmit={onSubmit}
                           placeholder={EXAMPLE_QUERIES[phIdx]}
-                          autoFocus={false}
+                          autoFocus
                         />
                       </motion.div>
 

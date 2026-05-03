@@ -233,7 +233,7 @@ def _ensure_user_record(sub: str, email: str, name: str) -> dict:
         )
         logger.info("New user created", extra={"user_id": sub, "org_id": org_id})
         return user_item
-    except client.exceptions.TransactionCanceledException:
+    except dynamodb_client.exceptions.TransactionCanceledException:
         # Race condition: another concurrent login already created the user.
         # ConsistentRead ensures we see the item written by the winning transaction.
         result = reports_table.get_item(Key={"pk": user_pk, "sk": user_pk}, ConsistentRead=True)

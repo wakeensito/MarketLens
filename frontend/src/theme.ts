@@ -10,7 +10,7 @@ export function getSystemResolved(): ResolvedTheme {
 
 export function getThemePref(): ThemePreference {
   if (typeof window === 'undefined') return 'system';
-  const stored = localStorage.getItem(KEY) as ThemePreference | null;
+  const stored = localStorage.getItem(KEY);
   if (stored === 'light' || stored === 'stealth' || stored === 'system') return stored;
   if (stored === 'dark') {
     localStorage.setItem(KEY, 'stealth');

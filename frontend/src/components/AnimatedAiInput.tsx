@@ -179,9 +179,11 @@ const AnimatedAiInput = forwardRef<HTMLTextAreaElement, AnimatedAiInputProps>(
                           type="button"
                           role="option"
                           aria-selected={isSelected}
+                          aria-disabled={!m.active || undefined}
                           className={`ai-input__menu-item${m.active ? '' : ' is-soon'}`}
                           data-active={isSelected ? '' : undefined}
                           onClick={() => {
+                            if (!m.active) return;
                             setSelectedId(m.id);
                             closeModelDropdown();
                           }}

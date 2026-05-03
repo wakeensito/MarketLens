@@ -140,7 +140,7 @@ function ThreadItem({
       className={`thread-row${menuOpen ? ' thread-row--menu-open' : ''}`}
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.04, duration: 0.32, ease: 'easeOut' as const }}
+      transition={{ delay: index * 0.06, duration: 0.35, ease: 'easeOut' as const }}
     >
       <button
         type="button"
@@ -304,15 +304,23 @@ export default function RecentThreads({ isOpen, onClose, onOpen, onNewChat, acti
   const handleDelete = useCallback(async (reportId: string) => {
     setDeletingId(reportId);
     setDeleteError(null);
-    // Optimistic removal
-    const previous = reports;
+    // Optimistic removal — capture only the failing report so a concurrent
+    // delete of a different row isn't resurrected on rollback.
+    const removed = reports.find(r => r.report_id === reportId) ?? null;
     setReports(prev => prev.filter(r => r.report_id !== reportId));
     setConfirmingId(null);
     try {
       if (!USE_MOCK) await deleteReport(reportId);
     } catch {
-      // Rollback
-      setReports(previous);
+      if (removed) {
+        setReports(prev =>
+          prev.some(r => r.report_id === reportId)
+            ? prev
+            : [...prev, removed].sort(
+                (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+              ),
+        );
+      }
       setDeleteError('Couldn\'t delete the report. Try again.');
     } finally {
       setDeletingId(null);
@@ -427,16 +435,10 @@ export default function RecentThreads({ isOpen, onClose, onOpen, onNewChat, acti
             </div>
           </div>
 
-          {/* Search (Soon) */}
-          <div className="thread-search soon-affordance is-soon" title="Search coming soon">
+          {/* Search (Soon) — non-interactive affordance until search is wired */}
+          <div className="thread-search soon-affordance is-soon" title="Search coming soon" aria-hidden="true">
             <Search size={11} strokeWidth={2} className="thread-search-icon" />
-            <input
-              type="text"
-              className="thread-search-input"
-              placeholder="Search reports"
-              disabled
-              aria-label="Search reports (coming soon)"
-            />
+            <span className="thread-search-input">Search reports</span>
             <SoonPill />
           </div>
 

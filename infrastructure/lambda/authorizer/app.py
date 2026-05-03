@@ -171,7 +171,7 @@ def lambda_handler(event: dict, context) -> dict:
     # Look up user record to get org_id
     try:
         table = _get_table()
-        result = table.get_item(Key={"pk": f"USER#{sub}", "sk": f"USER#{sub}"})
+        result = table.get_item(Key={"pk": f"USER#{sub}", "sk": f"USER#{sub}"}, ConsistentRead=True)
         user = result.get("Item")
         if not user:
             logger.warning("Authenticated user not found in DB", extra={"sub": sub})
