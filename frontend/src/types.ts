@@ -1,4 +1,4 @@
-export type AppState = 'landing' | 'analysis' | 'report';
+export type AppState = 'landing' | 'analysis' | 'report' | 'workspace-empty';
 export type StageStatus = 'pending' | 'running' | 'done';
 
 export interface PipelineStage {

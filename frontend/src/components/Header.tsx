@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { BrandWordmarkInner } from './BrandWordmark';
 
 interface Props {
   query: string;
@@ -22,9 +23,8 @@ export default function Header({ query, onReset }: Props) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, ease: 'easeOut' as const }}
     >
-      <button className="header-logo" onClick={onReset}>
-        <span className="header-logo-primary">Market</span>
-        <span className="header-logo-accent">Lens</span>
+      <button type="button" className="header-logo" onClick={onReset}>
+        <BrandWordmarkInner variant="header" />
       </button>
 
       {query && (

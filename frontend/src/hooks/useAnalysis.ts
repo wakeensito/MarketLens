@@ -64,6 +64,7 @@ export interface AnalysisState {
   loadHistoricalReport:  (reportId: string) => void;
   handleReset:           () => void;
   handleRetry:           () => void;
+  startNewChat:          () => void;
 }
 
 export function useAnalysis(): AnalysisState {
@@ -234,6 +235,17 @@ export function useAnalysis(): AnalysisState {
     setFinalizing(false);
   }, [stopAll]);
 
+  const startNewChat = useCallback(() => {
+    stopAll();
+    setScreen('workspace-empty');
+    setQuery('');
+    setStages(freshStages());
+    setReport(null);
+    setError(null);
+    setReportId(null);
+    setFinalizing(false);
+  }, [stopAll]);
+
   const handleRetry = useCallback(() => {
     if (query) startAnalysis(query);
   }, [query, startAnalysis]);
@@ -242,6 +254,6 @@ export function useAnalysis(): AnalysisState {
 
   return {
     screen, query, stages, report, error, reportId, finalizing,
-    startAnalysis, loadHistoricalReport, handleReset, handleRetry,
+    startAnalysis, loadHistoricalReport, handleReset, handleRetry, startNewChat,
   };
 }
