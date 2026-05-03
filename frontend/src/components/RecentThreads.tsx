@@ -152,23 +152,6 @@ export default function RecentThreads({ isOpen, onClose, onOpen, onNewChat, acti
             <SquarePen size={15} strokeWidth={1.8} />
           </button>
 
-          <div className="sidebar-rail-threads">
-            {reports.slice(0, 10).map(r => {
-              const score = r.result_json ? Number(r.result_json.saturation_score) : null;
-              const isActive = r.report_id === activeId;
-              return (
-                <button
-                  key={r.report_id}
-                  type="button"
-                  className={`sidebar-rail-dot${isActive ? ' sidebar-rail-dot--active' : ''}`}
-                  onClick={() => { if (r.status === 'complete') onSelect(r.report_id); }}
-                  title={r.idea_text}
-                  style={{ background: score !== null ? scoreColor(score) : undefined }}
-                />
-              );
-            })}
-          </div>
-
           <div className="sidebar-rail-footer">
             <button
               type="button"

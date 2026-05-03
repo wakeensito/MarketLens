@@ -1,8 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { motion, useInView, type Variants } from 'framer-motion';
-import { TrendingUp, AlertTriangle, Download, Loader2 } from 'lucide-react';
-import type { MarketReport, Competitor, MarketGap, RoadmapPhase, MarketStat } from '../types';
-import SaturationGauge from './SaturationGauge';
+import { TrendingUp, Download, Loader2 } from 'lucide-react';
+import type { MarketReport, Competitor, MarketGap, RoadmapPhase } from '../types';
 import { exportReport } from '../api';
 
 interface Props {
@@ -17,7 +16,7 @@ const fadeUp: Variants = {
 
 const stagger: Variants = {
   hidden: {},
-  show:   { transition: { staggerChildren: 0.07 } },
+  show:   { transition: { staggerChildren: 0.06 } },
 };
 
 const VIEWPORT = { once: true, margin: '-60px' } as const;
@@ -30,6 +29,17 @@ const AVATAR_COLORS = [
   'oklch(70% 0.22 305)',
   'oklch(70% 0.20 215)',
 ];
+
+function scoreColor(score: number, invert = false): string {
+  if (invert) {
+    if (score > 65) return 'var(--success)';
+    if (score > 40) return 'var(--warning)';
+    return 'var(--danger)';
+  }
+  if (score <= 40) return 'var(--success)';
+  if (score <= 65) return 'var(--warning)';
+  return 'var(--danger)';
+}
 
 function Reveal({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
   return (
@@ -55,23 +65,46 @@ function BriefSectionHeader({ num, name, count }: { num: string; name: string; c
   );
 }
 
-function StatCard({ stat, delay }: { stat: MarketStat; delay: number }) {
+function MetricCol({ colLabel, score, statusLabel, invert = false }: {
+  colLabel: string;
+  score: number;
+  statusLabel: string;
+  invert?: boolean;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { once: true, margin: '-40px' });
+  const [displayed, setDisplayed] = useState(0);
+  const [barWidth, setBarWidth] = useState(0);
+  const color = scoreColor(score, invert);
+
+  useEffect(() => {
+    if (!inView) return;
+    let rafId: number;
+    let start: number | null = null;
+    const duration = 1000;
+    const step = (ts: number) => {
+      if (!start) start = ts;
+      const progress = Math.min((ts - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplayed(Math.round(eased * score));
+      setBarWidth(eased * score);
+      if (progress < 1) rafId = requestAnimationFrame(step);
+    };
+    rafId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(rafId);
+  }, [inView, score]);
+
   return (
-    <motion.div
-      className="stat-card"
-      initial={{ opacity: 0, y: 8 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={VIEWPORT}
-      transition={{ duration: 0.35, ease: 'easeOut' as const, delay }}
-    >
-      <div className="stat-label">{stat.label}</div>
-      <div className="stat-value">{stat.value}</div>
-      <div className={`stat-change stat-change--${stat.direction}`}>
-        {stat.direction === 'up' && '↑ '}
-        {stat.direction === 'down' && '↓ '}
-        {stat.change}
+    <div className="metric-col" ref={ref}>
+      <div className="metric-col-label">{colLabel}</div>
+      <div className="metric-number">
+        {displayed}<span className="metric-denom">/100</span>
       </div>
-    </motion.div>
+      <div className="metric-bar-track">
+        <div className="metric-bar-fill" style={{ width: `${barWidth}%`, background: color }} />
+      </div>
+      <div className="metric-status" style={{ color }}>{statusLabel}</div>
+    </div>
   );
 }
 
@@ -230,31 +263,11 @@ function RoadmapRow({ phase, index }: { phase: RoadmapPhase; index: number }) {
   );
 }
 
-function VerdictDeclaration({ score }: { score: number }) {
-  const variant  = score > 65 ? 'crowded' : score > 40 ? 'moderate' : 'open';
-  const statement =
-    variant === 'open'     ? 'This market has meaningful whitespace.' :
-    variant === 'moderate' ? 'This space is contested — not closed.' :
-                             'This market is densely occupied.';
-  const body =
-    variant === 'open'     ? 'Early movers with a focused differentiation strategy can establish defensible territory before the space consolidates.' :
-    variant === 'moderate' ? 'A niche wedge or execution advantage can carve out a sustainable position. Timing and distribution matter most.' :
-                             'Entering requires a genuine wedge — a distribution channel, regulatory angle, or underserved segment that incumbents have missed.';
-
-  return (
-    <div className="verdict-declaration">
-      <div className="verdict-finding-label">Primary Finding</div>
-      <div className={`verdict-statement verdict-statement--${variant}`}>{statement}</div>
-      <p className="verdict-body-text">{body}</p>
-    </div>
-  );
-}
-
 export default function ReportView({ report, reportId }: Props) {
-  const [briefId]    = useState(() => `MS-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 9000) + 1000)}`);
-  const [dateStr]    = useState(() => new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }));
-  const [exporting,    setExporting]    = useState(false);
-  const [exportError,  setExportError]  = useState<string | null>(null);
+  const [briefId] = useState(() => `MS-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 9000) + 1000)}`);
+  const [dateStr] = useState(() => new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }));
+  const [exporting,   setExporting]   = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   async function handleExport() {
     if (exporting) return;
@@ -270,41 +283,87 @@ export default function ReportView({ report, reportId }: Props) {
     }
   }
 
+  const variant    = report.saturationScore > 65 ? 'crowded' : report.saturationScore > 40 ? 'moderate' : 'open';
+  const badgeText  = variant === 'open' ? 'Open Market' : variant === 'moderate' ? 'Contested Space' : 'Crowded Market';
+  const topGap     = report.gaps[0] ?? null;
+  const firstPhase = report.roadmap[0] ?? null;
+
+  const difficultyLabel  = report.difficultyScore  > 65 ? 'High Barrier'         : report.difficultyScore  > 40 ? 'Moderate Barrier'    : 'Low Barrier';
+  const opportunityLabel = report.opportunityScore > 65 ? 'Strong Opportunity'   : report.opportunityScore > 40 ? 'Moderate Opportunity' : 'Limited';
+
   return (
     <div className="report">
       <motion.div variants={stagger} initial="hidden" animate="show">
+
+        {/* ── Identity + above-the-fold verdict ── */}
         <motion.div variants={fadeUp}>
-          {/* Briefing metadata */}
           <div className="brief-meta">
             <span className="brief-meta-item brief-meta-item--ref">{briefId}</span>
             <div className="brief-meta-sep" />
             <span className="brief-meta-item">{dateStr}</span>
             <div className="brief-meta-sep" />
-            <span className="brief-meta-item">Full Spectrum Analysis</span>
+            <span className="brief-meta-item">{report.vertical}</span>
           </div>
 
-          <div className="report-overline">{report.vertical}</div>
           <h1 className="report-title">{report.idea}</h1>
           <p className="report-oneliner">{report.oneliner}</p>
-        </motion.div>
 
-        {/* Typographic verdict — the signature element */}
-        <motion.div variants={fadeUp}>
-          <VerdictDeclaration score={report.saturationScore} />
-        </motion.div>
+          <div className="verdict-row">
+            <span className={`verdict-badge verdict-badge--${variant}`}>{badgeText}</span>
+          </div>
 
-        <motion.div className="report-hero" variants={fadeUp}>
-          <SaturationGauge score={report.saturationScore} label={report.saturationLabel} />
-          <div className="stats-grid">
-            {report.keyStats.map((stat, i) => (
-              <StatCard key={stat.label} stat={stat} delay={i * 0.05} />
-            ))}
+          {/* Recommendation first — the close */}
+          <div className="reco-block">
+            <div className="reco-eyebrow">Recommendation</div>
+            <p className="reco-text">{report.recommendation}</p>
           </div>
         </motion.div>
+
+        {/* ── 3 signal numbers ── */}
+        <motion.div className="hero-metrics" variants={fadeUp}>
+          <MetricCol
+            colLabel="Market Saturation"
+            score={report.saturationScore}
+            statusLabel={report.saturationLabel}
+          />
+          <MetricCol
+            colLabel="Entry Difficulty"
+            score={report.difficultyScore}
+            statusLabel={difficultyLabel}
+          />
+          <MetricCol
+            colLabel="Opportunity"
+            score={report.opportunityScore}
+            statusLabel={opportunityLabel}
+            invert
+          />
+        </motion.div>
+
+        {/* ── Quick-scan action blocks ── */}
+        {topGap && (
+          <motion.div className="entry-angle-callout" variants={fadeUp}>
+            <div className="entry-angle-eyebrow">↗ Best Entry Angle</div>
+            <div className="entry-angle-title">{topGap.title}</div>
+            <p className="entry-angle-desc">{topGap.description}</p>
+          </motion.div>
+        )}
+
+        {firstPhase && (
+          <motion.div className="first-move-block" variants={fadeUp}>
+            <div className="first-move-eyebrow">First Move — {firstPhase.title}</div>
+            <ul className="first-move-list">
+              {firstPhase.milestones.map((m, i) => (
+                <li key={i} className="first-move-item">{m}</li>
+              ))}
+            </ul>
+          </motion.div>
+        )}
+
       </motion.div>
 
       <div className="divider" />
 
+      {/* ── Evidence sections ── */}
       <Reveal>
         <div className="section">
           <BriefSectionHeader
@@ -351,22 +410,10 @@ export default function ReportView({ report, reportId }: Props) {
 
       <Reveal>
         <div className="section">
-          <BriefSectionHeader num="04" name="Signals & Recommendation" />
-          <div className="bottom-cards">
-            <div className="bottom-card bottom-card--trend">
-              <div className="bottom-card-eyebrow">
-                <TrendingUp size={11} strokeWidth={2.5} />
-                Trend Signal
-              </div>
-              <p className="bottom-card-text">{report.trendSignal}</p>
-            </div>
-            <div className="bottom-card bottom-card--reco">
-              <div className="bottom-card-eyebrow">
-                <AlertTriangle size={11} strokeWidth={2.5} />
-                Our Recommendation
-              </div>
-              <p className="bottom-card-text">{report.recommendation}</p>
-            </div>
+          <BriefSectionHeader num="04" name="Trend Signal" />
+          <div className="trend-block">
+            <TrendingUp size={13} strokeWidth={2} style={{ flexShrink: 0, marginTop: 2 }} />
+            <p className="trend-text">{report.trendSignal}</p>
           </div>
         </div>
       </Reveal>

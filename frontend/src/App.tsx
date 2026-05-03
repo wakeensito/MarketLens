@@ -243,7 +243,7 @@ export default function App() {
               animate={{ opacity: 1, y: 0, transition: { delay: 0.08, duration: 0.32, ease: 'easeOut' as const } }}
             >
               <span className="lnd-free-badge-dot" />
-              1 free analysis · No account needed
+              Free: 3 reports/day · Account required
             </motion.div>
           )}
 

@@ -538,6 +538,7 @@ html { scroll-behavior: smooth; }
 
 .sidebar-rail-footer {
   flex-shrink: 0;
+  margin-top: auto;
   padding: 8px 0 10px;
   display: flex;
   align-items: center;
@@ -2237,6 +2238,200 @@ html { scroll-behavior: smooth; }
 
 .bottom-card-text { font-size: 13px; color: var(--text-secondary); line-height: 1.65; }
 
+/* ── Verdict badge ────────────────────────────────────── */
+.verdict-row { margin: 16px 0 12px; }
+
+.verdict-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  font-family: var(--font-body);
+}
+.verdict-badge::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.verdict-badge--open     { background: var(--success-light); color: var(--success); }
+.verdict-badge--moderate { background: var(--warning-light); color: var(--warning); }
+.verdict-badge--crowded  { background: var(--danger-light);  color: var(--danger);  }
+
+/* ── Recommendation block ─────────────────────────────── */
+.reco-block {
+  padding: 16px 18px;
+  background: var(--surface-alt);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  margin: 0 0 24px;
+}
+.reco-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  margin-bottom: 7px;
+}
+.reco-text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+/* ── Hero metrics 3-col panel ─────────────────────────── */
+.hero-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.metric-col {
+  padding: 20px 20px 18px;
+  border-right: 1px solid var(--border);
+}
+.metric-col:last-child { border-right: none; }
+.metric-col-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  margin-bottom: 10px;
+}
+.metric-number {
+  font-size: 36px;
+  font-weight: 600;
+  line-height: 1;
+  font-family: var(--font-mono);
+  color: var(--text);
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+}
+.metric-denom {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.metric-bar-track {
+  height: 3px;
+  background: var(--border);
+  border-radius: 2px;
+  margin: 10px 0 8px;
+  overflow: hidden;
+}
+.metric-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.metric-status {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  font-family: var(--font-body);
+}
+
+/* ── Entry angle callout ──────────────────────────────── */
+.entry-angle-callout {
+  padding: 16px 18px;
+  background: var(--signal-light);
+  border: 1px solid var(--signal-border);
+  border-radius: var(--radius-lg);
+  margin-bottom: 12px;
+}
+.entry-angle-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--signal);
+  font-family: var(--font-body);
+  margin-bottom: 8px;
+}
+.entry-angle-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 5px;
+}
+.entry-angle-desc {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+/* ── First move block ─────────────────────────────────── */
+.first-move-block {
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  margin-bottom: 8px;
+}
+.first-move-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  margin-bottom: 12px;
+}
+.first-move-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.first-move-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+.first-move-item::before {
+  content: '→';
+  color: var(--accent);
+  font-weight: 700;
+  flex-shrink: 0;
+  font-size: 12px;
+  margin-top: 1px;
+}
+
+/* ── Trend block (section 04) ─────────────────────────── */
+.trend-block {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px 18px;
+  background: var(--accent-light);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-lg);
+  color: var(--accent);
+}
+.trend-text {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
 /* ── Pipeline error state ─────────────────────────────── */
 .pipeline-error {
   display: flex;
@@ -2400,6 +2595,9 @@ html { scroll-behavior: smooth; }
   .report-hero        { grid-template-columns: 1fr; }
   .bottom-cards       { grid-template-columns: 1fr; }
   .roadmap-phase      { grid-template-columns: 1fr; gap: 12px; }
+  .hero-metrics       { grid-template-columns: 1fr; }
+  .metric-col         { border-right: none; border-bottom: 1px solid var(--border); }
+  .metric-col:last-child { border-bottom: none; }
   .parallel-cards-row { flex-direction: column; }
   .ws-main > *        { padding-left: 16px; padding-right: 16px; }
   .ws-input-wrap {

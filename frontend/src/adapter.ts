@@ -75,6 +75,8 @@ export function adaptReport(json: ResultJson, idea_text: string): MarketReport {
     oneliner:        json.oneliner ?? '',
     saturationScore,
     saturationLabel: json.saturation_label ?? '',
+    difficultyScore,
+    opportunityScore,
     keyStats,
     competitors,
     gaps,

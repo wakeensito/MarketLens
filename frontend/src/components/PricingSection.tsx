@@ -47,7 +47,7 @@ const PLANS: Plan[] = [
       { label: 'Sharing', included: false },
       { label: 'Seats', value: '1', included: true },
     ],
-    limit: 'No account required',
+    limit: 'Account required',
   },
   {
     id: 'pro',
