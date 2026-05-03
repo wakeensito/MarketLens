@@ -51,13 +51,27 @@ export default function SignInModal({ isOpen, onClose, auth, onShowPricing, vari
   const backdropRef = useRef<HTMLDivElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
+  const codeInputRef = useRef<HTMLInputElement>(null);
   const emailFieldId = useId();
   const [emailBusy, setEmailBusy] = useState(false);
   const [emailErr, setEmailErr] = useState<string | null>(null);
+  const [otpStep, setOtpStep] = useState(false);
+  const [otpSession, setOtpSession] = useState('');
+  const [otpEmail, setOtpEmail] = useState('');
+  const [otpEmailHint, setOtpEmailHint] = useState('');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpBusy, setOtpBusy] = useState(false);
+  const [otpErr, setOtpErr] = useState<string | null>(null);
 
   const closeModal = useCallback(() => {
     setEmailErr(null);
     setEmailBusy(false);
+    setOtpStep(false);
+    setOtpSession('');
+    setOtpEmail('');
+    setOtpCode('');
+    setOtpErr(null);
+    setOtpBusy(false);
     onClose();
   }, [onClose]);
 
@@ -78,13 +92,17 @@ export default function SignInModal({ isOpen, onClose, auth, onShowPricing, vari
     if (!isOpen) return;
     const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const raf = requestAnimationFrame(() => {
-      emailInputRef.current?.focus();
+      if (otpStep) {
+        codeInputRef.current?.focus();
+      } else {
+        emailInputRef.current?.focus();
+      }
     });
     return () => {
       cancelAnimationFrame(raf);
       previous?.focus({ preventScroll: true });
     };
-  }, [isOpen]);
+  }, [isOpen, otpStep]);
 
   const handleDialogKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key !== 'Tab' || !dialogRef.current) return;
@@ -118,12 +136,42 @@ export default function SignInModal({ isOpen, onClose, auth, onShowPricing, vari
     }
     setEmailBusy(true);
     try {
-      await auth.continueWithEmail(raw);
-      closeModal();
+      const { session, emailHint } = await auth.continueWithEmail(raw);
+      setOtpEmail(raw);
+      setOtpEmailHint(emailHint);
+      setOtpSession(session);
+      setOtpStep(true);
     } catch (err) {
       setEmailErr(err instanceof Error ? err.message : 'Something went wrong. Try again.');
     } finally {
       setEmailBusy(false);
+    }
+  }
+
+  async function handleCodeVerify(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setOtpErr(null);
+    const trimmed = otpCode.trim();
+    if (trimmed.length !== 6 || !/^\d{6}$/.test(trimmed)) {
+      setOtpErr('Enter the 6-digit code from your email.');
+      return;
+    }
+    setOtpBusy(true);
+    try {
+      await auth.verifyCode(otpEmail, trimmed, otpSession);
+      closeModal();
+    } catch (err) {
+      if (err instanceof Error) {
+        // Update session if a new one was provided
+        const newSession = (err as Error & { session?: string }).session;
+        if (newSession) setOtpSession(newSession);
+        setOtpErr(err.message);
+      } else {
+        setOtpErr('Verification failed. Try again.');
+      }
+      setOtpCode('');
+    } finally {
+      setOtpBusy(false);
     }
   }
 
@@ -204,34 +252,92 @@ export default function SignInModal({ isOpen, onClose, auth, onShowPricing, vari
               <span className="signin-modal-divider-line" />
             </div>
 
-            <form className="signin-modal-email-form" onSubmit={handleEmailContinue} noValidate>
-              <label className="signin-modal-label" htmlFor={emailFieldId}>Email</label>
-              <input
-                ref={emailInputRef}
-                id={emailFieldId}
-                name="email"
-                type="email"
-                autoComplete="email"
-                inputMode="email"
-                placeholder="you@company.com"
-                className="signin-modal-input"
-                disabled={emailBusy}
-                aria-invalid={emailErr ? true : undefined}
-                aria-describedby={emailErr ? `${emailFieldId}-err` : undefined}
-              />
-              {emailErr ? (
-                <p id={`${emailFieldId}-err`} className="signin-modal-field-error" role="alert">
-                  {emailErr}
-                </p>
-              ) : null}
-              <button
-                type="submit"
-                className="signin-modal-btn signin-modal-btn--continue"
-                disabled={emailBusy}
-              >
-                {emailBusy ? 'Please wait…' : 'Continue'}
-              </button>
-            </form>
+            <AnimatePresence mode="wait">
+              {!otpStep ? (
+                <motion.form
+                  key="email-step"
+                  className="signin-modal-email-form"
+                  onSubmit={handleEmailContinue}
+                  noValidate
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.18 }}
+                >
+                  <label className="signin-modal-label" htmlFor={emailFieldId}>Email</label>
+                  <input
+                    ref={emailInputRef}
+                    id={emailFieldId}
+                    name="email"
+                    type="email"
+                    autoComplete="email"
+                    inputMode="email"
+                    placeholder="you@company.com"
+                    className="signin-modal-input"
+                    disabled={emailBusy}
+                    aria-invalid={emailErr ? true : undefined}
+                    aria-describedby={emailErr ? `${emailFieldId}-err` : undefined}
+                  />
+                  {emailErr ? (
+                    <p id={`${emailFieldId}-err`} className="signin-modal-field-error" role="alert">
+                      {emailErr}
+                    </p>
+                  ) : null}
+                  <button
+                    type="submit"
+                    className="signin-modal-btn signin-modal-btn--continue"
+                    disabled={emailBusy}
+                  >
+                    {emailBusy ? 'Sending code…' : 'Continue'}
+                  </button>
+                </motion.form>
+              ) : (
+                <motion.form
+                  key="code-step"
+                  className="signin-modal-email-form"
+                  onSubmit={handleCodeVerify}
+                  noValidate
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.18 }}
+                >
+                  <p className="signin-modal-otp-hint">
+                    We sent a 6-digit code to <strong>{otpEmailHint}</strong>
+                  </p>
+                  <input
+                    ref={codeInputRef}
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    placeholder="000000"
+                    className="signin-modal-input signin-modal-input--code"
+                    maxLength={6}
+                    value={otpCode}
+                    onChange={e => { setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setOtpErr(null); }}
+                    disabled={otpBusy}
+                    aria-invalid={otpErr ? true : undefined}
+                  />
+                  {otpErr ? (
+                    <p className="signin-modal-field-error" role="alert">{otpErr}</p>
+                  ) : null}
+                  <button
+                    type="submit"
+                    className="signin-modal-btn signin-modal-btn--continue"
+                    disabled={otpBusy || otpCode.length !== 6}
+                  >
+                    {otpBusy ? 'Verifying…' : 'Sign in'}
+                  </button>
+                  <button
+                    type="button"
+                    className="signin-modal-back-link"
+                    onClick={() => { setOtpStep(false); setOtpCode(''); setOtpErr(null); }}
+                  >
+                    ← Use a different email
+                  </button>
+                </motion.form>
+              )}
+            </AnimatePresence>
 
             {onShowPricing ? (
               <button

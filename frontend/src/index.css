@@ -3421,3 +3421,230 @@ html { scroll-behavior: smooth; }
     max-width: 100%;
   }
 }
+
+/* ── Login Page ──────────────────────────────────────── */
+.login-page {
+  position: relative;
+  min-height: 100vh;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  padding: 24px;
+}
+
+.login-card {
+  position: relative;
+  z-index: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 40px 36px 32px;
+  max-width: 400px;
+  width: 100%;
+  box-shadow: 0 24px 80px oklch(7% 0.032 245 / 0.6);
+}
+
+.login-wordmark {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: center;
+  margin-bottom: 32px;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.login-heading {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.login-sub {
+  font-size: 14px;
+  color: var(--text-secondary);
+  text-align: center;
+  line-height: 1.5;
+  margin-bottom: 24px;
+}
+
+.login-sub strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.login-input {
+  height: 44px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-mid);
+  background: var(--surface-alt);
+  color: var(--text);
+  font-size: 15px;
+  font-family: var(--font-body);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  margin-bottom: 12px;
+}
+
+.login-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px oklch(76% 0.22 215 / 0.15);
+}
+
+.login-input::placeholder {
+  color: var(--text-muted);
+}
+
+.login-input--code {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 8px;
+  text-align: center;
+  padding: 0 20px;
+}
+
+.login-error {
+  font-size: 13px;
+  color: var(--danger);
+  margin-bottom: 12px;
+  text-align: center;
+}
+
+.login-submit {
+  height: 44px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--text-inverse);
+  font-size: 14px;
+  font-weight: 700;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s, opacity 0.15s;
+  margin-bottom: 16px;
+  border: none;
+}
+
+.login-submit:hover:not(:disabled) {
+  background: var(--accent-hover);
+  box-shadow: 0 0 28px oklch(76% 0.22 215 / 0.35);
+}
+
+.login-submit:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.login-submit:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--border-focus);
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.login-divider-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.login-divider-text {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.login-sso-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 44px;
+  border-radius: 10px;
+  border: 1px solid var(--border-mid);
+  background: var(--surface-alt);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.login-sso-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--border-strong);
+}
+
+.login-sso-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--border-focus);
+}
+
+.login-back {
+  font-size: 13px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  text-align: center;
+  transition: color 0.15s;
+}
+
+.login-back:hover {
+  color: var(--text-secondary);
+}
+
+/* ── Sign-in modal OTP step ──────────────────────────── */
+.signin-modal-otp-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  text-align: center;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+
+.signin-modal-otp-hint strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.signin-modal-input--code {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 8px;
+  text-align: center;
+}
+
+.signin-modal-back-link {
+  font-size: 13px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  text-align: center;
+  transition: color 0.15s;
+  margin-top: 4px;
+}
+
+.signin-modal-back-link:hover {
+  color: var(--text-secondary);
+}

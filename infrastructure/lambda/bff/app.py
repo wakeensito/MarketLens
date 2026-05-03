@@ -1,11 +1,13 @@
 """
 MarketLens BFF Auth Lambda — Backend-for-Frontend auth endpoints.
 
-Handles OAuth2 flows with Cognito. Tokens never reach the browser —
-they're stored in HttpOnly, Secure, SameSite=Strict cookies.
+Handles OAuth2 flows with Cognito and passwordless email OTP.
+Tokens never reach the browser — they're stored in HttpOnly, Secure, SameSite=Strict cookies.
 
 Endpoints:
-  GET  /auth/login     → redirect to Cognito Hosted UI
+  POST /auth/initiate  → start passwordless email OTP flow
+  POST /auth/verify    → verify OTP code, set cookies
+  GET  /auth/login     → redirect to Cognito Hosted UI (Google SSO)
   GET  /auth/callback  → exchange code for tokens, set cookies, redirect to app
   POST /auth/refresh   → silent token refresh via refresh_token cookie
   POST /auth/logout    → revoke tokens, clear cookies
@@ -15,6 +17,9 @@ import os
 import json
 import secrets
 import urllib.parse
+import base64
+import hashlib
+import hmac
 
 import boto3
 import jwt
@@ -211,7 +216,181 @@ def _get_app_url() -> str:
     return f"{APP_DOMAIN}/"
 
 
+# Cognito client for custom auth (InitiateAuth / RespondToAuthChallenge)
+cognito_client = boto3.client("cognito-idp")
+
+
+def _compute_secret_hash(username: str) -> str:
+    msg = username + CLIENT_ID
+    dig = hmac.new(CLIENT_SECRET.encode("utf-8"), msg.encode("utf-8"), hashlib.sha256).digest()
+    return base64.b64encode(dig).decode("utf-8")
+
+
 # ── Routes ──
+
+
+@app.post("/initiate")
+@tracer.capture_method
+def initiate():
+    """Start passwordless email OTP flow.
+
+    If the user doesn't exist in Cognito, auto-creates them with a random password
+    (they'll never use it — custom auth bypasses password entirely).
+    """
+    body = app.current_event.json_body
+    if not isinstance(body, dict):
+        return {"error": "Request body must be a JSON object"}, 400
+
+    email = (body.get("email") or "").strip().lower()
+    if not email or "@" not in email:
+        return {"error": "Valid email is required"}, 400
+
+    # Auto-create user if they don't exist
+    try:
+        cognito_client.admin_get_user(
+            UserPoolId=USER_POOL_ID,
+            Username=email,
+        )
+    except cognito_client.exceptions.UserNotFoundException:
+        # Create user with random password (never used — custom auth bypasses it)
+        random_password = secrets.token_urlsafe(24) + "!A1a"  # meets password policy
+        try:
+            cognito_client.sign_up(
+                ClientId=CLIENT_ID,
+                SecretHash=_compute_secret_hash(email),
+                Username=email,
+                Password=random_password,
+                UserAttributes=[
+                    {"Name": "email", "Value": email},
+                ],
+            )
+            # Auto-confirm the user (skip email verification — OTP is the verification)
+            cognito_client.admin_confirm_sign_up(
+                UserPoolId=USER_POOL_ID,
+                Username=email,
+            )
+            logger.info("Auto-created Cognito user", extra={"email_domain": email.split("@")[-1]})
+        except cognito_client.exceptions.UsernameExistsException:
+            pass  # Race condition — another request created them
+        except Exception as e:
+            logger.error("Failed to create Cognito user", extra={"error": str(e)})
+            return {"error": "Failed to start sign-in. Please try again."}, 500
+
+    # Initiate custom auth challenge
+    try:
+        response = cognito_client.initiate_auth(
+            ClientId=CLIENT_ID,
+            AuthFlow="CUSTOM_AUTH",
+            AuthParameters={
+                "USERNAME": email,
+                "SECRET_HASH": _compute_secret_hash(email),
+            },
+        )
+    except Exception as e:
+        logger.error("InitiateAuth failed", extra={"error": str(e)})
+        return {"error": "Failed to start sign-in. Please try again."}, 500
+
+    session = response.get("Session", "")
+    challenge = response.get("ChallengeName", "")
+
+    if challenge != "CUSTOM_CHALLENGE":
+        logger.error("Unexpected challenge", extra={"challenge": challenge})
+        return {"error": "Authentication configuration error."}, 500
+
+    # Return session token (client needs it for verify step)
+    return {
+        "session": session,
+        "challenge": challenge,
+        "email_hint": email[:3] + "***" + email[email.index("@"):],
+    }
+
+
+@app.post("/verify")
+@tracer.capture_method
+def verify():
+    """Verify OTP code and set auth cookies."""
+    body = app.current_event.json_body
+    if not isinstance(body, dict):
+        return {"error": "Request body must be a JSON object"}, 400
+
+    email = (body.get("email") or "").strip().lower()
+    code = (body.get("code") or "").strip()
+    session = body.get("session", "")
+
+    if not email or not code or not session:
+        return {"error": "Email, code, and session are required"}, 400
+
+    if len(code) != 6 or not code.isdigit():
+        return {"error": "Code must be 6 digits"}, 400
+
+    try:
+        response = cognito_client.respond_to_auth_challenge(
+            ClientId=CLIENT_ID,
+            ChallengeName="CUSTOM_CHALLENGE",
+            Session=session,
+            ChallengeResponses={
+                "USERNAME": email,
+                "ANSWER": code,
+                "SECRET_HASH": _compute_secret_hash(email),
+            },
+        )
+    except cognito_client.exceptions.NotAuthorizedException:
+        return {"error": "Invalid or expired code. Please try again."}, 401
+    except cognito_client.exceptions.CodeMismatchException:
+        return {"error": "Incorrect code. Please try again."}, 401
+    except Exception as e:
+        logger.error("RespondToAuthChallenge failed", extra={"error": str(e)})
+        return {"error": "Verification failed. Please try again."}, 500
+
+    # Check if we got tokens (authentication complete)
+    auth_result = response.get("AuthenticationResult")
+    if not auth_result:
+        # Another challenge round needed (shouldn't happen with our flow)
+        new_session = response.get("Session", "")
+        return {
+            "session": new_session,
+            "challenge": response.get("ChallengeName", ""),
+            "error": "Incorrect code. Please try again.",
+        }, 401
+
+    access_token = auth_result.get("AccessToken", "")
+    refresh_token = auth_result.get("RefreshToken", "")
+    id_token = auth_result.get("IdToken", "")
+
+    if not access_token or not refresh_token:
+        logger.error("Cognito returned incomplete tokens after OTP verify")
+        return {"error": "Authentication failed. Please try again."}, 500
+
+    # Get user sub from ID token
+    try:
+        id_claims = _decode_and_verify_token(id_token)
+        sub = id_claims.get("sub", "")
+    except Exception as e:
+        logger.error("ID token verification failed after OTP", extra={"error": str(e)})
+        return {"error": "Authentication failed. Please try again."}, 500
+
+    if not sub:
+        return {"error": "Authentication failed."}, 500
+
+    # Ensure user + org exist in DynamoDB
+    try:
+        _ensure_user_record(sub, email, email.split("@")[0])
+    except Exception as e:
+        logger.error("User record creation failed", extra={"error": str(e), "sub": sub})
+
+    # Set cookies
+    response_cookies = [
+        _set_cookie("ml_access", access_token, ACCESS_TOKEN_MAX_AGE),
+        _set_cookie("ml_refresh", refresh_token, REFRESH_TOKEN_MAX_AGE),
+        _set_cookie("ml_logged_in", "1", REFRESH_TOKEN_MAX_AGE, http_only=False),
+    ]
+
+    return {
+        "statusCode": 200,
+        "headers": {"Content-Type": "application/json"},
+        "multiValueHeaders": {"Set-Cookie": response_cookies},
+        "body": json.dumps({"status": "authenticated", "email": email}),
+    }
 
 
 @app.get("/login")
