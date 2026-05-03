@@ -175,6 +175,14 @@ def lambda_handler(event: dict, context) -> dict:
             })
 
         org_id = user.get("org_id", "")
+        if not org_id:
+            logger.warning("User record missing org_id — denied", extra={"sub": sub})
+            return _generate_policy(sub, "Deny", method_arn, {
+                "user_id": sub,
+                "org_id": "",
+                "is_authenticated": "false",
+            })
+
         logger.info("Authenticated request", extra={"user_id": sub, "org_id": org_id})
 
         return _generate_policy(sub, "Allow", method_arn, {
