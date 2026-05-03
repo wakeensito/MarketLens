@@ -5,12 +5,9 @@ stack_name = "marketlens-dev"
 resolve_s3 = true
 s3_prefix = "marketlens-dev"
 region = "us-east-1"
-confirm_changeset = true
-capabilities = "CAPABILITY_IAM"
-# ApiKeyValue is intentionally omitted — pass it at deploy time:
-#   sam deploy --parameter-overrides "Stage=dev ApiKeyValue=<your-key>"
-# Generate a key with: python3 -c "import secrets; print(secrets.token_urlsafe(32))"
-parameter_overrides = "Stage=\"dev\""
+confirm_changeset = false
+capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+parameter_overrides = "Stage=\"dev\" ApiKeyValue=\"UBa92w4rAWm1JPSurcc4otfE7SPKKLXOlaqycEhx168\" SenderEmail=\"wakeenproduction@gmail.com\" GoogleClientId=\"placeholder-not-configured\" GoogleClientSecret=\"placeholder-not-configured\" CognitoCallbackDomain=\"d3qv7k78vm3pjm.cloudfront.net\""
 image_repositories = []
 
 [default.global.parameters]
