@@ -34,11 +34,13 @@ def _html_email(code: str) -> str:
       <td align="center" style="padding:48px 20px;">
         <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="max-width:480px;">
 
-          <!-- Wordmark -->
+          <!-- Wordmark: hosted PNG so Outlook + dark-mode clients render reliably -->
           <tr>
             <td style="padding-bottom:24px;">
-              <span style="font-size:22px;font-weight:700;letter-spacing:-0.03em;color:#1a1814;">plinths</span>
-              <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#c9965a;margin-left:3px;vertical-align:middle;"></span>
+              <img src="https://plinths.net/email-logo.png"
+                   alt="plinths"
+                   width="160" height="40"
+                   style="display:block;width:160px;height:40px;border:0;outline:none;text-decoration:none;" />
             </td>
           </tr>
 

@@ -6,7 +6,7 @@ themes:
     label: "Pale Intelligence"
     canvas: "warm parchment"
     accent: "dark ink, amber on the wordmark only"
-    signal: "slate blue (oklch 36 0.10 240)"
+    signal: "warm sepia ink (oklch 34 0.05 65)"
   stealth:
     label: "Stealth"
     canvas: "neutral near-black (chroma 0)"
@@ -30,9 +30,9 @@ colors:
     accent-light:      "oklch(13% 0.008 245 / 0.06)"
     accent-border:     "oklch(13% 0.008 245 / 0.14)"
     accent-hover:      "oklch(7% 0.006 245)"
-    signal:            "oklch(36% 0.10 240)"
-    signal-light:      "oklch(36% 0.10 240 / 0.08)"
-    signal-border:     "oklch(36% 0.10 240 / 0.18)"
+    signal:            "oklch(34% 0.05 65)"
+    signal-light:      "color-mix(in oklch, var(--signal) 8%, transparent)"
+    signal-border:     "color-mix(in oklch, var(--signal) 18%, transparent)"
     logo-accent:       "oklch(68% 0.12 65)"
     logo-accent-mid:   "oklch(73% 0.11 65)"
     logo-accent-ink:   "oklch(57% 0.10 65)"
@@ -185,7 +185,7 @@ Plinths looks like a private research deliverable that was prepared specifically
 
 Two themes are first-class:
 
-- **Pale Intelligence** (light, default). Warm parchment surfaces, warm-tinted charcoal text, dark-ink for every interaction, slate-blue for data signals, and a single warm-amber wordmark accent that appears nowhere else in the UI. The reader feels like they are reading a document, not using software.
+- **Pale Intelligence** (light, default). Warm parchment surfaces, warm-tinted charcoal text, dark-ink for every interaction, deep warm sepia for data signals, and a single warm-amber wordmark accent that appears nowhere else in the UI. The reader feels like they are reading a document, not using software.
 - **Stealth** (dark variant). Pure neutral near-black surfaces (chroma 0, no warm or cool tint), pure off-white text and accent. Warm amber `#c9965a` is the only chromatic colour in the entire UI: it is the data signal, the wordmark, and the focus ring. Reads like a calibrated reference monitor at night.
 
 The two themes share the same type system, the same component shapes, the same motion budget, the same content patterns. Only the surface palette and accent role change. Identity is preserved across them by typography and rhythm, not by colour.
@@ -197,7 +197,7 @@ There is no third theme. The system was previously also documenting a "warm dark
 - IBM Plex Serif / Sans / Mono — three roles, never mixed
 - Tonal surface ladder for elevation, no shadows at rest
 - One accent role per theme: dark-ink (light) or off-white (stealth)
-- One signal role per theme: slate-blue (light) or warm-amber (stealth)
+- One signal role per theme: warm sepia ink (light) or warm-amber (stealth) — both live in the warm hue family, never cool
 - Logo wordmark amber is the only ornamental colour in light mode and is restricted to the wordmark
 - Animation budget: 280ms default, 400ms ceiling, 700-1200ms only for data count-ups
 - The shared input layoutId pattern that morphs from landing-centre to workspace-bottom is the system's most distinctive interaction
@@ -214,7 +214,7 @@ The canvas is warm parchment, biased toward hue 80 (warm yellow-cream), with ver
 - **Borders:** `--border` `oklch(88% 0.006 80)` (default), `--border-mid` `oklch(80% 0.008 80)`, `--border-strong` `oklch(68% 0.010 80)`. Borders carry hierarchy; shadows are reserved for state.
 - **Text:** `--text` `oklch(13% 0.008 245)` (warm charcoal), `--text-secondary` `oklch(44% 0.006 245)`, `--text-muted` `oklch(62% 0.005 245)`. The cool-shifted dark on warm-shifted background is the source of the "expensive paper" feeling.
 - **Accent (interaction):** `--accent` `oklch(13% 0.008 245)` — the same dark ink as body text. Every interactive element (buttons, links, focus rings, send affordances) uses this colour. It is the only "non-neutral" treatment in the light theme. Hover lifts to `--accent-hover` `oklch(7% 0.006 245)`.
-- **Signal (data):** `--signal` `oklch(36% 0.10 240)` slate blue. Used on report scores, data callouts, the brief-section-header index. Distinct from accent so a "this is data" beat is visible.
+- **Signal (data):** `--signal` `oklch(34% 0.05 65)` warm sepia ink. Used on report scores, data callouts, brief-section-header indices, badge fills, and the free-plan dot indicator. Lives in the warm 65 hue family so it harmonises with the parchment surface and the logo amber, but at low lightness + low chroma so it never reads as "amber" — it reads as ink stamped on paper. This token replaced an earlier slate-blue value that clashed visually with the warm parchment surfaces.
 - **Logo accent (wordmark only):** `--logo-accent` `oklch(68% 0.12 65)` warm amber. Restricted by rule to the four-bar mark in the wordmark. Never used on a button, never used on a score, never used on a status. The amber's job is to ID the brand and nothing else.
 
 ### Stealth (dark variant)
@@ -243,7 +243,7 @@ Score colour direction is **inverted for opportunity**: high opportunity is succ
 
 **The Single Accent Rule.** Each theme has exactly one interaction colour. Light: dark ink. Stealth: off-white. Never mix or layer accents within a theme.
 
-**The Single Signal Rule.** Each theme has exactly one data colour. Light: slate blue. Stealth: warm amber. Score colours (success/warning/danger) are not signals; they are categorical labels and only appear on saturation/difficulty/opportunity scores.
+**The Single Signal Rule.** Each theme has exactly one data colour, both in the warm hue family. Light: deep warm sepia ink (a darker neighbour of amber, distinct from it by lightness). Stealth: warm amber. Score colours (success/warning/danger) are not signals; they are categorical labels and only appear on saturation/difficulty/opportunity scores.
 
 **The Logo-Accent Rule (light theme).** Warm amber `oklch(68% 0.12 65)` appears only on the wordmark mark in the light theme. Never on a button, never on a score, never on an alert, never on a tooltip. If amber appears anywhere else in light mode, it is a bug.
 

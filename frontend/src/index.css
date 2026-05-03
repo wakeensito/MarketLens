@@ -29,18 +29,22 @@
   --accent-border:   color-mix(in oklch, var(--accent) 14%, transparent);
   --accent-hover:    oklch(7%  0.006 245);
 
-  /* Signal — slate for data/scores (distinct from body text) */
-  --signal:          oklch(36% 0.10 240);
-  --signal-light:    oklch(36% 0.10 240 / 0.08);
-  --signal-border:   oklch(36% 0.10 240 / 0.18);
+  /* Signal — deep sepia ink for system data (brief IDs, scores, indices,
+     pill markers). Warm-axis (hue 65) so it lives in the same family as
+     the parchment surface + logo amber, but at low lightness + low chroma
+     so it never reads as "amber". Reads as ink-on-paper. */
+  --signal:          oklch(34% 0.05 65);
+  --signal-light:    color-mix(in oklch, var(--signal) 8%, transparent);
+  --signal-border:   color-mix(in oklch, var(--signal) 18%, transparent);
 
-  /* Logo accent — warm amber, applied ONLY to the "Lens" wordmark */
+  /* Logo accent — warm amber, applied ONLY to the wordmark mark in light mode */
   --logo-accent:     oklch(68% 0.12 65);
   --logo-accent-mid: oklch(73% 0.11 65);
   --logo-accent-ink: oklch(57% 0.10 65);
 
-  /* plinths wordmark — cream title on dark surfaces (e.g. sign-in hero); light UI uses --text via scoped rules */
-  --brand-plinths-title: oklch(95% 0.01 80);
+  /* plinths wordmark title color. In light mode this matches --text so the
+     wordmark holds contrast on every surface (page, sign-in modal, sidebar). */
+  --brand-plinths-title: var(--text);
 
   /* Micro-detail */
   --gloss:           oklch(100% 0 0 / 0.55);
