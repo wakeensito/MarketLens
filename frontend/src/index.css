@@ -64,6 +64,97 @@
   --radius-full: 9999px;
 }
 
+/* ── Dark mode — warm charcoal "vintage tee" palette ─────
+   Applied via data-theme="dark" (manual) or system preference.
+   Hue 65 on backgrounds = slightly warm grey, not cool blue-steel.
+   Amber logo accent glows naturally against the dark surface.
+   ──────────────────────────────────────────────────────── */
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Foundation — warm charcoal */
+  --bg:              oklch(13.5% 0.007 65);
+  --surface:         oklch(17%   0.008 65);
+  --surface-alt:     oklch(21%   0.010 65);
+  --surface-hover:   oklch(25%   0.012 65);
+
+  /* Borders */
+  --border:          oklch(27%   0.007 65);
+  --border-mid:      oklch(35%   0.009 65);
+  --border-strong:   oklch(47%   0.010 65);
+  --border-focus:    oklch(85%   0.005 80 / 0.30);
+
+  /* Text — warm near-white */
+  --text:            oklch(91%   0.006 80);
+  --text-secondary:  oklch(64%   0.007 80);
+  --text-muted:      oklch(47%   0.006 80);
+  --text-inverse:    oklch(13.5% 0.007 65);
+
+  /* Accent — near-white for interactions (inverted charcoal principle) */
+  --accent:          oklch(91%   0.006 80);
+  --accent-light:    oklch(91%   0.006 80 / 0.08);
+  --accent-border:   oklch(91%   0.006 80 / 0.16);
+  --accent-hover:    oklch(98%   0.003 80);
+
+  /* Signal — slate blue, brightened for dark legibility */
+  --signal:          oklch(66%   0.13  240);
+  --signal-light:    oklch(66%   0.13  240 / 0.14);
+  --signal-border:   oklch(66%   0.13  240 / 0.25);
+
+  /* Logo accent — unchanged; amber reads beautifully on dark */
+  --logo-accent:     oklch(60%   0.17   47);
+
+  /* plinths wordmark title on dark surfaces */
+  --brand-plinths-title: #f2ede6;
+
+  /* Micro-detail */
+  --gloss:           oklch(100% 0 0 / 0.08);
+  --warning-border:  oklch(73% 0.18 67 / 0.25);
+
+  /* Semantic — lifted for dark bg legibility */
+  --success:         oklch(62%   0.17  152);
+  --success-light:   oklch(62%   0.17  152 / 0.14);
+  --warning:         oklch(73%   0.18   67);
+  --warning-light:   oklch(73%   0.18   67 / 0.14);
+  --danger:          oklch(66%   0.22   23);
+  --danger-light:    oklch(66%   0.22   23 / 0.14);
+}
+
+/* ── Component-specific dark overrides ───────────────────
+   Tokens cover 95% of components automatically.
+   These patches fix hardcoded literal values.
+   ──────────────────────────────────────────────────────── */
+
+/* Orbs: amber glow reads on dark, bump opacity for atmosphere */
+:root[data-theme="dark"] .orb-1 {
+  background: radial-gradient(circle, oklch(60% 0.17 47 / 0.10) 0%, transparent 70%);
+}
+:root[data-theme="dark"] .orb-2 {
+  background: radial-gradient(circle, oklch(60% 0.17 47 / 0.07) 0%, transparent 70%);
+}
+:root[data-theme="dark"] .orb-3 {
+  background: radial-gradient(circle, oklch(60% 0.17 47 / 0.05) 0%, transparent 70%);
+}
+:root[data-theme="dark"] .cursor-glow {
+  background: radial-gradient(circle, oklch(60% 0.17 47 / 0.12) 0%, transparent 65%);
+}
+
+/* AI input: dark shadow + warm focus ring */
+:root[data-theme="dark"] .ai-input {
+  box-shadow: 0 1px 3px oklch(0% 0 0 / 0.5);
+  border-left-color: var(--border-mid);
+}
+:root[data-theme="dark"] .ai-input:focus-within {
+  border-left-color: var(--accent);
+  box-shadow: 0 1px 3px oklch(0% 0 0 / 0.5), 0 0 0 3px var(--accent-light);
+}
+
+/* Modal backdrop: heavier overlay so dark bg still recedes */
+:root[data-theme="dark"] .signin-modal-backdrop {
+  background: oklch(0% 0 0 / 0.70);
+}
+
 html, body, #root {
   height: 100%;
   width: 100%;

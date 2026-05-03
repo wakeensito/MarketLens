@@ -1,11 +1,12 @@
 import { Fragment, useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Clock, X, PanelLeftClose, Zap, Palette, User, Settings2, HelpCircle, LogOut, SquarePen } from 'lucide-react';
+import { Clock, X, PanelLeftClose, Zap, Palette, User, Settings2, HelpCircle, LogOut, SquarePen, Sun, Moon } from 'lucide-react';
 import type { ApiReport } from '../api';
 import { listReports } from '../api';
 import { useAuthContext } from '../hooks/useAuth';
 import { BrandWordmarkInner, PlinthsMark } from './BrandWordmark';
 import { MOCK_HISTORY } from '../mockData';
+import { getThemePref, getResolved, setThemePref, type ThemePreference } from '../theme';
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 
@@ -53,6 +54,14 @@ export default function RecentThreads({ isOpen, onClose, onOpen, onNewChat, acti
   const [loading, setLoading] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const profileGroupRef = useRef<HTMLDivElement>(null);
+  const [themePref, setLocalPref] = useState<ThemePreference>(getThemePref);
+  const resolvedTheme = getResolved(themePref);
+
+  const toggleTheme = () => {
+    const next: ThemePreference = resolvedTheme === 'dark' ? 'light' : 'dark';
+    setThemePref(next);
+    setLocalPref(next);
+  };
 
   useEffect(() => {
     if (!profileOpen) return;
@@ -195,6 +204,18 @@ export default function RecentThreads({ isOpen, onClose, onOpen, onNewChat, acti
                 aria-label="New analysis"
               >
                 <SquarePen size={14} strokeWidth={1.8} />
+              </button>
+              <button
+                type="button"
+                className="sidebar-icon-btn"
+                onClick={toggleTheme}
+                title={resolvedTheme === 'dark' ? 'Switch to light' : 'Switch to dark'}
+                aria-label={resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              >
+                {resolvedTheme === 'dark'
+                  ? <Sun size={14} strokeWidth={1.8} />
+                  : <Moon size={14} strokeWidth={1.8} />
+                }
               </button>
               <button
                 type="button"

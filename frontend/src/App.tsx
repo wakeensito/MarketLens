@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { PanelLeft } from 'lucide-react';
+import { initTheme } from './theme';
 import PipelineTracker from './components/PipelineTracker';
 import ReportView from './components/ReportView';
 import AnimatedAiInput from './components/AnimatedAiInput';
@@ -53,6 +54,8 @@ export default function App() {
   const inWorkspace = !isLanding;
   // Empty workspace state (signed-in new chat, or signed-in on initial load)
   const isWorkspaceEmpty = screen === 'workspace-empty' || (screen === 'landing' && auth.isAuthenticated);
+
+  useEffect(() => { initTheme(); }, []);
 
   useEffect(() => {
     const id = setInterval(() => setPhIdx(i => (i + 1) % EXAMPLE_QUERIES.length), 3200);
