@@ -1,201 +1,199 @@
-import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { X, ArrowRight, BarChart3, Zap, TrendingUp, Shield, CheckCircle2 } from 'lucide-react';
+import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { X } from 'lucide-react';
+import { PlinthsMark } from './BrandWordmark';
 import type { AuthState } from '../hooks/useAuth';
 
-const IS_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
+const SHOW_DEV_MOCK = import.meta.env.DEV && import.meta.env.VITE_USE_MOCK === 'true';
 
-interface Props {
-  open: boolean;
-  onClose: () => void;
-  auth: AuthState;
-  onViewPricing?: () => void;
+function GoogleIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" aria-hidden className="signin-modal-btn-icon">
+      <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s12-5.373 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-2.641-.21-5.236-.611-7.743z" />
+      <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z" />
+      <path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z" />
+      <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571l6.19 5.238C42.022 35.026 44 30.038 44 24c0-2.641-.21-5.236-.611-7.743z" />
+    </svg>
+  );
 }
 
-const BENEFITS = [
-  { icon: BarChart3,  label: 'Competitive landscape mapping', sub: 'Every player in your space' },
-  { icon: TrendingUp, label: 'Saturation & opportunity scores', sub: 'Know where the real gaps are' },
-  { icon: Zap,        label: 'AI-powered entry roadmap',        sub: '3-phase go-to-market in minutes' },
-  { icon: Shield,     label: 'Enterprise-grade intelligence',   sub: 'Backed by real-time web search' },
-];
+function GitHubIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden className="signin-modal-btn-icon">
+      <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.221 0 4.605-2.805 5.624-5.475 5.921.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z" />
+    </svg>
+  );
+}
 
-const STATS = [
-  { num: '14K+',  label: 'Founders' },
-  { num: '98K+',  label: 'Reports' },
-  { num: '~2min', label: 'Per report' },
-];
+interface SignInModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  auth: AuthState;
+  onShowPricing?: () => void;
+}
 
-export default function SignInModal({ open, onClose, auth, onViewPricing }: Props) {
-  const [hovered, setHovered] = useState<string | null>(null);
+export default function SignInModal({ isOpen, onClose, auth, onShowPricing }: SignInModalProps) {
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const emailFieldId = useId();
+  const [emailBusy, setEmailBusy] = useState(false);
+  const [emailErr, setEmailErr] = useState<string | null>(null);
+
+  const closeModal = useCallback(() => {
+    setEmailErr(null);
+    setEmailBusy(false);
+    onClose();
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') closeModal(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [isOpen, closeModal]);
+
+  useEffect(() => {
+    if (!auth.isAuthenticated || !isOpen) return;
+    const t = window.setTimeout(() => closeModal(), 0);
+    return () => clearTimeout(t);
+  }, [auth.isAuthenticated, isOpen, closeModal]);
+
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === backdropRef.current) closeModal();
+  };
+
+  async function handleEmailContinue(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setEmailErr(null);
+    const fd = new FormData(e.currentTarget);
+    const raw = String(fd.get('email') ?? '').trim();
+    if (!raw) {
+      setEmailErr('Enter your email.');
+      return;
+    }
+    setEmailBusy(true);
+    try {
+      await auth.continueWithEmail(raw);
+      closeModal();
+    } catch (err) {
+      setEmailErr(err instanceof Error ? err.message : 'Something went wrong. Try again.');
+    } finally {
+      setEmailBusy(false);
+    }
+  }
 
   return (
     <AnimatePresence>
-      {open && (
+      {isOpen && (
         <motion.div
-          className="signin-overlay"
+          ref={backdropRef}
+          className="signin-modal-backdrop"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          transition={{ duration: 0.18 }}
-          onClick={onClose}
+          transition={{ duration: 0.18, ease: 'easeOut' as const }}
+            onClick={handleBackdropClick}
         >
           <motion.div
-            className="signin-modal"
-            initial={{ opacity: 0, scale: 0.97, y: 24 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: 24 }}
+            className="signin-modal-card"
+            initial={{ opacity: 0, y: 28, scale: 0.94 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 16, scale: 0.97 }}
             transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] as const }}
-            onClick={(e: React.MouseEvent) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Sign in to plinths"
+            onClick={e => e.stopPropagation()}
           >
-            {/* ── Mobile-only sticky top bar ─────────────────── */}
-            <div className="signin-topbar">
-              <div className="signin-topbar-brand">
-                <span className="signin-logo-primary">Market</span>
-                <span className="signin-logo-accent">Lens</span>
-              </div>
-              <button className="signin-topbar-close" onClick={onClose} aria-label="Close">
-                <X size={16} strokeWidth={2} />
+            <button className="signin-modal-close" type="button" onClick={closeModal} aria-label="Close">
+              <X size={14} strokeWidth={2.5} />
+            </button>
+
+            <div className="signin-modal-header">
+              <PlinthsMark className="signin-modal-mark" />
+              <span className="signin-modal-badge">
+                <span className="signin-modal-badge-dot" />
+                3 analyses/day · Roadmaps · Exports
+              </span>
+            </div>
+
+            <h2 className="signin-modal-title">Welcome to plinths</h2>
+            <p className="signin-modal-desc">Sign in to unlock your full intelligence suite</p>
+
+            <div className="signin-modal-actions signin-modal-actions--top">
+              <button
+                type="button"
+                className="signin-modal-btn signin-modal-btn--google"
+                onClick={() => auth.login()}
+              >
+                <GoogleIcon />
+                Continue with Google
+              </button>
+              <button
+                type="button"
+                className="signin-modal-btn signin-modal-btn--github"
+                onClick={() => auth.login()}
+              >
+                <GitHubIcon />
+                Continue with GitHub
               </button>
             </div>
 
-            {/* ── Left hero panel ───────────────────────────── */}
-            <div className="signin-hero">
-              <div className="signin-hero-orb signin-hero-orb-1" />
-              <div className="signin-hero-orb signin-hero-orb-2" />
-              <div className="signin-hero-content">
-                <div className="signin-hero-logo">
-                  <span className="signin-logo-primary">Market</span>
-                  <span className="signin-logo-accent">Lens</span>
-                </div>
-
-                <div className="signin-hero-badge">
-                  <span className="signin-hero-badge-pulse" />
-                  1 free analysis · No credit card
-                </div>
-
-                <h2 className="signin-hero-headline">
-                  Know your<br />market before<br />you build.
-                </h2>
-
-                <p className="signin-hero-tagline">
-                  AI market intelligence for founders, operators, and investors.
-                </p>
-
-                <ul className="signin-benefit-list">
-                  {BENEFITS.map(({ icon: Icon, label, sub }) => (
-                    <li key={label} className="signin-benefit-item">
-                      <span className="signin-benefit-icon">
-                        <Icon size={13} strokeWidth={2.5} />
-                      </span>
-                      <span>
-                        <span className="signin-benefit-label">{label}</span>
-                        <span className="signin-benefit-sub">{sub}</span>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-
-                <div className="signin-stats-row">
-                  {STATS.map(({ num, label }) => (
-                    <div key={label} className="signin-stat">
-                      <span className="signin-stat-num">{num}</span>
-                      <span className="signin-stat-label">{label}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* ── Right auth panel ──────────────────────────── */}
-            <div className="signin-auth">
-              <button className="signin-close-btn" onClick={onClose} aria-label="Close">
-                <X size={15} strokeWidth={2} />
+            {SHOW_DEV_MOCK && auth.mockLogin ? (
+              <button type="button" className="signin-modal-devmock" onClick={() => auth.mockLogin?.()}>
+                Dev mock sign in
               </button>
+            ) : null}
 
-              <div className="signin-auth-content">
-                <div className="signin-free-badge">
-                  <CheckCircle2 size={12} />
-                  Start free — 1 analysis included
-                </div>
-
-                <h3 className="signin-auth-title">Create your account</h3>
-                <p className="signin-auth-sub">
-                  Unlock 3 analyses per day with a free account.
-                </p>
-
-                <div className="signin-providers">
-                  <button
-                    className={`signin-provider signin-provider--google${hovered === 'google' ? ' signin-provider--hovered' : ''}`}
-                    onClick={auth.login}
-                    onMouseEnter={() => setHovered('google')}
-                    onMouseLeave={() => setHovered(null)}
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
-                      <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                      <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                      <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                    </svg>
-                    <span>Continue with Google</span>
-                    <ArrowRight
-                      size={14}
-                      className={`signin-provider-arrow${hovered === 'google' ? ' visible' : ''}`}
-                      aria-hidden="true"
-                    />
-                  </button>
-
-                  <button
-                    className={`signin-provider signin-provider--github${hovered === 'github' ? ' signin-provider--hovered' : ''}`}
-                    onClick={auth.login}
-                    onMouseEnter={() => setHovered('github')}
-                    onMouseLeave={() => setHovered(null)}
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                      <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
-                    </svg>
-                    <span>Continue with GitHub</span>
-                    <ArrowRight
-                      size={14}
-                      className={`signin-provider-arrow${hovered === 'github' ? ' visible' : ''}`}
-                      aria-hidden="true"
-                    />
-                  </button>
-
-                  {IS_MOCK && (
-                    <button
-                      className="signin-provider signin-provider--mock"
-                      onClick={() => auth.mockLogin?.()}
-                    >
-                      <span className="signin-dev-badge">DEV</span>
-                      <span>Mock Sign In</span>
-                    </button>
-                  )}
-                </div>
-
-                {onViewPricing && (
-                  <>
-                    <div className="signin-sep">
-                      <span className="signin-sep-line" />
-                      <span className="signin-sep-text">or explore plans</span>
-                      <span className="signin-sep-line" />
-                    </div>
-                    <button
-                      className="signin-pricing-btn"
-                      onClick={() => { onClose(); onViewPricing(); }}
-                    >
-                      View pricing plans
-                    </button>
-                  </>
-                )}
-
-                <p className="signin-legal">
-                  By signing in, you agree to our{' '}
-                  <a href="#" className="signin-legal-link">Terms</a>
-                  {' '}and{' '}
-                  <a href="#" className="signin-legal-link">Privacy Policy</a>.
-                </p>
-              </div>
+            <div className="signin-modal-divider" aria-hidden>
+              <span className="signin-modal-divider-line" />
+              <span className="signin-modal-divider-text">Or continue with email</span>
+              <span className="signin-modal-divider-line" />
             </div>
+
+            <form className="signin-modal-email-form" onSubmit={handleEmailContinue} noValidate>
+              <label className="signin-modal-label" htmlFor={emailFieldId}>Email</label>
+              <input
+                id={emailFieldId}
+                name="email"
+                type="email"
+                autoComplete="email"
+                inputMode="email"
+                placeholder="you@company.com"
+                className="signin-modal-input"
+                disabled={emailBusy}
+                aria-invalid={emailErr ? true : undefined}
+                aria-describedby={emailErr ? `${emailFieldId}-err` : undefined}
+              />
+              {emailErr ? (
+                <p id={`${emailFieldId}-err`} className="signin-modal-field-error" role="alert">
+                  {emailErr}
+                </p>
+              ) : null}
+              <button
+                type="submit"
+                className="signin-modal-btn signin-modal-btn--continue"
+                disabled={emailBusy}
+              >
+                {emailBusy ? 'Please wait…' : 'Continue'}
+              </button>
+            </form>
+
+            {onShowPricing ? (
+              <button
+                className="signin-modal-pricing-link"
+                type="button"
+                onClick={() => { closeModal(); onShowPricing(); }}
+              >
+                View plans &amp; pricing →
+              </button>
+            ) : null}
+
+            <p className="signin-modal-legal">
+              By continuing you agree to our{' '}
+              <a href="#" onClick={e => e.preventDefault()}>Terms</a>
+              {' '}and{' '}
+              <a href="#" onClick={e => e.preventDefault()}>Privacy Policy</a>
+            </p>
           </motion.div>
         </motion.div>
       )}

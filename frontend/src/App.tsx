@@ -7,6 +7,7 @@ import AnimatedAiInput from './components/AnimatedAiInput';
 import RecentThreads from './components/RecentThreads';
 import SignInModal from './components/SignInModal';
 import PricingSection from './components/PricingSection';
+import { BrandWordmarkInner } from './components/BrandWordmark';
 import { useAnalysis } from './hooks/useAnalysis';
 import { useAuthContext } from './hooks/useAuth';
 import { EXAMPLE_QUERIES } from './mockData';
@@ -59,9 +60,14 @@ export default function App() {
     return () => mq.removeEventListener('change', sync);
   }, []);
 
-  // Close sign-in when user becomes authenticated (mock or real)
+  // After login, close pricing + sign-in overlay so the user returns to the main shell.
   useEffect(() => {
-    if (auth.isAuthenticated) setShowSignIn(false);
+    if (!auth.isAuthenticated) return;
+    const id = requestAnimationFrame(() => {
+      setShowSignIn(false);
+      setShowPricing(false);
+    });
+    return () => cancelAnimationFrame(id);
   }, [auth.isAuthenticated]);
 
   const mouseX = useMotionValue(0.5);
@@ -112,15 +118,14 @@ export default function App() {
         <div className="orb orb-3" />
         <motion.div className="lnd-wordmark" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
           <span className="lnd-wm-inner">
-            <span className="lnd-wm-primary">Market</span>
-            <span className="lnd-wm-accent">Lens</span>
+            <BrandWordmarkInner variant="landing" />
           </span>
         </motion.div>
       </div>
     );
   }
 
-  // ── Pricing overlay ─────────────────────────────────────
+  // ── Pricing overlay ──────────────────────────────────
   if (showPricing) {
     return (
       <div className="shell shell--pricing">
@@ -128,8 +133,16 @@ export default function App() {
         <div className="orb orb-2" style={{ position: 'fixed' }} />
         <div className="orb orb-3" style={{ position: 'fixed' }} />
         <PricingSection
-          onBack={() => setShowPricing(false)}
-          onSignIn={() => { setShowPricing(false); setShowSignIn(true); }}
+          onBack={() => {
+            setShowSignIn(false);
+            setShowPricing(false);
+          }}
+          onSignIn={() => setShowSignIn(true)}
+        />
+        <SignInModal
+          isOpen={showSignIn}
+          onClose={() => setShowSignIn(false)}
+          auth={auth}
         />
       </div>
     );
@@ -159,14 +172,6 @@ export default function App() {
         )}
       </AnimatePresence>
 
-      {/* ── Sign-in modal ──────────────────────────────────── */}
-      <SignInModal
-        open={showSignIn}
-        onClose={() => setShowSignIn(false)}
-        auth={auth}
-        onViewPricing={() => setShowPricing(true)}
-      />
-
       {/* ── Auth error banner ──────────────────────────────── */}
       <AnimatePresence>
         {authError && (
@@ -192,8 +197,7 @@ export default function App() {
               style={isTouchDevice ? undefined : { rotateX, rotateY, transformStyle: 'preserve-3d' as const }}
               className="lnd-wm-inner"
             >
-              <span className="lnd-wm-primary">Market</span>
-              <span className="lnd-wm-accent">Lens</span>
+              <BrandWordmarkInner variant="landing" />
             </motion.span>
           </motion.div>
 
@@ -209,13 +213,19 @@ export default function App() {
             </motion.div>
           )}
 
+          <motion.h1
+            className="lnd-headline"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0, transition: { delay: 0.12, duration: 0.38, ease: 'easeOut' as const } }}
+          >
+            The Foundation for Every Build.
+          </motion.h1>
           <motion.p
             className="lnd-sub"
             initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0, transition: { delay: 0.14, duration: 0.38, ease: 'easeOut' as const } }}
+            animate={{ opacity: 1, y: 0, transition: { delay: 0.18, duration: 0.38, ease: 'easeOut' as const } }}
           >
-            Drop in a business idea. Get a competitive landscape,
-            saturation score, and entry roadmap — in minutes.
+            Drop ideas. Get roadmaps.
           </motion.p>
 
           {/* Input */}
@@ -249,7 +259,10 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1, transition: { delay: 0.28, duration: 0.35 } }}
             >
-              <button className="lnd-cta-signin" onClick={() => setShowSignIn(true)}>
+              <button
+                className="lnd-cta-signin"
+                onClick={() => setShowSignIn(true)}
+              >
                 Sign in for 3/day
                 <ArrowRight size={13} aria-hidden="true" />
               </button>
@@ -260,6 +273,14 @@ export default function App() {
           )}
         </>
       )}
+
+      {/* ── Floating sign-in modal ────────────────────────── */}
+      <SignInModal
+        isOpen={showSignIn}
+        onClose={() => setShowSignIn(false)}
+        auth={auth}
+        onShowPricing={() => setShowPricing(true)}
+      />
 
       {/* ── Workspace ──────────────────────────────────────── */}
       {!isLanding && (
@@ -295,8 +316,7 @@ export default function App() {
                 onClick={onReset}
                 transition={SPRING}
               >
-                <span className="ws-logo-primary">Market</span>
-                <span className="ws-logo-accent">Lens</span>
+                <BrandWordmarkInner variant="workspace" />
               </motion.button>
 
               <motion.div

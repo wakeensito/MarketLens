@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, ArrowLeft } from 'lucide-react';
 import NumberFlow from '@number-flow/react';
+import { BrandWordmarkInner } from './BrandWordmark';
 
 interface Plan {
   id: string;
@@ -108,8 +109,7 @@ export default function PricingSection({ onBack, onSignIn }: Props) {
             Back
           </button>
           <span className="pricing-nav-brand">
-            <span className="pricing-nav-primary">Market</span>
-            <span className="pricing-nav-accent">Lens</span>
+            <BrandWordmarkInner variant="pricing-nav" />
           </span>
         </nav>
 
@@ -174,7 +174,7 @@ export default function PricingSection({ onBack, onSignIn }: Props) {
         </header>
 
         {/* Cards grid */}
-        <div className="pricing-grid">
+        <div className="pricing-grid" id="pricing-plans">
           {PLANS.map((plan, i) => (
             <motion.div
               key={plan.id}
@@ -202,7 +202,7 @@ export default function PricingSection({ onBack, onSignIn }: Props) {
                       <span className="pricing-price-currency">$</span>
                       <span className="pricing-price-num">
                         <NumberFlow
-                          value={annual ? Math.round(plan.yearlyPrice / 12) : plan.price}
+                          value={annual ? plan.yearlyPrice / 12 : plan.price}
                         />
                       </span>
                       <span className="pricing-price-period">/mo</span>

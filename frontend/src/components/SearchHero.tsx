@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, type KeyboardEvent } from 'react';
 import { motion, AnimatePresence, type Variants } from 'framer-motion';
 import { Search, ArrowRight } from 'lucide-react';
 import { EXAMPLE_QUERIES } from '../mockData';
+import { BrandWordmarkInner } from './BrandWordmark';
 
 interface Props {
   onSearch: (query: string) => void;
@@ -65,8 +66,7 @@ export default function SearchHero({ onSearch }: Props) {
       </motion.div>
 
       <motion.div className="hero-brand" variants={item}>
-        <span className="hero-brand-primary">Market </span>
-        <span className="hero-brand-accent">Scout</span>
+        <BrandWordmarkInner variant="hero" />
       </motion.div>
 
       <motion.p className="hero-tagline" variants={item}>
