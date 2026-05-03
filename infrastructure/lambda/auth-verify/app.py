@@ -12,11 +12,19 @@ logger = Logger()
 
 
 def lambda_handler(event: dict, context) -> dict:
-    expected = event.get("request", {}).get("privateChallengeParameters", {}).get("code", "")
-    answer = event.get("request", {}).get("challengeAnswer", "").strip()
+    expected = event.get("request", {}).get("privateChallengeParameters", {}).get("code")
+    answer = (event.get("request", {}).get("challengeAnswer") or "").strip()
 
-    # Constant-time comparison
-    is_correct = hmac.compare_digest(expected, answer)
+    if not expected or not isinstance(expected, str):
+        event["response"]["answerCorrect"] = False
+        logger.warning("OTP verification missing or invalid expected code in privateChallengeParameters")
+        return event
+
+    # Constant-time comparison (expected is a non-empty string)
+    if len(expected) != len(answer):
+        is_correct = False
+    else:
+        is_correct = hmac.compare_digest(expected, answer)
 
     event["response"]["answerCorrect"] = is_correct
 

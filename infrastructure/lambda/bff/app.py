@@ -17,6 +17,9 @@ import os
 import json
 import secrets
 import urllib.parse
+import base64
+import hashlib
+import hmac
 
 import boto3
 import jwt
@@ -217,6 +220,12 @@ def _get_app_url() -> str:
 cognito_client = boto3.client("cognito-idp")
 
 
+def _compute_secret_hash(username: str) -> str:
+    msg = username + CLIENT_ID
+    dig = hmac.new(CLIENT_SECRET.encode("utf-8"), msg.encode("utf-8"), hashlib.sha256).digest()
+    return base64.b64encode(dig).decode("utf-8")
+
+
 # ── Routes ──
 
 
@@ -236,19 +245,6 @@ def initiate():
     if not email or "@" not in email:
         return {"error": "Valid email is required"}, 400
 
-    import hashlib
-    import hmac
-    import base64
-
-    def _compute_secret_hash(username: str) -> str:
-        msg = username + CLIENT_ID
-        dig = hmac.new(
-            CLIENT_SECRET.encode("utf-8"),
-            msg.encode("utf-8"),
-            hashlib.sha256,
-        ).digest()
-        return base64.b64encode(dig).decode("utf-8")
-
     # Auto-create user if they don't exist
     try:
         cognito_client.admin_get_user(
@@ -257,7 +253,6 @@ def initiate():
         )
     except cognito_client.exceptions.UserNotFoundException:
         # Create user with random password (never used — custom auth bypasses it)
-        import string
         random_password = secrets.token_urlsafe(24) + "!A1a"  # meets password policy
         try:
             cognito_client.sign_up(
@@ -327,19 +322,6 @@ def verify():
 
     if len(code) != 6 or not code.isdigit():
         return {"error": "Code must be 6 digits"}, 400
-
-    import hashlib
-    import hmac
-    import base64
-
-    def _compute_secret_hash(username: str) -> str:
-        msg = username + CLIENT_ID
-        dig = hmac.new(
-            CLIENT_SECRET.encode("utf-8"),
-            msg.encode("utf-8"),
-            hashlib.sha256,
-        ).digest()
-        return base64.b64encode(dig).decode("utf-8")
 
     try:
         response = cognito_client.respond_to_auth_challenge(

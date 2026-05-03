@@ -123,7 +123,7 @@ export default function LoginPage() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2 }}
+              transition={{ duration: 0.38, ease: 'easeOut' as const }}
             >
               <p className="login-heading">Sign in to MarketLens</p>
               <p className="login-sub">Enter your email — we'll send you a sign-in code.</p>
@@ -172,7 +172,7 @@ export default function LoginPage() {
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.2 }}
+              transition={{ duration: 0.38, ease: 'easeOut' as const }}
             >
               <p className="login-heading">Check your email</p>
               <p className="login-sub">

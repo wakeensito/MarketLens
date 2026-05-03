@@ -72,8 +72,14 @@ def lambda_handler(event: dict, context) -> dict:
     # Store code in private parameters (Cognito keeps this server-side)
     event["response"]["privateChallengeParameters"] = {"code": code}
     # Public parameters sent to client (just a hint, not the code)
+    local, _, domain = email.partition("@")
+    if domain:
+        masked_local = local if len(local) <= 3 else local[:3]
+        masked_email = masked_local + "***@" + domain
+    else:
+        masked_email = (email[:3] if len(email) > 3 else email) + "***"
     event["response"]["publicChallengeParameters"] = {
-        "email": email[:3] + "***" + email[email.index("@"):],
+        "email": masked_email,
     }
     event["response"]["challengeMetadata"] = "OTP_CHALLENGE"
 

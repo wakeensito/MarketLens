@@ -46,6 +46,54 @@ WIKIDATA_SPARQL_URL = "https://query.wikidata.org/sparql"
 # User-Agent for Wikipedia/Wikidata (their courtesy policy)
 WIKI_HEADERS = {"User-Agent": "MarketLens/1.0 (market intelligence platform)"}
 
+# Wikidata "instance of" (P31) values that indicate a company / business organization
+_WD_COMPANY_LIKE = frozenset({
+    "Q783794",  # company
+    "Q6881511",  # enterprise
+    "Q891723",  # publicly traded company
+    "Q4830453",  # business
+    "Q43229",  # organization
+    "Q219577",  # holding company
+    "Q167037",  # corporation
+    "Q3187459",  # internet company
+})
+
+
+def _wikidata_entity_is_company_like(entity_id: str) -> bool:
+    """Use wbgetentities to verify P31 (instance of) is a company/business-like item."""
+    try:
+        ent_resp = requests.get(
+            WIKIDATA_SEARCH_URL,
+            params={
+                "action": "wbgetentities",
+                "ids": entity_id,
+                "format": "json",
+                "props": "claims",
+            },
+            headers=WIKI_HEADERS,
+            timeout=5,
+        )
+        ent_resp.raise_for_status()
+        entity = ent_resp.json().get("entities", {}).get(entity_id)
+        if not entity or entity.get("missing") == "":
+            return False
+        for stmt in entity.get("claims", {}).get("P31", []):
+            snak = stmt.get("mainsnak", {})
+            if snak.get("snaktype") != "value":
+                continue
+            datavalue = snak.get("datavalue", {})
+            value = datavalue.get("value")
+            if isinstance(value, dict) and value.get("entity-type") == "item":
+                if value.get("id") in _WD_COMPANY_LIKE:
+                    return True
+        return False
+    except Exception as e:
+        logger.warning(
+            "Wikidata entity verification failed",
+            extra={"entity_id": entity_id, "error": str(e)},
+        )
+        return False
+
 
 def _get_brave_api_key() -> str | None:
     """Retrieve Brave Search API key from SSM Parameter Store (cached in memory)."""
@@ -133,7 +181,7 @@ def _wikidata_company_facts(company_name: str) -> dict | None:
                 "search": company_name,
                 "language": "en",
                 "type": "item",
-                "limit": 3,
+                "limit": 10,
                 "format": "json",
             },
             headers=WIKI_HEADERS,
@@ -144,13 +192,21 @@ def _wikidata_company_facts(company_name: str) -> dict | None:
         if not results:
             return None
 
-        # Pick the first result (best match)
-        entity_id = results[0]["id"]
-        entity_desc = results[0].get("description", "").lower()
-
-        # Basic filter: skip if it's clearly not a company
         skip_words = {"album", "song", "film", "village", "river", "person", "character"}
-        if any(w in entity_desc for w in skip_words):
+        entity_id = None
+        for cand in results:
+            cid = cand.get("id")
+            if not cid:
+                continue
+            entity_desc = cand.get("description", "").lower()
+            if any(w in entity_desc for w in skip_words):
+                continue
+            if not _wikidata_entity_is_company_like(cid):
+                continue
+            entity_id = cid
+            break
+
+        if not entity_id:
             return None
 
         # Step 2: SPARQL query for structured properties
@@ -244,12 +300,16 @@ def _enrich_competitors_with_wiki(competitor_names: list[str]) -> dict:
     with ThreadPoolExecutor(max_workers=8) as pool:
         futures = {pool.submit(_lookup, name): name for name in names}
         for future in as_completed(futures):
+            name = futures.get(future, "unknown")
             try:
-                name, entry = future.result()
+                res_name, entry = future.result()
                 if entry:
-                    wiki_data[name] = entry
+                    wiki_data[res_name] = entry
             except Exception:
-                pass  # Individual lookup failures are fine
+                logger.exception(
+                    "Wiki enrichment lookup failed in _lookup",
+                    extra={"company": name},
+                )
 
     return wiki_data
 
@@ -808,14 +868,22 @@ def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
     num_direct = len(competitors)
     num_gaps = len(analysis.get("market_gaps", []))
 
-    # Market age: prefer search data, fall back to parse estimate
-    market_age = _safe_number(
-        search_results.get("market_age_years"), default=None
-    ) or _safe_number(parsed.get("estimated_market_age_years"), default=5)
+    # Market age: prefer search data, fall back to parse estimate (preserve 0; don't use "or")
+    _market_age_search = _safe_number(search_results.get("market_age_years"), default=None)
+    market_age = (
+        _market_age_search
+        if _market_age_search is not None
+        else _safe_number(parsed.get("estimated_market_age_years"), default=5)
+    )
 
-    # TAM/growth: prefer search data, fall back to analyse estimates
-    tam_usd = _safe_number(search_results.get("market_size_tam_usd")) or _safe_number(analysis.get("estimated_tam_usd"))
-    growth_pct = _safe_number(search_results.get("market_growth_rate_pct")) or _safe_number(analysis.get("estimated_growth_pct"))
+    # TAM/growth: prefer search data, fall back to analyse estimates (preserve 0)
+    _tam_search = _safe_number(search_results.get("market_size_tam_usd"))
+    _tam_analysis = _safe_number(analysis.get("estimated_tam_usd"))
+    tam_usd = _tam_search if _tam_search is not None else _tam_analysis
+
+    _growth_search = _safe_number(search_results.get("market_growth_rate_pct"))
+    _growth_analysis = _safe_number(analysis.get("estimated_growth_pct"))
+    growth_pct = _growth_search if _growth_search is not None else _growth_analysis
 
     complexity = parsed.get("estimated_complexity", "medium")
     business_model = parsed.get("business_model", "other")

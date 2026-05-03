@@ -133,12 +133,14 @@ Scores are STRING numbers (e.g. `"10"` not `10`). The adapter in `frontend/src/a
 
 **Key methods on `AuthState`**:
 - `login()` — redirect to Cognito Hosted UI
-- `loginWithEmail(email, password, intent)` — email/password via BFF; mock signs in locally
+- `continueWithEmail(email)` — starts passwordless OTP via BFF (`POST /auth/initiate`); returns `{ session, emailHint }` for the code step (Cognito custom auth challenge)
+- `verifyCode(email, code, session)` — validates the OTP and completes sign-in (`POST /auth/verify`)
 - `logout()` — clears cookies via BFF
 - `refresh()` — silent token refresh
+- `loginWithEmail({ email, password }, intent)` — legacy email/password hook used by older flows; production posts to BFF where configured
 
 **Dev shortcut**: set `VITE_USE_MOCK=true` in `.env` to enable `mockLogin()` — instant auth bypass.
-No real Cognito call is made; `AuthUser` fields are stubbed.
+No real Cognito call is made; `AuthUser` fields are stubbed. Integrations should prefer `continueWithEmail` / `verifyCode`; under mock, those APIs stub the OTP steps (no real email/code) rather than password auth.
 
 ## TypeScript Rules (verbatimModuleSyntax is ON)
 
