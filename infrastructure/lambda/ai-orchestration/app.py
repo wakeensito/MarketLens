@@ -39,6 +39,12 @@ ssm = boto3.client("ssm")
 _brave_api_key: str | None = None
 
 BRAVE_SEARCH_URL = "https://api.search.brave.com/res/v1/web/search"
+WIKIPEDIA_API_URL = "https://en.wikipedia.org/api/rest_v1/page/summary"
+WIKIDATA_SEARCH_URL = "https://www.wikidata.org/w/api.php"
+WIKIDATA_SPARQL_URL = "https://query.wikidata.org/sparql"
+
+# User-Agent for Wikipedia/Wikidata (their courtesy policy)
+WIKI_HEADERS = {"User-Agent": "MarketLens/1.0 (market intelligence platform)"}
 
 
 def _get_brave_api_key() -> str | None:
@@ -84,6 +90,168 @@ def _brave_search(query: str, count: int = 20) -> list[dict]:
     except Exception as e:
         logger.warning("Brave Search API call failed", extra={"query": query, "error": str(e)})
         return []
+
+
+def _wikipedia_summary(company_name: str) -> dict | None:
+    """Fetch a company summary from Wikipedia. Returns None on miss."""
+    try:
+        # Wikipedia titles use underscores for spaces
+        title = company_name.strip().replace(" ", "_")
+        resp = requests.get(
+            f"{WIKIPEDIA_API_URL}/{title}",
+            headers=WIKI_HEADERS,
+            timeout=5,
+        )
+        if resp.status_code == 404:
+            return None
+        resp.raise_for_status()
+        data = resp.json()
+        if data.get("type") == "disambiguation":
+            return None  # Ambiguous — skip
+        return {
+            "name": data.get("title", company_name),
+            "description": data.get("description", ""),
+            "extract": data.get("extract", ""),
+            "url": data.get("content_urls", {}).get("desktop", {}).get("page", ""),
+        }
+    except Exception:
+        return None
+
+
+def _wikidata_company_facts(company_name: str) -> dict | None:
+    """Search Wikidata for a company and return structured facts.
+
+    Returns dict with: founded_year, employee_count, revenue_usd, industry,
+    hq_location, parent_org. All fields may be None.
+    """
+    try:
+        # Step 1: Search for the entity
+        search_resp = requests.get(
+            WIKIDATA_SEARCH_URL,
+            params={
+                "action": "wbsearchentities",
+                "search": company_name,
+                "language": "en",
+                "type": "item",
+                "limit": 3,
+                "format": "json",
+            },
+            headers=WIKI_HEADERS,
+            timeout=5,
+        )
+        search_resp.raise_for_status()
+        results = search_resp.json().get("search", [])
+        if not results:
+            return None
+
+        # Pick the first result (best match)
+        entity_id = results[0]["id"]
+        entity_desc = results[0].get("description", "").lower()
+
+        # Basic filter: skip if it's clearly not a company
+        skip_words = {"album", "song", "film", "village", "river", "person", "character"}
+        if any(w in entity_desc for w in skip_words):
+            return None
+
+        # Step 2: SPARQL query for structured properties
+        sparql = f"""
+        SELECT ?founded ?employees ?revenue ?industryLabel ?hqLabel ?parentLabel WHERE {{
+          OPTIONAL {{ wd:{entity_id} wdt:P571 ?founded. }}
+          OPTIONAL {{ wd:{entity_id} wdt:P1128 ?employees. }}
+          OPTIONAL {{ wd:{entity_id} wdt:P2139 ?revenue. }}
+          OPTIONAL {{ wd:{entity_id} wdt:P452 ?industry. }}
+          OPTIONAL {{ wd:{entity_id} wdt:P159 ?hq. }}
+          OPTIONAL {{ wd:{entity_id} wdt:P749 ?parent. }}
+          SERVICE wikibase:label {{ bd:serviceParam wikibase:language "en". }}
+        }}
+        LIMIT 1
+        """
+        sparql_resp = requests.get(
+            WIKIDATA_SPARQL_URL,
+            params={"query": sparql, "format": "json"},
+            headers=WIKI_HEADERS,
+            timeout=8,
+        )
+        sparql_resp.raise_for_status()
+        bindings = sparql_resp.json().get("results", {}).get("bindings", [])
+
+        if not bindings:
+            return {"name": company_name, "wikidata_id": entity_id}
+
+        b = bindings[0]
+
+        def _val(key):
+            return b.get(key, {}).get("value")
+
+        founded_raw = _val("founded")
+        founded_year = None
+        if founded_raw:
+            try:
+                founded_year = int(founded_raw[:4])
+            except (ValueError, IndexError):
+                pass
+
+        employees_raw = _val("employees")
+        employee_count = None
+        if employees_raw:
+            try:
+                employee_count = int(float(employees_raw))
+            except ValueError:
+                pass
+
+        revenue_raw = _val("revenue")
+        revenue_usd = None
+        if revenue_raw:
+            try:
+                revenue_usd = float(revenue_raw)
+            except ValueError:
+                pass
+
+        return {
+            "name": company_name,
+            "wikidata_id": entity_id,
+            "founded_year": founded_year,
+            "employee_count": employee_count,
+            "revenue_usd": revenue_usd,
+            "industry": _val("industryLabel"),
+            "hq_location": _val("hqLabel"),
+            "parent_org": _val("parentLabel"),
+        }
+    except Exception as e:
+        logger.warning("Wikidata lookup failed", extra={"company": company_name, "error": str(e)})
+        return None
+
+
+def _enrich_competitors_with_wiki(competitor_names: list[str]) -> dict:
+    """Look up competitor names in Wikipedia + Wikidata in parallel. Returns enrichment data."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    wiki_data = {}
+    names = competitor_names[:15]  # Cap at 15 to stay fast
+
+    def _lookup(name: str) -> tuple[str, dict]:
+        entry = {}
+        facts = _wikidata_company_facts(name)
+        summary = _wikipedia_summary(name)
+        if facts:
+            entry.update({k: v for k, v in facts.items() if v is not None})
+        if summary:
+            entry["wikipedia_extract"] = summary.get("extract", "")[:300]
+            if not entry.get("name"):
+                entry["name"] = summary.get("name", name)
+        return (name, entry)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        futures = {pool.submit(_lookup, name): name for name in names}
+        for future in as_completed(futures):
+            try:
+                name, entry = future.result()
+                if entry:
+                    wiki_data[name] = entry
+            except Exception:
+                pass  # Individual lookup failures are fine
+
+    return wiki_data
 
 
 def _set_stage(report_id: str, stage: str, org_id: str) -> None:
@@ -314,6 +482,55 @@ def search(parsed: dict) -> dict:
         logger.info("Brave Search unavailable, falling back to LLM-only search")
         return _search_fallback_llm(parsed)
 
+    # ── Wikipedia + Wikidata enrichment ──
+    # Extract company names from Brave results for wiki lookup
+    brave_company_names = []
+    for r in all_competitors[:20]:
+        # Try to extract company name from title (before " - " or " | ")
+        title = r.get("title", "")
+        for sep in [" - ", " | ", " — ", ": "]:
+            if sep in title:
+                title = title.split(sep)[0]
+                break
+        name = title.strip()
+        if name and len(name) < 60:
+            brave_company_names.append(name)
+
+    wiki_enrichment = {}
+    if brave_company_names:
+        try:
+            wiki_enrichment = _enrich_competitors_with_wiki(brave_company_names)
+            logger.info("Wiki enrichment complete", extra={"enriched": len(wiki_enrichment), "attempted": len(brave_company_names)})
+        except Exception as e:
+            logger.warning("Wiki enrichment failed", extra={"error": str(e)})
+
+    # Format wiki data for the LLM
+    wiki_snippets = ""
+    if wiki_enrichment:
+        lines = []
+        for name, data in wiki_enrichment.items():
+            parts = [f"- {name}:"]
+            if data.get("founded_year"):
+                parts.append(f"founded {data['founded_year']}")
+            if data.get("employee_count"):
+                parts.append(f"{data['employee_count']:,} employees")
+            if data.get("revenue_usd"):
+                rev = data["revenue_usd"]
+                if rev >= 1e9:
+                    parts.append(f"${rev/1e9:.1f}B revenue")
+                elif rev >= 1e6:
+                    parts.append(f"${rev/1e6:.0f}M revenue")
+            if data.get("industry"):
+                parts.append(f"industry: {data['industry']}")
+            if data.get("hq_location"):
+                parts.append(f"HQ: {data['hq_location']}")
+            if data.get("parent_org"):
+                parts.append(f"parent: {data['parent_org']}")
+            if data.get("wikipedia_extract"):
+                parts.append(f"— {data['wikipedia_extract'][:200]}")
+            lines.append(" | ".join(parts))
+        wiki_snippets = "\n".join(lines)
+
     # Format raw results for the LLM to structure
     competitor_snippets = "\n".join(
         f"- {r['title']}: {r['description']} ({r['url']})" for r in all_competitors[:25]
@@ -336,6 +553,9 @@ def search(parsed: dict) -> dict:
 
 COMPETITOR & COMPANY RESULTS (from Crunchbase + web):
 {competitor_snippets}
+
+STRUCTURED COMPANY DATA (from Wikipedia + Wikidata — verified facts):
+{wiki_snippets if wiki_snippets else "(no structured data found)"}
 
 MARKET SIZE & RESEARCH REPORTS:
 {market_snippets}
@@ -372,9 +592,10 @@ Based on these REAL search results, extract structured data. Return ONLY valid J
 RULES:
 - Extract 10-15 REAL companies from the search results. Use actual names and URLs.
 - Do NOT invent companies that aren't in the search results.
+- Use the STRUCTURED COMPANY DATA (Wikipedia/Wikidata) for accurate founding years, employee counts, and revenue. Prefer these over guesses.
 - For market size and growth, extract actual numbers from the research report snippets.
 - For user pain points, extract real complaints from the community/review results.
-- If a data point isn't in the search results, set it to null — do not guess."""
+- If a data point isn't in the search results or structured data, set it to null — do not guess."""
 
     response = call_llm(prompt, model_id=MODEL_ID_PARSE, max_tokens=2048, temperature=0.1)
     try:
@@ -389,6 +610,7 @@ RULES:
             "market_age_years": _safe_number(result.get("market_age_years"), default=5),
             "trends": result.get("trends", []),
             "user_pain_points": result.get("user_pain_points", []),
+            "wiki_enrichment": wiki_enrichment,
         }
     except json.JSONDecodeError:
         logger.warning("Failed to parse structured search results, falling back to LLM-only")
@@ -497,18 +719,23 @@ Return ONLY valid JSON with this exact structure:
     }}
   ],
   "positioning": "One sentence on how a new entrant should differentiate",
-  "has_public_companies": true/false,
-  "has_series_c_plus": true/false,
   "dominant_segment": "enterprise | mid_market | smb | consumer | mixed",
-  "funding_concentration_high": true/false (are top 3 players holding most of the market?),
-  "rising_cac_signals": true/false (are there signs of rising customer acquisition costs?)
+  "funding_maturity": 1-10 integer. 1=all bootstrapped/seed, 5=mix of seed and series A/B, 8=multiple series C+ players, 10=public companies dominate with high concentration,
+  "market_consolidation": 1-10 integer. 1=highly fragmented (many small players, no clear leader), 5=moderately consolidated, 10=oligopoly (top 3 hold >70% share),
+  "switching_cost": 1-10 integer. 1=trivial to switch (commodity), 5=moderate friction, 10=extreme lock-in (data, integrations, contracts),
+  "cac_pressure": 1-10 integer. 1=organic/cheap acquisition channels available, 5=moderate paid acquisition needed, 10=extremely expensive to acquire customers (saturated ad channels, long sales cycles),
+  "innovation_velocity": 1-10 integer. 1=stagnant market (incumbents not shipping), 5=moderate pace, 10=rapid innovation (hard to keep up),
+  "estimated_tam_usd": number or null (total addressable market in USD, best estimate from competitor data),
+  "estimated_growth_pct": number or null (estimated YoY market growth percentage)
 }}
 
 RULES:
 - Only include competitors from the provided list. Do NOT invent new ones.
 - Be honest about strengths and weaknesses. No generic filler.
 - market_gaps should identify 2-4 genuinely underserved areas.
-- Mark uncertainty explicitly — if you don't know a funding stage, say "unknown"."""
+- Mark uncertainty explicitly — if you don't know a funding stage, say "unknown".
+- For the 1-10 scores: use the FULL range. A 3 and a 7 should feel meaningfully different. Don't default to 5.
+- estimated_tam_usd and estimated_growth_pct: infer from competitor scale, funding levels, and market context. Set to null ONLY if you truly cannot estimate."""
 
     response = call_llm(prompt, model_id=MODEL_ID_ANALYSE, max_tokens=2048, temperature=0.3)
     try:
@@ -518,11 +745,14 @@ RULES:
             "competitor_analysis": [],
             "market_gaps": [],
             "positioning": "Differentiation opportunity exists.",
-            "has_public_companies": False,
-            "has_series_c_plus": False,
             "dominant_segment": "mixed",
-            "funding_concentration_high": False,
-            "rising_cac_signals": False,
+            "funding_maturity": 5,
+            "market_consolidation": 5,
+            "switching_cost": 5,
+            "cac_pressure": 5,
+            "innovation_velocity": 5,
+            "estimated_tam_usd": None,
+            "estimated_growth_pct": None,
         }
 
 
@@ -568,127 +798,150 @@ def _safe_number(val, default=None) -> float | None:
 
 
 def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
-    """Compute saturation, difficulty, opportunity scores using the design-doc algorithm.
+    """Compute saturation, difficulty, opportunity scores.
 
-    Uses continuous scaling where possible to produce varied, data-sensitive
-    scores instead of collapsing into a handful of fixed buckets.
+    Uses 1-10 gradient signals from the analyse stage instead of binary booleans.
+    This produces a continuous distribution of scores across the 0-100 range.
     """
 
     competitors = analysis.get("competitor_analysis", [])
     num_direct = len(competitors)
     num_gaps = len(analysis.get("market_gaps", []))
+
+    # Market age: prefer search data, fall back to parse estimate
     market_age = _safe_number(
         search_results.get("market_age_years"), default=None
     ) or _safe_number(parsed.get("estimated_market_age_years"), default=5)
-    tam_usd = _safe_number(search_results.get("market_size_tam_usd"))
-    growth_pct = _safe_number(search_results.get("market_growth_rate_pct"))
+
+    # TAM/growth: prefer search data, fall back to analyse estimates
+    tam_usd = _safe_number(search_results.get("market_size_tam_usd")) or _safe_number(analysis.get("estimated_tam_usd"))
+    growth_pct = _safe_number(search_results.get("market_growth_rate_pct")) or _safe_number(analysis.get("estimated_growth_pct"))
+
     complexity = parsed.get("estimated_complexity", "medium")
     business_model = parsed.get("business_model", "other")
     dominant_segment = analysis.get("dominant_segment", "mixed")
-    has_public = analysis.get("has_public_companies", False)
-    has_series_c = analysis.get("has_series_c_plus", False)
-    funding_concentrated = analysis.get("funding_concentration_high", False)
-    rising_cac = analysis.get("rising_cac_signals", False)
     industry = (parsed.get("industry") or "").lower()
 
+    # 1-10 gradient signals from analyse (with sane defaults)
+    funding_maturity = max(1, min(10, int(_safe_number(analysis.get("funding_maturity"), default=5))))
+    market_consolidation = max(1, min(10, int(_safe_number(analysis.get("market_consolidation"), default=5))))
+    switching_cost = max(1, min(10, int(_safe_number(analysis.get("switching_cost"), default=5))))
+    cac_pressure = max(1, min(10, int(_safe_number(analysis.get("cac_pressure"), default=5))))
+    innovation_velocity = max(1, min(10, int(_safe_number(analysis.get("innovation_velocity"), default=5))))
+
+    # Backward compat: if old boolean signals exist, convert them to gradient
+    if "has_public_companies" in analysis and "funding_maturity" not in analysis:
+        has_public = analysis.get("has_public_companies", False)
+        has_series_c = analysis.get("has_series_c_plus", False)
+        funding_concentrated = analysis.get("funding_concentration_high", False)
+        rising_cac = analysis.get("rising_cac_signals", False)
+        funding_maturity = 10 if (has_public and funding_concentrated) else 8 if has_public else 6 if has_series_c else 3
+        market_consolidation = 8 if funding_concentrated else 4
+        cac_pressure = 7 if rising_cac else 3
+
     # ── Saturation Score (0-100) ──
-    # Continuous competitor scaling: 0 competitors → 0, 16+ → 40 (linear, capped)
-    competitor_count_factor = min(40.0, num_direct * (40.0 / 16.0))
-
-    # Funding maturity: continuous 0-25 based on signals
-    funding_factor = 3.0
-    if funding_concentrated and has_public:
-        funding_factor = 25.0
-    elif funding_concentrated:
-        funding_factor = 22.0
-    elif has_public:
-        funding_factor = 16.0
-    elif has_series_c:
-        funding_factor = 11.0
-
-    # Market age: continuous 0-15 (young markets = low saturation)
-    if market_age is not None and market_age > 0:
-        age_factor = min(15.0, market_age * 1.0)  # 1 point per year, cap at 15
+    # Competitor count: logarithmic scaling (diminishing returns after 8)
+    import math
+    if num_direct > 0:
+        # 1→5, 4→14, 8→22, 12→27, 16→30 (log curve, max 30)
+        competitor_factor = min(30.0, 5.0 * math.log2(num_direct + 1))
     else:
-        age_factor = 3.0  # unknown age gets a small default
+        competitor_factor = 0.0
 
-    cac_factor = 7.0 if rising_cac else 0.0
+    # Funding maturity: 1-10 → 0-20 (linear)
+    funding_factor = (funding_maturity - 1) * (20.0 / 9.0)
 
-    # Base is lower (12) so the other factors have more room to differentiate
-    saturation_raw = 12.0 + competitor_count_factor + funding_factor + age_factor + cac_factor
+    # Market consolidation: 1-10 → 0-18 (linear)
+    consolidation_factor = (market_consolidation - 1) * (18.0 / 9.0)
+
+    # Market age: continuous 0-12 (1 point per year, cap at 12)
+    if market_age is not None and market_age > 0:
+        age_factor = min(12.0, market_age * 1.0)
+    else:
+        age_factor = 4.0
+
+    # CAC pressure: 1-10 → 0-10
+    cac_factor = (cac_pressure - 1) * (10.0 / 9.0)
+
+    # Innovation velocity adds to saturation (fast-moving = harder to enter)
+    innovation_factor = (innovation_velocity - 1) * (10.0 / 9.0)
+
+    saturation_raw = competitor_factor + funding_factor + consolidation_factor + age_factor + cac_factor + innovation_factor
     saturation = _clamp(saturation_raw)
 
     # ── Difficulty Score (0-100) ──
-    complexity_map = {"high": 25, "medium": 15, "low": 5}
-    technical_score = complexity_map.get(complexity, 15)
+    complexity_map = {"high": 22, "medium": 13, "low": 5}
+    technical_score = complexity_map.get(complexity, 13)
 
     capital_map = {
-        "hardware": 25, "b2b_saas": 18, "marketplace": 20,
-        "b2c_saas": 10, "ecommerce": 8, "service": 5, "other": 12,
+        "hardware": 22, "b2b_saas": 16, "marketplace": 18,
+        "b2c_saas": 9, "ecommerce": 7, "service": 4, "other": 10,
     }
-    capital_score = capital_map.get(business_model, 12)
+    capital_score = capital_map.get(business_model, 10)
 
-    segment_map = {"enterprise": 20, "mid_market": 12, "smb": 5, "prosumer": 2, "consumer": 0, "mixed": 8}
+    segment_map = {"enterprise": 18, "mid_market": 11, "smb": 5, "prosumer": 2, "consumer": 0, "mixed": 7}
     sales_cycle_score = segment_map.get(dominant_segment, 5)
 
     regulated_industries = {"healthcare", "fintech", "finance", "legal", "edtech", "insurance", "banking"}
     semi_regulated = {"proptech", "foodtech", "transport", "logistics", "real estate"}
     if any(r in industry for r in regulated_industries):
-        regulatory_score = 20
+        regulatory_score = 18
     elif any(r in industry for r in semi_regulated):
-        regulatory_score = 10
+        regulatory_score = 9
     else:
         regulatory_score = 0
 
-    brand_trust_score = 0.0
-    if has_public and funding_concentrated:
-        brand_trust_score = 12.0
-    elif has_public:
-        brand_trust_score = 8.0
-    elif has_series_c:
-        brand_trust_score = 4.0
+    # Switching cost contributes to difficulty (high lock-in = hard to steal customers)
+    switching_factor = (switching_cost - 1) * (15.0 / 9.0)
 
-    difficulty = _clamp(technical_score + capital_score + sales_cycle_score + regulatory_score + brand_trust_score)
+    # Funding maturity also makes it harder (well-funded incumbents)
+    incumbent_strength = (funding_maturity - 1) * (10.0 / 9.0)
+
+    difficulty = _clamp(technical_score + capital_score + sales_cycle_score + regulatory_score + switching_factor + incumbent_strength)
 
     # ── Opportunity Score (0-100) ──
-    # Continuous market size scoring using log scale
+    # Market size: log scale
     if tam_usd is not None and tam_usd > 0:
-        import math
-        # log10(100M)=8, log10(1B)=9, log10(10B)=10, log10(100B)=11
         log_tam = math.log10(tam_usd)
-        # Map log10 range [6..12] → score [2..30]
-        market_size_score = min(30.0, max(0.0, (log_tam - 6.0) * 5.0))
+        market_size_score = min(25.0, max(0.0, (log_tam - 6.0) * (25.0 / 6.0)))
     else:
-        market_size_score = 0.0
+        # No TAM data: give a moderate default instead of 0 (absence of data ≠ small market)
+        market_size_score = 8.0
 
-    # Continuous growth scoring
+    # Growth: continuous
     if growth_pct is not None and growth_pct > 0:
-        # 5% → 4, 15% → 12, 25% → 20, 40%+ → 23 (diminishing returns)
-        growth_score = min(28.0, growth_pct * 0.8 if growth_pct <= 25 else 20.0 + (growth_pct - 25) * 0.2)
+        growth_score = min(22.0, growth_pct * 0.7 if growth_pct <= 25 else 17.5 + (growth_pct - 25) * 0.15)
     else:
-        growth_score = 0.0
+        growth_score = 5.0  # moderate default
 
-    # Gap indicator: check if competitor weaknesses suggest common buyer complaints
+    # Gap signals
     weakness_keywords = {"expensive", "complex", "no smb", "limited", "outdated", "slow", "poor",
                          "lacking", "missing", "frustrating", "clunky", "overpriced", "rigid"}
     weaknesses_text = " ".join(
         (c.get("weakness") or "").lower() for c in competitors
     )
-    # Also factor in real user pain points from search
     pain_points = search_results.get("user_pain_points", [])
     pain_text = " ".join(p.lower() for p in pain_points if isinstance(p, str))
     combined_complaints = weaknesses_text + " " + pain_text
     complaint_matches = sum(1 for kw in weakness_keywords if kw in combined_complaints)
     num_pain_points = len(pain_points)
 
-    # Continuous gap scoring based on number of signals
     gap_signals = num_gaps + num_pain_points + complaint_matches
-    gap_score = min(30.0, gap_signals * 3.5)
+    gap_score = min(25.0, gap_signals * 3.0)
 
-    saturation_penalty = saturation * 0.18
-    difficulty_penalty = difficulty * 0.12
+    # Low consolidation = more room for new entrants (inverse of consolidation)
+    fragmentation_bonus = max(0.0, (6 - market_consolidation)) * 2.5  # 0-12.5
 
-    opportunity = _clamp(market_size_score + growth_score + gap_score - saturation_penalty - difficulty_penalty)
+    # Low switching cost = easier to win customers
+    low_switching_bonus = max(0.0, (6 - switching_cost)) * 2.0  # 0-10
+
+    saturation_penalty = saturation * 0.15
+    difficulty_penalty = difficulty * 0.10
+
+    opportunity_raw = (market_size_score + growth_score + gap_score
+                       + fragmentation_bonus + low_switching_bonus
+                       - saturation_penalty - difficulty_penalty)
+    opportunity = _clamp(opportunity_raw)
 
     logger.info(
         "Score breakdown",
@@ -698,16 +951,23 @@ def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
             "tam_usd": tam_usd,
             "growth_pct": growth_pct,
             "market_age": market_age,
+            "funding_maturity": funding_maturity,
+            "market_consolidation": market_consolidation,
+            "switching_cost": switching_cost,
+            "cac_pressure": cac_pressure,
+            "innovation_velocity": innovation_velocity,
             "saturation_raw": round(saturation_raw, 1),
             "saturation": saturation,
             "difficulty": difficulty,
-            "opportunity_raw": round(market_size_score + growth_score + gap_score - saturation_penalty - difficulty_penalty, 1),
+            "opportunity_raw": round(opportunity_raw, 1),
             "opportunity": opportunity,
+            "competitor_factor": round(competitor_factor, 1),
+            "funding_factor": round(funding_factor, 1),
+            "consolidation_factor": round(consolidation_factor, 1),
             "market_size_score": round(market_size_score, 1),
             "growth_score": round(growth_score, 1),
             "gap_score": round(gap_score, 1),
-            "gap_signals": gap_signals,
-            "complaint_matches": complaint_matches,
+            "fragmentation_bonus": round(fragmentation_bonus, 1),
         },
     )
 
