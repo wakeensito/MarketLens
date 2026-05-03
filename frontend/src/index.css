@@ -36,6 +36,8 @@
 
   /* Logo accent — warm amber, applied ONLY to the "Lens" wordmark */
   --logo-accent:     oklch(60% 0.17 47);
+  --logo-accent-mid: oklch(65% 0.16 50);
+  --logo-accent-ink: oklch(48% 0.15 47);
 
   /* plinths wordmark — cream title on dark surfaces (e.g. sign-in hero); light UI uses --text via scoped rules */
   --brand-plinths-title: #f2ede6;
@@ -1128,7 +1130,7 @@ html { scroll-behavior: smooth; }
 .brand-wordmark-inner {
   display: inline-flex;
   align-items: center;
-  font-family: 'Syne', var(--font-body), sans-serif;
+  font-family: Syne, var(--font-body), sans-serif;
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1;
@@ -1612,6 +1614,14 @@ html { scroll-behavior: smooth; }
   border-color: var(--accent-border);
   color: var(--accent);
   background: var(--accent-light);
+}
+
+.landing-pill:focus-visible {
+  outline: none;
+  border-color: var(--border-strong);
+  color: var(--accent);
+  background: var(--accent-light);
+  box-shadow: 0 0 0 2px var(--border-focus);
 }
 
 /* ── Pipeline Tracker ─────────────────────────────────── */
@@ -3086,10 +3096,10 @@ html { scroll-behavior: smooth; }
   height: 3px;
   background: linear-gradient(
     90deg,
-    oklch(60% 0.17 47 / 0) 0%,
-    #c9965a 30%,
-    oklch(65% 0.16 50) 70%,
-    oklch(60% 0.17 47 / 0) 100%
+    transparent 0%,
+    var(--logo-accent) 30%,
+    var(--logo-accent-mid) 70%,
+    transparent 100%
   );
   border-radius: 20px 20px 0 0;
 }
@@ -3136,20 +3146,20 @@ html { scroll-behavior: smooth; }
   gap: 7px;
   padding: 4px 12px 4px 9px;
   border-radius: 99px;
-  background: oklch(60% 0.17 47 / 0.07);
-  border: 1px solid oklch(60% 0.17 47 / 0.18);
+  background: color-mix(in oklch, var(--logo-accent) 7%, transparent);
+  border: 1px solid color-mix(in oklch, var(--logo-accent) 18%, transparent);
   font-family: var(--font-body);
   font-size: 11.5px;
   font-weight: 500;
   letter-spacing: 0.01em;
-  color: oklch(48% 0.15 47);
+  color: var(--logo-accent-ink);
 }
 
 .signin-modal-badge-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #c9965a;
+  background: var(--logo-accent);
   flex-shrink: 0;
 }
 
@@ -3214,8 +3224,8 @@ html { scroll-behavior: smooth; }
 
 .signin-modal-input:focus {
   outline: none;
-  border-color: oklch(55% 0.14 47);
-  box-shadow: 0 0 0 3px oklch(60% 0.17 47 / 0.2);
+  border-color: color-mix(in oklch, var(--logo-accent) 75%, var(--border-strong));
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--logo-accent) 20%, transparent);
 }
 
 .signin-modal-input:disabled {
@@ -3316,14 +3326,14 @@ html { scroll-behavior: smooth; }
 
 /* Google — warm amber primary */
 .signin-modal-btn--google {
-  background: #c9965a;
-  color: #fff;
-  box-shadow: 0 2px 10px oklch(60% 0.17 47 / 0.28);
+  background: var(--logo-accent);
+  color: var(--text-inverse);
+  box-shadow: 0 2px 10px color-mix(in oklch, var(--logo-accent) 28%, transparent);
 }
 
 .signin-modal-btn--google:hover {
-  background: oklch(57% 0.17 47);
-  box-shadow: 0 4px 18px oklch(60% 0.17 47 / 0.35);
+  background: color-mix(in oklch, var(--logo-accent) 88%, black);
+  box-shadow: 0 4px 18px color-mix(in oklch, var(--logo-accent) 35%, transparent);
 }
 
 /* GitHub — dark ink */
@@ -3331,12 +3341,12 @@ html { scroll-behavior: smooth; }
   background: var(--accent);
   color: var(--text-inverse);
   border-color: var(--accent);
-  box-shadow: 0 2px 8px oklch(13% 0.008 245 / 0.12);
+  box-shadow: 0 2px 8px color-mix(in oklch, var(--accent) 12%, transparent);
 }
 
 .signin-modal-btn--github:hover {
   background: var(--accent-hover);
-  box-shadow: 0 4px 14px oklch(13% 0.008 245 / 0.18);
+  box-shadow: 0 4px 14px color-mix(in oklch, var(--accent) 18%, transparent);
 }
 
 .signin-modal-btn-icon {
@@ -3378,7 +3388,7 @@ html { scroll-behavior: smooth; }
 }
 
 .signin-modal-legal a:hover {
-  color: oklch(48% 0.15 47);
+  color: var(--logo-accent-ink);
 }
 
 .signin-modal-legal-plain {

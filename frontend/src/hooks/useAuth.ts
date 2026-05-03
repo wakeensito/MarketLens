@@ -167,15 +167,19 @@ export function useAuth(): AuthState {
       if (!res.ok) throw new Error(`Could not continue (${res.status})`);
 
       const ct = res.headers.get('content-type');
+      let authChecked = false;
       if (ct?.includes('application/json')) {
         try {
           const data = (await res.json()) as { authenticated?: boolean };
-          if (data?.authenticated) await checkAuth();
+          if (data?.authenticated) {
+            await checkAuth();
+            authChecked = true;
+          }
         } catch {
           /* ignore malformed JSON */
         }
       }
-      await checkAuth();
+      if (!authChecked) await checkAuth();
     },
     [checkAuth],
   );

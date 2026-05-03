@@ -12,6 +12,7 @@ import { BrandWordmarkInner } from './components/BrandWordmark';
 import { useAnalysis } from './hooks/useAnalysis';
 import { useAuthContext } from './hooks/useAuth';
 import { EXAMPLE_QUERIES } from './mockData';
+import { landingEntryAnimate, landingEntryInitial } from './motion';
 
 const SPRING = { type: 'spring' as const, stiffness: 280, damping: 36 };
 
@@ -224,8 +225,8 @@ export default function App() {
           {!auth.isAuthenticated && (
             <motion.nav
               className="lnd-nav"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1, transition: { delay: 0.05, duration: 0.4, ease: 'easeOut' as const } }}
+              initial={landingEntryInitial}
+              animate={landingEntryAnimate(0.28)}
             >
               <div className="lnd-nav-right">
                 <button className="lnd-nav-pricing" onClick={() => setShowPricing(true)}>
@@ -285,8 +286,8 @@ export default function App() {
 
           <motion.div
             className="landing-examples"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1, transition: { delay: 0.18, duration: 0.35 } }}
+            initial={landingEntryInitial}
+            animate={landingEntryAnimate(0.18)}
           >
             <span className="landing-examples-label">Try:</span>
             {EXAMPLE_QUERIES.map(ex => (

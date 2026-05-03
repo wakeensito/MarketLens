@@ -1,9 +1,18 @@
-import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { PlinthsMark } from './BrandWordmark';
 import type { AuthState } from '../hooks/useAuth';
 import { LANDING_ENTRY_Y } from '../motion';
+
+const TABBABLE_SELECTOR =
+  'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function getTabbableIn(root: HTMLElement): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(TABBABLE_SELECTOR)).filter(
+    el => el.getAttribute('aria-hidden') !== 'true',
+  );
+}
 
 const SHOW_DEV_MOCK = import.meta.env.DEV && import.meta.env.VITE_USE_MOCK === 'true';
 
@@ -40,6 +49,8 @@ interface SignInModalProps {
 export default function SignInModal({ isOpen, onClose, auth, onShowPricing, variant = 'default' }: SignInModalProps) {
   const isSaveReport = variant === 'save-report';
   const backdropRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const emailInputRef = useRef<HTMLInputElement>(null);
   const emailFieldId = useId();
   const [emailBusy, setEmailBusy] = useState(false);
   const [emailErr, setEmailErr] = useState<string | null>(null);
@@ -62,6 +73,35 @@ export default function SignInModal({ isOpen, onClose, auth, onShowPricing, vari
     const t = window.setTimeout(() => closeModal(), 0);
     return () => clearTimeout(t);
   }, [auth.isAuthenticated, closeModal]);
+
+  useLayoutEffect(() => {
+    if (!isOpen) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const raf = requestAnimationFrame(() => {
+      emailInputRef.current?.focus();
+    });
+    return () => {
+      cancelAnimationFrame(raf);
+      previous?.focus({ preventScroll: true });
+    };
+  }, [isOpen]);
+
+  const handleDialogKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'Tab' || !dialogRef.current) return;
+    const list = getTabbableIn(dialogRef.current);
+    if (list.length === 0) return;
+    const first = list[0]!;
+    const last = list[list.length - 1]!;
+    if (e.shiftKey) {
+      if (document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      }
+    } else if (document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
 
   const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === backdropRef.current) closeModal();
@@ -100,15 +140,17 @@ export default function SignInModal({ isOpen, onClose, auth, onShowPricing, vari
             onClick={handleBackdropClick}
         >
           <motion.div
+            ref={dialogRef}
             className="signin-modal-card"
-            initial={{ opacity: 0, y: LANDING_ENTRY_Y }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: LANDING_ENTRY_Y }}
-            transition={{ duration: 0.35, ease: 'easeOut' as const }}
+            initial={{ opacity: 0, y: LANDING_ENTRY_Y, scale: 1 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: LANDING_ENTRY_Y, scale: 1 }}
+            transition={{ duration: 0.38, ease: 'easeOut' as const }}
             role="dialog"
             aria-modal="true"
             aria-label="Sign in to plinths"
             onClick={e => e.stopPropagation()}
+            onKeyDown={handleDialogKeyDown}
           >
             <button className="signin-modal-close" type="button" onClick={closeModal} aria-label="Close">
               <X size={14} strokeWidth={2.5} />
@@ -165,6 +207,7 @@ export default function SignInModal({ isOpen, onClose, auth, onShowPricing, vari
             <form className="signin-modal-email-form" onSubmit={handleEmailContinue} noValidate>
               <label className="signin-modal-label" htmlFor={emailFieldId}>Email</label>
               <input
+                ref={emailInputRef}
                 id={emailFieldId}
                 name="email"
                 type="email"
