@@ -35,12 +35,12 @@
   --signal-border:   oklch(36% 0.10 240 / 0.18);
 
   /* Logo accent — warm amber, applied ONLY to the "Lens" wordmark */
-  --logo-accent:     #c9965a;
-  --logo-accent-mid: #d4a46a;
-  --logo-accent-ink: #a37440;
+  --logo-accent:     oklch(68% 0.12 65);
+  --logo-accent-mid: oklch(73% 0.11 65);
+  --logo-accent-ink: oklch(57% 0.10 65);
 
   /* plinths wordmark — cream title on dark surfaces (e.g. sign-in hero); light UI uses --text via scoped rules */
-  --brand-plinths-title: #f2ede6;
+  --brand-plinths-title: oklch(95% 0.01 80);
 
   /* Micro-detail */
   --gloss:           oklch(100% 0 0 / 0.55);
@@ -105,10 +105,10 @@
   --signal-border:   oklch(66%   0.13  240 / 0.25);
 
   /* Logo accent — unchanged; amber reads beautifully on dark */
-  --logo-accent:     #c9965a;
+  --logo-accent:     oklch(68% 0.12 65);
 
   /* plinths wordmark title on dark surfaces */
-  --brand-plinths-title: #f2ede6;
+  --brand-plinths-title: oklch(95% 0.01 80);
 
   /* Micro-detail */
   --gloss:           oklch(100% 0 0 / 0.08);
@@ -138,28 +138,28 @@
   color-scheme: dark;
 
   /* Foundation — blended near-black scale */
-  --bg:              #0E0F10;   /* page canvas  */
-  --surface:         #1A1B1C;   /* cards, panels */
-  --surface-alt:     #212223;   /* elevated surface within card */
-  --surface-hover:   #2A2B2C;   /* hover state, input bg */
+  --bg:              oklch(8.5% 0.003 250);   /* page canvas  */
+  --surface:         oklch(12% 0.003 250);   /* cards, panels */
+  --surface-alt:     oklch(15% 0.003 250);   /* elevated surface within card */
+  --surface-hover:   oklch(19% 0.003 250);   /* hover state, input bg */
 
   /* Borders — whisper-quiet separators */
-  --border:          #2E2F31;   /* default divider */
-  --border-mid:      #3B3C3F;   /* slightly stronger */
-  --border-strong:   #4A4B4E;   /* emphasis */
-  --border-focus:    rgb(231 231 231 / 0.20);
+  --border:          oklch(22% 0.003 250);   /* default divider */
+  --border-mid:      oklch(27% 0.003 250);   /* slightly stronger */
+  --border-strong:   oklch(33% 0.003 250);   /* emphasis */
+  --border-focus:    oklch(92% 0.001 0 / 0.20);
 
   /* Text hierarchy */
-  --text:            #E7E7E7;   /* primary off-white */
-  --text-secondary:  #B8B8B8;   /* supporting */
-  --text-muted:      #8E8E8E;   /* metadata / disabled */
-  --text-inverse:    #0E0F10;
+  --text:            oklch(92% 0.001 0);   /* primary off-white */
+  --text-secondary:  oklch(76% 0.001 0);   /* supporting */
+  --text-muted:      oklch(61% 0.001 0);   /* metadata / disabled */
+  --text-inverse:    oklch(8.5% 0.003 250);
 
   /* Accent — off-white for all interactions */
-  --accent:          #E7E7E7;
-  --accent-light:    rgb(231 231 231 / 0.07);
-  --accent-border:   rgb(231 231 231 / 0.12);
-  --accent-hover:    #F2F2F2;
+  --accent:          oklch(92% 0.001 0);
+  --accent-light:    oklch(92% 0.001 0 / 0.07);
+  --accent-border:   oklch(92% 0.001 0 / 0.12);
+  --accent-hover:    oklch(96% 0.001 0);
 
   /* Signal — desaturated blue, readable on dark */
   --signal:          oklch(58%   0.07 240);
@@ -167,15 +167,15 @@
   --signal-border:   oklch(58%   0.07 240 / 0.20);
 
   /* Logo — amber is the one colour that carries across all three themes */
-  --logo-accent:     #c9965a;
-  --logo-accent-mid: #d4a46a;
-  --logo-accent-ink: #a37440;
+  --logo-accent:     oklch(68% 0.12 65);
+  --logo-accent-mid: oklch(73% 0.11 65);
+  --logo-accent-ink: oklch(57% 0.10 65);
 
   /* plinths wordmark title */
-  --brand-plinths-title: #E7E7E7;
+  --brand-plinths-title: oklch(92% 0.001 0);
 
   /* Micro-detail */
-  --gloss:           rgb(255 255 255 / 0.04);
+  --gloss:           oklch(100% 0 0 / 0.04);
   --warning-border:  oklch(70%   0.15 67 / 0.18);
 
   /* Semantic */
@@ -2258,7 +2258,7 @@ html { scroll-behavior: smooth; }
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: currentColor;
+  background: currentcolor;
   flex-shrink: 0;
 }
 .verdict-badge--open     { background: var(--success-light); color: var(--success); }
