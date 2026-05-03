@@ -33,9 +33,13 @@ export default function UpgradeModal({ isOpen, onClose, onViewPlans, variant = '
   // Tick the countdown while the modal is open so it doesn't go stale.
   useEffect(() => {
     if (!isOpen || !isRateLimit) return;
-    setResetIn(timeUntilReset());
-    const id = setInterval(() => setResetIn(timeUntilReset()), 60_000);
-    return () => clearInterval(id);
+    const tick = () => setResetIn(timeUntilReset());
+    const intervalId = window.setInterval(tick, 60_000);
+    const timeoutId = window.setTimeout(tick, 0);
+    return () => {
+      window.clearTimeout(timeoutId);
+      window.clearInterval(intervalId);
+    };
   }, [isOpen, isRateLimit]);
 
   // Trap focus + restore on close
