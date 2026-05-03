@@ -1,6 +1,26 @@
 const ENV_BASE = (import.meta.env.VITE_API_BASE_URL ?? '').trim();
 const BASE = ENV_BASE ? ENV_BASE.replace(/\/$/, '') : '';
 
+/**
+ * Thrown for any non-2xx response. Carries status + parsed body so callers
+ * can branch on specific error codes (e.g. rate-limit).
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code?: string;
+  readonly body?: unknown;
+  constructor(status: number, message: string, body?: unknown) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.body = body;
+    if (body && typeof body === 'object' && 'code' in body) {
+      const c = (body as { code: unknown }).code;
+      if (typeof c === 'string') this.code = c;
+    }
+  }
+}
+
 export interface BackendCompetitor {
   name: string;
   strength: string;
@@ -45,7 +65,7 @@ export interface ResultJson {
 export interface ApiReport {
   report_id: string;
   idea_text: string;
-  status: 'pending' | 'running' | 'complete' | 'failed';
+  status: 'pending' | 'running' | 'complete' | 'failed' | 'deleted';
   created_at: string;
   completed_at?: string;
   result_json?: ResultJson;
@@ -74,7 +94,14 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
       ...options,
       signal: controller.signal,
     });
-    if (!res.ok) throw new Error(`API ${res.status}`);
+    if (!res.ok) {
+      let body: unknown = null;
+      try { body = await res.json(); } catch { /* response body wasn't JSON */ }
+      const message = (body && typeof body === 'object' && 'error' in body && typeof (body as { error: unknown }).error === 'string')
+        ? (body as { error: string }).error
+        : `API ${res.status}`;
+      throw new ApiError(res.status, message, body);
+    }
     return res.json() as Promise<T>;
   } catch (e) {
     if (e instanceof Error && e.name === 'AbortError') {
@@ -98,7 +125,13 @@ export function getReport(report_id: string): Promise<ApiReport> {
 }
 
 export function listReports(): Promise<ApiReport[]> {
-  return request<{ reports: ApiReport[] }>('/api/reports').then(r => r.reports);
+  return request<{ reports: ApiReport[] }>('/api/reports').then(r =>
+    r.reports.filter(report => report.status !== 'deleted'),
+  );
+}
+
+export function deleteReport(report_id: string): Promise<{ message: string }> {
+  return request(`/api/reports/${report_id}`, { method: 'DELETE' });
 }
 
 export function exportReport(report_id: string): Promise<{ report_id: string; format: string; download_url: string }> {

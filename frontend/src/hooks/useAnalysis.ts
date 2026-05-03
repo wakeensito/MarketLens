@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { AppState, PipelineStage, MarketReport } from '../types';
 import { PIPELINE_STAGE_DEFS, TOTAL_PIPELINE_MS, MOCK_REPORT, MOCK_HISTORY } from '../mockData';
-import { createReport, getReport } from '../api';
+import { createReport, getReport, ApiError } from '../api';
 import { adaptReport } from '../adapter';
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
@@ -60,25 +60,40 @@ export interface AnalysisState {
   error:                 string | null;
   reportId:              string | null;
   finalizing:            boolean;
+  /** True when the daily free-report quota is exhausted. Drives the upgrade modal. */
+  rateLimited:           boolean;
   startAnalysis:         (q: string) => void;
   loadHistoricalReport:  (reportId: string) => void;
   handleReset:           () => void;
   handleRetry:           () => void;
   startNewChat:          () => void;
+  dismissRateLimit:      () => void;
 }
 
 export function useAnalysis(): AnalysisState {
-  const [screen,     setScreen]     = useState<AppState>('landing');
-  const [query,      setQuery]      = useState('');
-  const [stages,     setStages]     = useState<PipelineStage[]>(freshStages);
-  const [report,     setReport]     = useState<MarketReport | null>(null);
-  const [error,      setError]      = useState<string | null>(null);
-  const [reportId,   setReportId]   = useState<string | null>(null);
-  const [finalizing, setFinalizing] = useState(false);
+  const [screen,      setScreen]      = useState<AppState>('landing');
+  const [query,       setQuery]       = useState('');
+  const [stages,      setStages]      = useState<PipelineStage[]>(freshStages);
+  const [report,      setReport]      = useState<MarketReport | null>(null);
+  const [error,       setError]       = useState<string | null>(null);
+  const [reportId,    setReportId]    = useState<string | null>(null);
+  const [finalizing,  setFinalizing]  = useState(false);
+  const [rateLimited, setRateLimited] = useState(false);
 
-  const pollRef            = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pollStartRef       = useRef<number>(0);
+  const pollRef               = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const transitionTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollStartRef          = useRef<number>(0);
+  /** Snapshot of view state before startAnalysis mutated it — restored on rate-limit. */
+  const preAnalysisSnapshotRef = useRef<{
+    screen:      AppState;
+    query:       string;
+    stages:      PipelineStage[];
+    report:      MarketReport | null;
+    reportId:    string | null;
+    error:       string | null;
+    finalizing:  boolean;
+    rateLimited: boolean;
+  } | null>(null);
   // Incremented on every stopAll — async callbacks compare their captured value
   // against the current value to bail out if the analysis was cancelled mid-flight.
   const generationRef = useRef(0);
@@ -155,12 +170,18 @@ export function useAnalysis(): AnalysisState {
   const startAnalysis = useCallback((q: string) => {
     stopAll();
     const gen = generationRef.current;
+    // Capture the full pre-analysis view so a rate-limit can restore the
+    // user's prior report/query, not just the screen.
+    preAnalysisSnapshotRef.current = {
+      screen, query, stages, report, reportId, error, finalizing, rateLimited,
+    };
     setQuery(q);
     setStages(deriveStages(freshStages(), undefined, false));
     setReport(null);
     setError(null);
     setReportId(null);
     setFinalizing(false);
+    setRateLimited(false);
     setScreen('analysis');
 
     if (USE_MOCK) {
@@ -174,17 +195,38 @@ export function useAnalysis(): AnalysisState {
       createReport(q)
         .then(data => {
           if (generationRef.current !== gen) return;
+          preAnalysisSnapshotRef.current = null;
           setReportId(data.report_id);
           startPolling(data.report_id);
         })
-        .catch(() => {
+        .catch((err: unknown) => {
           if (generationRef.current !== gen) return;
           stopAll();
           setFinalizing(false);
-          setError('Failed to start analysis. Please try again.');
+          // Rate-limit triggers the upgrade modal; everything else falls
+          // back to the inline retry banner.
+          if (err instanceof ApiError && (err.status === 429 || err.code === 'RATE_LIMITED')) {
+            // Restore the full snapshot so the modal sits over the user's
+            // prior context (report, query, stages), not an empty tracker.
+            const snap = preAnalysisSnapshotRef.current;
+            if (snap) {
+              const restoreScreen = snap.screen === 'analysis' ? 'workspace-empty' : snap.screen;
+              setQuery(snap.query);
+              setStages(snap.stages);
+              setReport(snap.report);
+              setReportId(snap.reportId);
+              setError(snap.error);
+              setFinalizing(snap.finalizing);
+              setScreen(restoreScreen);
+            }
+            setRateLimited(true);
+          } else {
+            setError('Failed to start analysis. Please try again.');
+          }
+          preAnalysisSnapshotRef.current = null;
         });
     }
-  }, [stopAll, startPolling, showReport]);
+  }, [screen, query, stages, report, reportId, error, finalizing, rateLimited, stopAll, startPolling, showReport]);
 
   const loadHistoricalReport = useCallback((id: string) => {
     stopAll();
@@ -250,10 +292,13 @@ export function useAnalysis(): AnalysisState {
     if (query) startAnalysis(query);
   }, [query, startAnalysis]);
 
+  const dismissRateLimit = useCallback(() => setRateLimited(false), []);
+
   useEffect(() => () => stopAll(), [stopAll]);
 
   return {
-    screen, query, stages, report, error, reportId, finalizing,
+    screen, query, stages, report, error, reportId, finalizing, rateLimited,
     startAnalysis, loadHistoricalReport, handleReset, handleRetry, startNewChat,
+    dismissRateLimit,
   };
 }

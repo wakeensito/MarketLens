@@ -27,8 +27,9 @@ import requests as http_requests
 from jwt import PyJWKClient
 
 from aws_lambda_powertools import Logger, Tracer
-from aws_lambda_powertools.event_handler import APIGatewayRestResolver
+from aws_lambda_powertools.event_handler import APIGatewayRestResolver, Response
 from aws_lambda_powertools.logging import correlation_paths
+from aws_lambda_powertools.shared.cookies import Cookie, SameSite
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
 logger = Logger()
@@ -68,6 +69,10 @@ STATE_COOKIE_MAX_AGE = 600         # 10 minutes (OAuth state CSRF)
 # DynamoDB for user records
 dynamodb = boto3.resource("dynamodb")
 reports_table = dynamodb.Table(os.environ["REPORTS_TABLE"])
+# Low-level client for transact_write_items — the resource's meta.client
+# auto-serializes Python natives, which would double-wrap our pre-serialized
+# AttributeValue dicts.
+dynamodb_client = boto3.client("dynamodb")
 
 # JWKS client (cached in Lambda execution context)
 _jwks_client = None
@@ -80,23 +85,37 @@ def _get_jwks_client():
     return _jwks_client
 
 
-def _set_cookie(name: str, value: str, max_age: int, http_only: bool = True, samesite: str = "Strict") -> str:
-    """Build a Set-Cookie header value."""
-    parts = [
-        f"{name}={value}",
-        f"Max-Age={max_age}",
-        "Path=/",
-        "Secure",
-        f"SameSite={samesite}",
-    ]
-    if http_only:
-        parts.append("HttpOnly")
-    return "; ".join(parts)
+_SAMESITE_MAP = {
+    "Strict": SameSite.STRICT_MODE,
+    "Lax": SameSite.LAX_MODE,
+    "None": SameSite.NONE_MODE,
+}
 
 
-def _clear_cookie(name: str, samesite: str = "Strict") -> str:
-    """Build a Set-Cookie header that clears a cookie."""
-    return f"{name}=; Max-Age=0; Path=/; Secure; SameSite={samesite}; HttpOnly"
+def _set_cookie(name: str, value: str, max_age: int, http_only: bool = True, samesite: str = "Strict") -> Cookie:
+    """Build a Cookie object that Powertools' Response will serialize as Set-Cookie."""
+    return Cookie(
+        name=name,
+        value=value,
+        path="/",
+        secure=True,
+        http_only=http_only,
+        max_age=max_age,
+        same_site=_SAMESITE_MAP.get(samesite, SameSite.STRICT_MODE),
+    )
+
+
+def _clear_cookie(name: str, samesite: str = "Strict") -> Cookie:
+    """Build a Cookie object that clears a cookie (Max-Age=0)."""
+    return Cookie(
+        name=name,
+        value="",
+        path="/",
+        secure=True,
+        http_only=True,
+        max_age=0,
+        same_site=_SAMESITE_MAP.get(samesite, SameSite.STRICT_MODE),
+    )
 
 
 def _parse_cookies(cookie_header: str) -> dict:
@@ -112,11 +131,31 @@ def _parse_cookies(cookie_header: str) -> dict:
     return cookies
 
 
-def _decode_and_verify_token(token: str) -> dict:
-    """Decode and validate a Cognito token with full verification."""
+def _decode_and_verify_token(token: str, token_use: str = "id") -> dict:
+    """Decode and validate a Cognito token with full verification.
+
+    Cognito ID tokens carry an `aud` claim; access tokens do not — they carry
+    `client_id` instead. Pass token_use="access" for access tokens so we
+    validate `client_id` and skip the audience check.
+    """
     jwks_client = _get_jwks_client()
     signing_key = jwks_client.get_signing_key_from_jwt(token)
-    return jwt.decode(
+
+    if token_use == "access":
+        claims = jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["RS256"],
+            issuer=EXPECTED_ISSUER,
+            options={"verify_exp": True, "verify_aud": False},
+        )
+        if claims.get("token_use") != "access":
+            raise jwt.InvalidTokenError("Expected access token")
+        if claims.get("client_id") != CLIENT_ID:
+            raise jwt.InvalidTokenError("client_id mismatch")
+        return claims
+
+    claims = jwt.decode(
         token,
         signing_key.key,
         algorithms=["RS256"],
@@ -124,6 +163,9 @@ def _decode_and_verify_token(token: str) -> dict:
         issuer=EXPECTED_ISSUER,
         options={"verify_exp": True},
     )
+    if claims.get("token_use") != "id":
+        raise jwt.InvalidTokenError("Expected ID token")
+    return claims
 
 
 def _ensure_user_record(sub: str, email: str, name: str) -> dict:
@@ -171,8 +213,7 @@ def _ensure_user_record(sub: str, email: str, name: str) -> dict:
     }
 
     try:
-        client = reports_table.meta.client
-        client.transact_write_items(
+        dynamodb_client.transact_write_items(
             TransactItems=[
                 {
                     "Put": {
@@ -192,7 +233,7 @@ def _ensure_user_record(sub: str, email: str, name: str) -> dict:
         )
         logger.info("New user created", extra={"user_id": sub, "org_id": org_id})
         return user_item
-    except client.exceptions.TransactionCanceledException:
+    except dynamodb_client.exceptions.TransactionCanceledException:
         # Race condition: another concurrent login already created the user.
         # ConsistentRead ensures we see the item written by the winning transaction.
         result = reports_table.get_item(Key={"pk": user_pk, "sk": user_pk}, ConsistentRead=True)
@@ -398,19 +439,16 @@ def verify():
     except Exception as e:
         logger.error("User record creation failed", extra={"error": str(e), "sub": sub})
 
-    # Set cookies
-    response_cookies = [
-        _set_cookie("ml_access", access_token, ACCESS_TOKEN_MAX_AGE),
-        _set_cookie("ml_refresh", refresh_token, REFRESH_TOKEN_MAX_AGE),
-        _set_cookie("ml_logged_in", "1", REFRESH_TOKEN_MAX_AGE, http_only=False),
-    ]
-
-    return {
-        "statusCode": 200,
-        "headers": {"Content-Type": "application/json"},
-        "multiValueHeaders": {"Set-Cookie": response_cookies},
-        "body": json.dumps({"status": "authenticated", "email": email}),
-    }
+    return Response(
+        status_code=200,
+        content_type="application/json",
+        body=json.dumps({"status": "authenticated", "email": email}),
+        cookies=[
+            _set_cookie("ml_access", access_token, ACCESS_TOKEN_MAX_AGE),
+            _set_cookie("ml_refresh", refresh_token, REFRESH_TOKEN_MAX_AGE),
+            _set_cookie("ml_logged_in", "1", REFRESH_TOKEN_MAX_AGE, http_only=False),
+        ],
+    )
 
 
 @app.get("/login")
@@ -427,14 +465,12 @@ def login():
         "state": state,
     })
 
-    state_cookie = _set_cookie("ml_oauth_state", state, STATE_COOKIE_MAX_AGE, samesite="Lax")
-
-    return {
-        "statusCode": 302,
-        "headers": {"Location": f"{AUTHORIZE_ENDPOINT}?{params}"},
-        "multiValueHeaders": {"Set-Cookie": [state_cookie]},
-        "body": "",
-    }
+    return Response(
+        status_code=302,
+        body="",
+        headers={"Location": f"{AUTHORIZE_ENDPOINT}?{params}"},
+        cookies=[_set_cookie("ml_oauth_state", state, STATE_COOKIE_MAX_AGE, samesite="Lax")],
+    )
 
 
 @app.get("/callback")
@@ -513,20 +549,17 @@ def callback():
     except Exception as e:
         logger.error("User record creation failed", extra={"error": str(e), "sub": sub})
 
-    # Set cookies and redirect to app (clear the state cookie)
-    response_cookies = [
-        _set_cookie("ml_access", access_token, ACCESS_TOKEN_MAX_AGE),
-        _set_cookie("ml_refresh", refresh_token, REFRESH_TOKEN_MAX_AGE),
-        _set_cookie("ml_logged_in", "1", REFRESH_TOKEN_MAX_AGE, http_only=False),
-        _clear_cookie("ml_oauth_state", samesite="Lax"),
-    ]
-
-    return {
-        "statusCode": 302,
-        "headers": {"Location": _get_app_url()},
-        "multiValueHeaders": {"Set-Cookie": response_cookies},
-        "body": "",
-    }
+    return Response(
+        status_code=302,
+        body="",
+        headers={"Location": _get_app_url()},
+        cookies=[
+            _set_cookie("ml_access", access_token, ACCESS_TOKEN_MAX_AGE),
+            _set_cookie("ml_refresh", refresh_token, REFRESH_TOKEN_MAX_AGE),
+            _set_cookie("ml_logged_in", "1", REFRESH_TOKEN_MAX_AGE, http_only=False),
+            _clear_cookie("ml_oauth_state", samesite="Lax"),
+        ],
+    )
 
 
 @app.post("/refresh")
@@ -562,17 +595,15 @@ def refresh():
     if not new_access:
         return {"error": "Refresh failed"}, 401
 
-    set_cookies = [
-        _set_cookie("ml_access", new_access, ACCESS_TOKEN_MAX_AGE),
-        _set_cookie("ml_logged_in", "1", REFRESH_TOKEN_MAX_AGE, http_only=False),
-    ]
-
-    return {
-        "statusCode": 200,
-        "headers": {"Content-Type": "application/json"},
-        "multiValueHeaders": {"Set-Cookie": set_cookies},
-        "body": json.dumps({"status": "refreshed"}),
-    }
+    return Response(
+        status_code=200,
+        content_type="application/json",
+        body=json.dumps({"status": "refreshed"}),
+        cookies=[
+            _set_cookie("ml_access", new_access, ACCESS_TOKEN_MAX_AGE),
+            _set_cookie("ml_logged_in", "1", REFRESH_TOKEN_MAX_AGE, http_only=False),
+        ],
+    )
 
 
 @app.post("/logout")
@@ -594,18 +625,16 @@ def logout():
         except Exception as e:
             logger.warning("Token revocation failed", extra={"error": str(e)})
 
-    clear_cookies = [
-        _clear_cookie("ml_access"),
-        _clear_cookie("ml_refresh"),
-        _clear_cookie("ml_logged_in"),
-    ]
-
-    return {
-        "statusCode": 200,
-        "headers": {"Content-Type": "application/json"},
-        "multiValueHeaders": {"Set-Cookie": clear_cookies},
-        "body": json.dumps({"status": "logged_out"}),
-    }
+    return Response(
+        status_code=200,
+        content_type="application/json",
+        body=json.dumps({"status": "logged_out"}),
+        cookies=[
+            _clear_cookie("ml_access"),
+            _clear_cookie("ml_refresh"),
+            _clear_cookie("ml_logged_in"),
+        ],
+    )
 
 
 @app.get("/me")
@@ -620,9 +649,10 @@ def me():
         return {"authenticated": False}, 200
 
     try:
-        claims = _decode_and_verify_token(access_token)
+        claims = _decode_and_verify_token(access_token, token_use="access")
         sub = claims.get("sub", "")
-    except Exception:
+    except Exception as e:
+        logger.warning("Access token validation failed", extra={"error": str(e)})
         return {"authenticated": False}, 200
 
     try:
@@ -649,15 +679,15 @@ def me():
         return {"authenticated": False}, 200
 
 
-def _redirect_with_error(message: str) -> dict:
+def _redirect_with_error(message: str) -> Response:
     """Redirect to frontend with error query param."""
     encoded = urllib.parse.quote(message)
     app_url = _get_app_url().rstrip("/")
-    return {
-        "statusCode": 302,
-        "headers": {"Location": f"{app_url}/?auth_error={encoded}"},
-        "body": "",
-    }
+    return Response(
+        status_code=302,
+        body="",
+        headers={"Location": f"{app_url}/?auth_error={encoded}"},
+    )
 
 
 @logger.inject_lambda_context(correlation_id_path=correlation_paths.API_GATEWAY_REST)

@@ -17,6 +17,7 @@ import random
 import time
 import requests
 from datetime import datetime
+from decimal import Decimal
 
 from aws_lambda_powertools import Logger, Tracer
 from aws_durable_execution_sdk_python import durable_execution, DurableContext
@@ -823,6 +824,18 @@ def _clamp(value: float, lo: int = 0, hi: int = 100) -> int:
     return int(min(hi, max(lo, round(value))))
 
 
+def _floats_to_decimal(obj):
+    """Recursively convert Python floats to Decimal so the dict can be written
+    via the DynamoDB resource client (which rejects floats)."""
+    if isinstance(obj, float):
+        return Decimal(str(obj))
+    if isinstance(obj, dict):
+        return {k: _floats_to_decimal(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_floats_to_decimal(v) for v in obj]
+    return obj
+
+
 def _safe_number(val, default=None) -> float | None:
     """Coerce a value to float. LLMs often return numbers as strings or with
     formatting like '$14.8B'. This handles those cases gracefully."""
@@ -1208,7 +1221,7 @@ def handler(event: dict, context: DurableContext) -> dict:
             ExpressionAttributeNames={"#s": "status"},
             ExpressionAttributeValues={
                 ":status": "complete",
-                ":result": result,
+                ":result": _floats_to_decimal(result),
                 ":now": now,
             },
         )

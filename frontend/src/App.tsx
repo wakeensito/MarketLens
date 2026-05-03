@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { AnimatePresence, motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { PanelLeft } from 'lucide-react';
 import { initTheme } from './theme';
 import PipelineTracker from './components/PipelineTracker';
@@ -8,6 +8,7 @@ import AnimatedAiInput from './components/AnimatedAiInput';
 import RecentThreads from './components/RecentThreads';
 import SignInModal from './components/SignInModal';
 import PricingSection from './components/PricingSection';
+import UpgradeModal from './components/UpgradeModal';
 import { BrandWordmarkInner } from './components/BrandWordmark';
 import { ThemePicker } from './components/ThemePicker';
 import { useAnalysis } from './hooks/useAnalysis';
@@ -20,8 +21,9 @@ const SPRING = { type: 'spring' as const, stiffness: 280, damping: 36 };
 export default function App() {
   const auth = useAuthContext();
   const {
-    screen, query, stages, report, error, reportId, finalizing,
+    screen, query, stages, report, error, reportId, finalizing, rateLimited,
     startAnalysis, loadHistoricalReport, handleReset, handleRetry, startNewChat,
+    dismissRateLimit,
   } = useAnalysis();
 
   const [sidebarOpen, setSidebarOpen] = useState(() =>
@@ -32,11 +34,9 @@ export default function App() {
   const [showSignIn, setShowSignIn] = useState(false);
   const [showPricing, setShowPricing] = useState(false);
   const [showSavePrompt, setShowSavePrompt] = useState(false);
+  /** True when the user clicked "Upgrade Plan" in the profile menu (vs. hitting the rate limit). */
+  const [proactiveUpgrade, setProactiveUpgrade] = useState(false);
   const shellRef = useRef<HTMLDivElement>(null);
-
-  const [isTouchDevice] = useState(() =>
-    typeof window !== 'undefined' && window.matchMedia('(hover: none)').matches
-  );
 
   const pendingQueryRef = useRef<string | null>(null);
 
@@ -108,19 +108,6 @@ export default function App() {
     return () => clearTimeout(t);
   }, [screen, auth.isAuthenticated]);
 
-  const mouseX = useMotionValue(0.5);
-  const mouseY = useMotionValue(0.5);
-  const rotateX = useSpring(useTransform(mouseY, [0, 1], [8, -8]), { stiffness: 80, damping: 18 });
-  const rotateY = useSpring(useTransform(mouseX, [0, 1], [-8, 8]), { stiffness: 80, damping: 18 });
-
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isLanding) return;
-    const rect = shellRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    mouseX.set((e.clientX - rect.left) / rect.width);
-    mouseY.set((e.clientY - rect.top) / rect.height);
-  }, [isLanding, mouseX, mouseY]);
-
   // New analysis: signed-in → workspace-empty, anon → back to landing
   const onNewChat = useCallback(() => {
     if (auth.isAuthenticated) {
@@ -185,8 +172,6 @@ export default function App() {
     <div
       ref={shellRef}
       className={`shell${isLanding ? ' shell--landing' : ' shell--workspace'}`}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={() => { mouseX.set(0.5); mouseY.set(0.5); }}
     >
       {/* ── Auth error banner ──────────────────────────────── */}
       <AnimatePresence>
@@ -228,12 +213,9 @@ export default function App() {
           )}
 
           <motion.div layoutId="ml-wordmark" className="lnd-wordmark" transition={SPRING}>
-            <motion.span
-              style={isTouchDevice ? undefined : { rotateX, rotateY, transformStyle: 'preserve-3d' as const }}
-              className="lnd-wm-inner"
-            >
+            <span className="lnd-wm-inner">
               <BrandWordmarkInner variant="landing" />
-            </motion.span>
+            </span>
           </motion.div>
 
           {!auth.isAuthenticated && (
@@ -243,7 +225,7 @@ export default function App() {
               animate={{ opacity: 1, y: 0, transition: { delay: 0.08, duration: 0.32, ease: 'easeOut' as const } }}
             >
               <span className="lnd-free-badge-dot" />
-              Free: 3 reports/day · Account required
+              Three reports a day, free
             </motion.div>
           )}
 
@@ -252,14 +234,14 @@ export default function App() {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0, transition: { delay: 0.12, duration: 0.38, ease: 'easeOut' as const } }}
           >
-            The Foundation for Every Build.
+            Validate before you build.
           </motion.h1>
           <motion.p
             className="lnd-sub"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0, transition: { delay: 0.18, duration: 0.38, ease: 'easeOut' as const } }}
           >
-            Drop ideas. Get roadmaps.
+            Type an idea. Get the brief.
           </motion.p>
 
           <motion.div layoutId="ml-input" className="lnd-input-wrap" transition={SPRING}>
@@ -268,7 +250,7 @@ export default function App() {
               onChange={setInputValue}
               onSubmit={onSubmit}
               placeholder={EXAMPLE_QUERIES[phIdx]}
-              autoFocus={!isTouchDevice}
+              autoFocus={false}
             />
           </motion.div>
 
@@ -304,6 +286,24 @@ export default function App() {
         variant="save-report"
       />
 
+      {/* ── Upgrade modal ───────────────────────────────────
+           Two triggers, two variants:
+           • Rate-limit hit during analysis (auto)
+           • User clicks "Upgrade Plan" in the profile menu */}
+      <UpgradeModal
+        isOpen={rateLimited || proactiveUpgrade}
+        variant={rateLimited ? 'rate-limit' : 'proactive'}
+        onClose={() => {
+          if (rateLimited) dismissRateLimit();
+          if (proactiveUpgrade) setProactiveUpgrade(false);
+        }}
+        onViewPlans={() => {
+          if (rateLimited) dismissRateLimit();
+          if (proactiveUpgrade) setProactiveUpgrade(false);
+          setShowPricing(true);
+        }}
+      />
+
       {/* ── Workspace ──────────────────────────────────────── */}
       {inWorkspace && (
         <>
@@ -319,6 +319,7 @@ export default function App() {
               setInputValue('');
               setShowSavePrompt(false);
             }}
+            onUpgradeClick={() => setProactiveUpgrade(true)}
           />
 
           <div className={`workspace-body${sidebarOpen ? '' : ' workspace-body--sidebar-closed'}`}>
@@ -357,20 +358,12 @@ export default function App() {
                     exit={{ opacity: 0, transition: { duration: 0.15 } }}
                   >
                     <div className="ws-empty-inner">
-                      <motion.p
-                        className="ws-empty-greeting"
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0, transition: { delay: 0.08, duration: 0.38, ease: 'easeOut' as const } }}
-                      >
-                        new analysis
-                      </motion.p>
-
                       <motion.h1
                         className="ws-empty-headline"
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0, transition: { delay: 0.14, duration: 0.38, ease: 'easeOut' as const } }}
                       >
-                        Drop your next idea.
+                        Type your next idea.
                       </motion.h1>
 
                       <motion.div
@@ -385,7 +378,7 @@ export default function App() {
                           onChange={setInputValue}
                           onSubmit={onSubmit}
                           placeholder={EXAMPLE_QUERIES[phIdx]}
-                          autoFocus={!isTouchDevice}
+                          autoFocus
                         />
                       </motion.div>
 
@@ -443,7 +436,7 @@ export default function App() {
                   value={inputValue}
                   onChange={setInputValue}
                   onSubmit={onSubmit}
-                  placeholder="Ask a follow-up or start a new analysis…"
+                  placeholder="Type a new idea to analyse"
                   compact
                 />
               </motion.div>

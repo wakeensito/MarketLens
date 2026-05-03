@@ -1,18 +1,26 @@
-import { useState } from 'react';
-import { getResolved, setThemePref, type ResolvedTheme } from '../theme';
+import { useEffect, useState } from 'react';
+import { getThemePref, setThemePref, type ThemePreference } from '../theme';
 
-const THEMES: { id: ResolvedTheme; label: string }[] = [
+const THEMES: { id: ThemePreference; label: string }[] = [
   { id: 'light',   label: 'Light'   },
-  { id: 'dark',    label: 'Warm dark' },
-  { id: 'stealth', label: 'Stealth'  },
+  { id: 'stealth', label: 'Stealth' },
+  { id: 'system',  label: 'System'  },
 ];
 
 export function ThemePicker() {
-  const [current, setCurrent] = useState<ResolvedTheme>(() => getResolved());
+  const [pref, setPref] = useState<ThemePreference>(() => getThemePref());
 
-  const handleSelect = (theme: ResolvedTheme) => {
-    setThemePref(theme);
-    setCurrent(theme);
+  useEffect(() => {
+    if (pref !== 'system') return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const sync = () => setThemePref('system');
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, [pref]);
+
+  const handleSelect = (next: ThemePreference) => {
+    setThemePref(next);
+    setPref(next);
   };
 
   return (
@@ -20,15 +28,15 @@ export function ThemePicker() {
       {THEMES.map(({ id, label }) => (
         <button
           key={id}
-          className={`theme-picker-btn${current === id ? ' theme-picker-btn--active' : ''}`}
+          className={`theme-picker-btn${pref === id ? ' theme-picker-btn--active' : ''}`}
           onClick={() => handleSelect(id)}
-          aria-label={`${label} mode`}
-          aria-pressed={current === id}
+          aria-label={`${label} theme`}
+          aria-pressed={pref === id}
           title={label}
         >
           {id === 'light'   && <SunIcon />}
-          {id === 'dark'    && <MoonIcon />}
           {id === 'stealth' && <StealthIcon />}
+          {id === 'system'  && <SystemIcon />}
         </button>
       ))}
     </div>
@@ -51,22 +59,20 @@ function SunIcon() {
   );
 }
 
-function MoonIcon() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
-      <path
-        d="M10.5 8.1A4.6 4.6 0 0 1 4.9 2.5 4.6 4.6 0 1 0 10.5 8.1z"
-        fill="currentColor"
-      />
-    </svg>
-  );
-}
-
 function StealthIcon() {
   return (
     <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
       <circle cx="6.5" cy="6.5" r="2.2" fill="currentColor" />
       <circle cx="6.5" cy="6.5" r="5"   stroke="currentColor" strokeWidth="0.9" opacity="0.35" />
+    </svg>
+  );
+}
+
+function SystemIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
+      <rect x="1.5" y="2.5" width="10" height="7" rx="1" stroke="currentColor" strokeWidth="1.2" />
+      <line x1="4" y1="11" x2="9" y2="11" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
     </svg>
   );
 }

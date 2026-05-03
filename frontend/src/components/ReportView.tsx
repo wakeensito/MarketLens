@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState } from 'react';
 import { motion, useInView, type Variants } from 'framer-motion';
-import { TrendingUp, Download, Loader2 } from 'lucide-react';
+import { TrendingUp, Download, Loader2, ArrowUpRight } from 'lucide-react';
 import type { MarketReport, Competitor, MarketGap, RoadmapPhase } from '../types';
 import { exportReport } from '../api';
 
@@ -58,7 +58,7 @@ function BriefSectionHeader({ num, name, count }: { num: string; name: string; c
   return (
     <div className="brief-section-header">
       <span className="brief-section-num">{num}</span>
-      <span className="brief-section-dash">—</span>
+      <span className="brief-section-sep" aria-hidden>·</span>
       <span className="brief-section-name">{name}</span>
       {count && <span className="brief-section-count">{count}</span>}
     </div>
@@ -101,7 +101,7 @@ function MetricCol({ colLabel, score, statusLabel, invert = false }: {
         {displayed}<span className="metric-denom">/100</span>
       </div>
       <div className="metric-bar-track">
-        <div className="metric-bar-fill" style={{ width: `${barWidth}%`, background: color }} />
+        <div className="metric-bar-fill" style={{ transform: `scaleX(${barWidth / 100})`, background: color }} />
       </div>
       <div className="metric-status" style={{ color }}>{statusLabel}</div>
     </div>
@@ -264,7 +264,7 @@ function RoadmapRow({ phase, index }: { phase: RoadmapPhase; index: number }) {
 }
 
 export default function ReportView({ report, reportId }: Props) {
-  const [briefId] = useState(() => `MS-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 9000) + 1000)}`);
+  const [briefId] = useState(() => `PLN-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 9000) + 1000)}`);
   const [dateStr] = useState(() => new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }));
   const [exporting,   setExporting]   = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -342,7 +342,10 @@ export default function ReportView({ report, reportId }: Props) {
         {/* ── Quick-scan action blocks ── */}
         {topGap && (
           <motion.div className="entry-angle-callout" variants={fadeUp}>
-            <div className="entry-angle-eyebrow">↗ Best Entry Angle</div>
+            <div className="entry-angle-eyebrow">
+              <ArrowUpRight size={11} strokeWidth={2.5} aria-hidden />
+              Best Entry Angle
+            </div>
             <div className="entry-angle-title">{topGap.title}</div>
             <p className="entry-angle-desc">{topGap.description}</p>
           </motion.div>
@@ -350,7 +353,7 @@ export default function ReportView({ report, reportId }: Props) {
 
         {firstPhase && (
           <motion.div className="first-move-block" variants={fadeUp}>
-            <div className="first-move-eyebrow">First Move — {firstPhase.title}</div>
+            <div className="first-move-eyebrow">First Move · {firstPhase.title}</div>
             <ul className="first-move-list">
               {firstPhase.milestones.map((m, i) => (
                 <li key={i} className="first-move-item">{m}</li>
@@ -421,7 +424,7 @@ export default function ReportView({ report, reportId }: Props) {
       <Reveal>
         <div className="report-footer">
           <span className="report-footer-text">
-            {briefId} · Generated {dateStr}
+            {briefId} · {dateStr}
           </span>
           <div className="report-export-group">
             {exportError && <span className="report-export-error">{exportError}</span>}

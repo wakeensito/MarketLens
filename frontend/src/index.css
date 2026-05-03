@@ -25,8 +25,8 @@
 
   /* Accent — dark ink for all UI interactions */
   --accent:          oklch(13% 0.008 245);
-  --accent-light:    oklch(13% 0.008 245 / 0.06);
-  --accent-border:   oklch(13% 0.008 245 / 0.14);
+  --accent-light:    color-mix(in oklch, var(--accent) 6%, transparent);
+  --accent-border:   color-mix(in oklch, var(--accent) 14%, transparent);
   --accent-hover:    oklch(7%  0.006 245);
 
   /* Signal — slate for data/scores (distinct from body text) */
@@ -65,68 +65,6 @@
   --radius-lg:   6px;
   --radius-full: 9999px;
 }
-
-/* ── Dark mode — warm charcoal "vintage tee" palette ─────
-   Applied via data-theme="dark" (manual) or system preference.
-   Hue 65 on backgrounds = slightly warm grey, not cool blue-steel.
-   Amber logo accent glows naturally against the dark surface.
-   ──────────────────────────────────────────────────────── */
-
-:root[data-theme="dark"] {
-  color-scheme: dark;
-
-  /* Foundation — warm charcoal */
-  --bg:              oklch(13.5% 0.007 65);
-  --surface:         oklch(17%   0.008 65);
-  --surface-alt:     oklch(21%   0.010 65);
-  --surface-hover:   oklch(25%   0.012 65);
-
-  /* Borders */
-  --border:          oklch(27%   0.007 65);
-  --border-mid:      oklch(35%   0.009 65);
-  --border-strong:   oklch(47%   0.010 65);
-  --border-focus:    oklch(85%   0.005 80 / 0.30);
-
-  /* Text — warm near-white */
-  --text:            oklch(91%   0.006 80);
-  --text-secondary:  oklch(64%   0.007 80);
-  --text-muted:      oklch(47%   0.006 80);
-  --text-inverse:    oklch(13.5% 0.007 65);
-
-  /* Accent — near-white for interactions (inverted charcoal principle) */
-  --accent:          oklch(91%   0.006 80);
-  --accent-light:    oklch(91%   0.006 80 / 0.08);
-  --accent-border:   oklch(91%   0.006 80 / 0.16);
-  --accent-hover:    oklch(98%   0.003 80);
-
-  /* Signal — slate blue, brightened for dark legibility */
-  --signal:          oklch(66%   0.13  240);
-  --signal-light:    oklch(66%   0.13  240 / 0.14);
-  --signal-border:   oklch(66%   0.13  240 / 0.25);
-
-  /* Logo accent — unchanged; amber reads beautifully on dark */
-  --logo-accent:     oklch(68% 0.12 65);
-
-  /* plinths wordmark title on dark surfaces */
-  --brand-plinths-title: oklch(95% 0.01 80);
-
-  /* Micro-detail */
-  --gloss:           oklch(100% 0 0 / 0.08);
-  --warning-border:  oklch(73% 0.18 67 / 0.25);
-
-  /* Semantic — lifted for dark bg legibility */
-  --success:         oklch(62%   0.17  152);
-  --success-light:   oklch(62%   0.17  152 / 0.14);
-  --warning:         oklch(73%   0.18   67);
-  --warning-light:   oklch(73%   0.18   67 / 0.14);
-  --danger:          oklch(66%   0.22   23);
-  --danger-light:    oklch(66%   0.22   23 / 0.14);
-}
-
-/* ── Stealth theme — midnight neutral, greyscale logo ─────
-   Pure neutral hue (chroma 0) = no warm or cool tint.
-   Logo mark shifts from amber to light grey.
-   ──────────────────────────────────────────────────────── */
 
 /* ── Stealth theme — neutral near-black, amber signature ──
    Pure neutral surfaces (no blue or warm tint — just clean
@@ -187,60 +125,17 @@
   --danger-light:    oklch(60%   0.18  23 / 0.12);
 }
 
-/* ── Component-specific dark overrides ───────────────────
+/* ── Component-specific theme overrides ──────────────────
    Tokens cover 95% of components automatically.
    These patches fix hardcoded literal values.
    ──────────────────────────────────────────────────────── */
 
-/* Orbs: amber glow reads on dark, bump opacity for atmosphere */
-:root[data-theme="dark"] .orb-1 {
-  background: radial-gradient(circle, oklch(60% 0.17 47 / 0.10) 0%, transparent 70%);
-}
-:root[data-theme="dark"] .orb-2 {
-  background: radial-gradient(circle, oklch(60% 0.17 47 / 0.07) 0%, transparent 70%);
-}
-:root[data-theme="dark"] .orb-3 {
-  background: radial-gradient(circle, oklch(60% 0.17 47 / 0.05) 0%, transparent 70%);
-}
-:root[data-theme="dark"] .cursor-glow {
-  background: radial-gradient(circle, oklch(60% 0.17 47 / 0.12) 0%, transparent 65%);
-}
-
-/* AI input: dark shadow + warm focus ring */
-:root[data-theme="dark"] .ai-input {
-  box-shadow: 0 1px 3px oklch(0% 0 0 / 0.5);
-  border-left-color: var(--border-mid);
-}
-:root[data-theme="dark"] .ai-input:focus-within {
-  border-left-color: var(--accent);
-  box-shadow: 0 1px 3px oklch(0% 0 0 / 0.5), 0 0 0 3px var(--accent-light);
-}
-
-/* Modal backdrop: heavier overlay so dark bg still recedes */
-:root[data-theme="dark"] .signin-modal-backdrop {
-  background: oklch(0% 0 0 / 0.70);
-}
-
-/* Stealth — orbs: #B8B8B8 (secondary text) at trace opacity */
-:root[data-theme="stealth"] .orb-1 {
-  background: radial-gradient(circle, rgb(184 184 184 / 0.05) 0%, transparent 70%);
-}
-:root[data-theme="stealth"] .orb-2 {
-  background: radial-gradient(circle, rgb(184 184 184 / 0.03) 0%, transparent 70%);
-}
-:root[data-theme="stealth"] .orb-3 {
-  background: radial-gradient(circle, rgb(184 184 184 / 0.02) 0%, transparent 70%);
-}
-:root[data-theme="stealth"] .cursor-glow {
-  background: radial-gradient(circle, rgb(184 184 184 / 0.07) 0%, transparent 65%);
-}
 :root[data-theme="stealth"] .ai-input {
-  box-shadow: 0 1px 4px rgb(0 0 0 / 0.55);
-  border-left-color: var(--border-mid);
+  box-shadow: 0 1px 4px oklch(0% 0 0 / 0.55);
 }
 :root[data-theme="stealth"] .ai-input:focus-within {
-  border-left-color: var(--accent);
-  box-shadow: 0 1px 4px rgb(0 0 0 / 0.55), 0 0 0 3px var(--accent-light);
+  border-color: var(--accent);
+  box-shadow: 0 1px 4px oklch(0% 0 0 / 0.55), 0 0 0 3px var(--accent-light);
 }
 :root[data-theme="stealth"] .signin-modal-backdrop {
   background: oklch(14% 0 0 / 0.85);
@@ -306,8 +201,8 @@ html { scroll-behavior: smooth; }
   overflow-y: auto;
 }
 
-/* All landing children above orbs (exclude fixed overlays) */
-.shell--landing > *:not(.orb):not(.cursor-glow):not(.signin-modal-backdrop):not(.lnd-nav):not(.auth-error-banner) {
+/* All landing children stack above any background layer */
+.shell--landing > *:not(.signin-modal-backdrop):not(.lnd-nav):not(.auth-error-banner) {
   position: relative;
 }
 
@@ -436,12 +331,28 @@ html { scroll-behavior: smooth; }
 
 /* Threads sub-header (replaces old threads-header for expanded mode) */
 .threads-subheader {
-  height: 32px;
   display: flex;
-  align-items: center;
-  padding: 0 16px;
-  border-bottom: 1px solid var(--border);
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 10px 6px;
   flex-shrink: 0;
+}
+
+.threads-subheader .threads-title {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.threads-subheader .threads-count {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  color: var(--text-muted);
+  opacity: 0.65;
 }
 
 /* ── Sidebar two-mode layout ──────────────────────────── */
@@ -605,6 +516,11 @@ html { scroll-behavior: smooth; }
   box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--border-focus);
 }
 
+/* Upgrade — the only functional, non-destructive item in the menu.
+   Subtle emphasis: weight bump + signal-tinted icon.  */
+.profile-menu-item--upgrade { font-weight: 600; }
+.profile-menu-item--upgrade > svg { color: var(--signal); }
+
 .profile-menu-item--danger { color: var(--danger); }
 .profile-menu-item--danger:hover {
   background: oklch(56% 0.22 25 / 0.12);
@@ -709,30 +625,11 @@ html { scroll-behavior: smooth; }
   overflow: hidden;
 }
 
-/* Pin orbs to the viewport in workspace so atmosphere persists through report scroll */
-.shell--workspace .orb {
-  position: fixed;
-}
-
-/* Workspace: same near-invisible warm haze */
-.shell--workspace .orb-1 {
-  background: radial-gradient(circle, oklch(60% 0.17 47 / 0.04) 0%, transparent 70%);
-  width: 800px; height: 680px;
-}
-.shell--workspace .orb-2 {
-  background: radial-gradient(circle, oklch(60% 0.17 47 / 0.025) 0%, transparent 70%);
-  width: 640px; height: 560px;
-}
-.shell--workspace .orb-3 {
-  background: radial-gradient(circle, oklch(60% 0.17 47 / 0.02) 0%, transparent 70%);
-}
-
 /* ── Workspace header ─────────────────────────────────── */
 .ws-header {
   flex-shrink: 0;
   height: 52px;
-  background: color-mix(in oklch, var(--surface) 92%, transparent);
-  backdrop-filter: blur(18px) saturate(150%);
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -922,10 +819,9 @@ html { scroll-behavior: smooth; }
 .thread-item {
   width: 100%;
   text-align: left;
-  padding: 11px 12px 11px 13px;
+  padding: 11px 12px;
   border-radius: var(--radius-md);
   border: 1px solid transparent;
-  border-left: 2px solid transparent;
   margin-bottom: 3px;
   transition: background 0.15s, border-color 0.15s;
   display: block;
@@ -934,13 +830,11 @@ html { scroll-behavior: smooth; }
 .thread-item:not(.thread-item--pending):hover {
   background: var(--surface);
   border-color: var(--border);
-  border-left-color: var(--accent-border);
 }
 
 .thread-item--active {
-  background: var(--surface);
-  border-color: var(--border);
-  border-left-color: var(--accent) !important;
+  background: var(--surface-alt);
+  border-color: var(--accent-border);
 }
 
 .thread-item--pending {
@@ -1050,6 +944,236 @@ html { scroll-behavior: smooth; }
   50%       { opacity: 0.25; }
 }
 
+/* ── Thread row: positioning wrapper for menu trigger ── */
+.thread-row {
+  position: relative;
+}
+
+.thread-row .thread-item {
+  padding-right: 36px;
+}
+
+.thread-menu-trigger {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  background: transparent;
+  border: 1px solid transparent;
+  opacity: 0;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+
+.thread-row:hover .thread-menu-trigger,
+.thread-row--menu-open .thread-menu-trigger,
+.thread-menu-trigger:focus-visible {
+  opacity: 1;
+}
+
+.thread-menu-trigger:hover {
+  background: var(--surface-alt);
+  color: var(--text);
+}
+
+.thread-menu-trigger:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-light);
+}
+
+/* Action menu dropdown */
+.thread-menu {
+  position: absolute;
+  top: 34px;
+  right: 8px;
+  z-index: 30;
+  min-width: 168px;
+  padding: 4px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: 0 10px 30px oklch(0% 0 0 / 0.16);
+  display: flex;
+  flex-direction: column;
+  transform-origin: top right;
+}
+
+.thread-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: var(--radius-md);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
+  text-align: left;
+  transition: background 0.12s, color 0.12s;
+}
+
+.thread-menu-item:hover {
+  background: var(--surface-alt);
+}
+
+.thread-menu-item:focus-visible {
+  outline: none;
+  background: var(--surface-alt);
+}
+
+.thread-menu-item:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.thread-menu-item--danger {
+  color: var(--danger);
+}
+
+.thread-menu-item--danger:hover {
+  background: color-mix(in oklch, var(--danger) 8%, transparent);
+}
+
+.thread-menu-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 3px 4px;
+}
+
+/* Inline delete confirm — replaces thread item */
+.thread-confirm {
+  padding: 12px 13px;
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in oklch, var(--danger) 30%, var(--border));
+  background: color-mix(in oklch, var(--danger) 5%, var(--surface));
+  margin-bottom: 3px;
+}
+
+.thread-confirm-text {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 9px;
+}
+
+.thread-confirm-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.thread-confirm-btn {
+  padding: 5px 11px;
+  border-radius: var(--radius-md);
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.thread-confirm-btn:hover {
+  background: var(--surface-hover);
+}
+
+.thread-confirm-btn--danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--text-inverse);
+}
+
+.thread-confirm-btn--danger:hover {
+  background: color-mix(in oklch, var(--danger) 92%, black);
+}
+
+.thread-confirm-btn--danger:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+/* Search (Soon) */
+.thread-search {
+  margin: 4px 6px 6px;
+  padding: 0 10px;
+  height: 30px;
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: default;
+}
+
+.thread-search-icon {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.thread-search-input {
+  flex: 1;
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  color: var(--text);
+  background: transparent;
+  border: none;
+  cursor: default;
+}
+
+.thread-search-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* Date group header */
+.thread-group-header {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 14px 10px 6px;
+}
+
+.thread-group-header:first-child {
+  padding-top: 4px;
+}
+
+/* Delete error toast */
+.thread-delete-error {
+  margin: 4px 8px 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: color-mix(in oklch, var(--danger) 8%, var(--surface));
+  border: 1px solid color-mix(in oklch, var(--danger) 24%, var(--border));
+  color: var(--text);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.thread-delete-error-dismiss {
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.thread-delete-error-dismiss:hover {
+  background: var(--surface-alt);
+  color: var(--text);
+}
+
 /* ── Workspace main content ───────────────────────────── */
 .ws-main {
   flex: 1;
@@ -1090,7 +1214,6 @@ html { scroll-behavior: smooth; }
   display: flex;
   justify-content: center;
   pointer-events: none;
-  transition: left 0.22s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .workspace-body--sidebar-closed .ws-input-wrap {
@@ -1154,66 +1277,64 @@ html { scroll-behavior: smooth; }
   gap: 8px;
 }
 
-/* ── Orbs — aurora atmosphere (always present) ────────── */
-.orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(90px);
-  pointer-events: none;
-  z-index: 0;
-}
+/* Touch devices: enforce 44×44 hit areas on icon-only controls without
+   bloating their visual size. Padding expands the click region; icon size
+   stays the same. */
+@media (hover: none) and (pointer: coarse) {
+  .sidebar-icon-btn,
+  .sidebar-collapse-btn,
+  .threads-close,
+  .signin-modal-close,
+  .thread-menu-trigger,
+  .theme-picker-btn,
+  .auth-error-dismiss,
+  .thread-delete-error-dismiss {
+    min-width: 44px;
+    min-height: 44px;
+  }
 
-.orb-1 {
-  width: 700px; height: 600px;
-  left: -12%; bottom: -15%;
-  background: radial-gradient(circle, oklch(60% 0.17 47 / 0.04) 0%, transparent 70%);
-  animation: orb-drift 16s ease-in-out infinite;
-}
-
-.orb-2 {
-  width: 550px; height: 480px;
-  right: -8%; top: -5%;
-  background: radial-gradient(circle, oklch(60% 0.17 47 / 0.025) 0%, transparent 70%);
-  animation: orb-drift 20s ease-in-out infinite reverse;
-}
-
-.orb-3 {
-  width: 420px; height: 360px;
-  right: 18%; bottom: 10%;
-  background: radial-gradient(circle, oklch(60% 0.17 47 / 0.02) 0%, transparent 70%);
-  animation: orb-drift 13s ease-in-out infinite 5s;
-}
-
-@keyframes orb-drift {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  30%       { transform: translate(4%, -5%) scale(1.05); }
-  65%       { transform: translate(-3%, 4%) scale(0.96); }
+  /* The thread "..." menu uses hover-reveal on desktop. Touch devices
+     have no hover state, so the trigger stays permanently visible. */
+  .thread-menu-trigger {
+    opacity: 1;
+    /* Tighter visual size — padding holds the 44px hit area, the icon
+       button itself reads as 28px. */
+    background: var(--surface-alt);
+    color: var(--text-secondary);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .orb        { animation: none; }
-  .spin       { animation: none; }
+  /* Decorative loops disabled */
+  .spin,
+  .thread-status-dot--running,
+  .lnd-free-badge-dot,
+  .signin-modal-badge-dot,
+  .threads-skeleton {
+    animation: none !important;
+  }
+
+  /* All transitions clamped to instant */
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
-/* Kill orb animations on touch devices — large blurred composited layers
-   interfere with iOS scroll gesture detection. Also reduce blur intensity
-   since composited blur on fixed elements can cause scroll jank on iOS. */
-@media (hover: none) {
-  .orb { animation: none; filter: blur(60px); }
+/* Global focus safety-net: if a control has no per-class :focus-visible
+   rule, this catches it. Per-class rules win on specificity. */
+button:focus-visible,
+[role="button"]:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-light), 0 0 0 1px var(--accent);
+  border-radius: var(--radius-md);
 }
 
-/* Cursor glow — extremely faint warm amber on light bg */
-.cursor-glow {
-  position: absolute;
-  width: 500px; height: 500px;
-  border-radius: 50%;
-  background: radial-gradient(circle, oklch(60% 0.17 47 / 0.05) 0%, transparent 65%);
-  filter: blur(40px);
-  pointer-events: none;
-  z-index: 0;
-  top: calc(50% - 250px);
-  left: calc(50% - 250px);
-  will-change: transform;
+input:focus-visible,
+textarea:focus-visible {
+  outline: none;
 }
 
 /* ── Landing elements ─────────────────────────────────── */
@@ -1382,18 +1503,16 @@ html { scroll-behavior: smooth; }
   background: var(--surface);
   border-radius: 16px;
   border: 1px solid var(--border);
-  border-left: 3px solid var(--border-mid);
   overflow: visible;
   transition: border-color 0.2s, box-shadow 0.2s;
-  box-shadow: 0 1px 4px oklch(13% 0.008 245 / 0.06);
+  box-shadow: 0 1px 4px color-mix(in oklch, var(--accent) 6%, transparent);
 }
 
 .ai-input:focus-within {
-  border-color: var(--border-mid);
-  border-left-color: var(--accent);
+  border-color: var(--accent);
   box-shadow:
-    0 1px 4px oklch(13% 0.008 245 / 0.06),
-    0 0 0 3px oklch(13% 0.008 245 / 0.06);
+    0 1px 4px color-mix(in oklch, var(--accent) 6%, transparent),
+    0 0 0 3px var(--accent-light);
 }
 
 .ai-input__body {
@@ -1522,6 +1641,51 @@ html { scroll-behavior: smooth; }
   white-space: nowrap;
 }
 
+/* "Beta" badge next to the active model label — single-purpose pill,
+   uses signal token so it tracks theme (slate in light, amber in stealth). */
+.ai-input__model-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 6px;
+  margin-left: 2px;
+  border-radius: var(--radius-full);
+  background: var(--signal-light);
+  color: var(--signal);
+  border: 1px solid var(--signal-border);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.ai-input__menu-item-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-input__menu-item-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 15px;
+  padding: 0 5px;
+  border-radius: var(--radius-full);
+  background: var(--signal-light);
+  color: var(--signal);
+  border: 1px solid var(--signal-border);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
 .ai-input__chevron {
   width: 12px;
   height: 12px;
@@ -1545,9 +1709,70 @@ html { scroll-behavior: smooth; }
   border-radius: 12px;
   border: 1px solid var(--border);
   background: var(--surface);
-  box-shadow: 0 8px 28px oklch(13% 0.008 245 / 0.12);
+  box-shadow: 0 8px 28px color-mix(in oklch, var(--accent) 12%, transparent);
   animation: menu-drop-down 0.15s ease-out;
   transform-origin: top left;
+}
+
+/* Wrap banner + menu so they flow as one positioned block */
+.ai-input__menu-wrap {
+  position: absolute;
+  z-index: 300;
+  top: calc(100% + 6px);
+  bottom: auto;
+  left: 0;
+  min-width: 13rem;
+  max-width: 280px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 8px 28px color-mix(in oklch, var(--accent) 12%, transparent);
+  overflow: hidden;
+  animation: menu-drop-down 0.15s ease-out;
+  transform-origin: top left;
+}
+
+.ai-input--compact .ai-input__menu-wrap {
+  top: auto;
+  bottom: calc(100% + 6px);
+  animation: menu-drop-up 0.15s ease-out;
+  transform-origin: bottom left;
+}
+
+.ai-input__menu-banner {
+  padding: 9px 11px;
+  background: var(--surface-alt);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+/* Reset the standalone menu styles when nested in wrap.
+   Cap height to ~4 rows so the 8-item list scrolls instead of
+   running off the viewport. Each item is ~34px + 12px wrap padding. */
+.ai-input__menu-wrap .ai-input__menu {
+  position: static;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  animation: none;
+  max-height: 156px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Thin scrollbar matching the sidebar pattern */
+.ai-input__menu-wrap .ai-input__menu::-webkit-scrollbar { width: 4px; }
+.ai-input__menu-wrap .ai-input__menu::-webkit-scrollbar-track { background: transparent; }
+.ai-input__menu-wrap .ai-input__menu::-webkit-scrollbar-thumb {
+  background: var(--border-mid);
+  border-radius: 2px;
+}
+.ai-input__menu-wrap .ai-input__menu::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
 }
 
 /* Compact mode: menu opens upward so it doesn't go off-screen at the viewport bottom */
@@ -1663,7 +1888,7 @@ html { scroll-behavior: smooth; }
 
 .ai-input__send:hover:not(:disabled) {
   background: var(--accent-hover);
-  box-shadow: 0 2px 8px oklch(13% 0.008 245 / 0.18);
+  box-shadow: 0 2px 8px color-mix(in oklch, var(--accent) 18%, transparent);
 }
 
 .ai-input__send:disabled {
@@ -1785,11 +2010,7 @@ html { scroll-behavior: smooth; }
 
 .pipeline-stage.stage--running {
   background: var(--surface-alt);
-  border-left: 2px solid var(--accent);
-  padding-left: 12px;
-  margin-left: -2px;
-  margin-right: -2px;
-  border-radius: 0 4px 4px 0;
+  border-radius: var(--radius-md);
 }
 
 .pipeline-parallel-block { display: flex; flex-direction: column; border-bottom: 1px solid var(--border); }
@@ -1876,7 +2097,7 @@ html { scroll-behavior: smooth; }
 .stage-desc { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
 
 .stage-progress { height: 2px; background: var(--border); border-radius: 1px; margin-top: 8px; overflow: hidden; }
-.stage-progress-fill { height: 100%; background: var(--accent); border-radius: 1px; transition: width 0.08s linear; }
+.stage-progress-fill { height: 100%; width: 100%; background: var(--accent); border-radius: 1px; transform-origin: left; transform: scaleX(0); transition: transform 0.08s linear; }
 
 /* ── Brief metadata strip ─────────────────────────────── */
 .brief-meta {
@@ -2005,7 +2226,7 @@ html { scroll-behavior: smooth; }
 .score-status-label { font-size: 12px; font-weight: 600; margin-bottom: 14px; }
 
 .score-bar-track { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
-.score-bar-fill  { height: 100%; border-radius: 2px; transition: width 1.2s cubic-bezier(0.22, 1, 0.36, 1); }
+.score-bar-fill  { height: 100%; width: 100%; border-radius: 2px; transform-origin: left; transform: scaleX(0); transition: transform 1.2s cubic-bezier(0.22, 1, 0.36, 1); }
 
 /* Stats grid — with 3D hover */
 .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -2023,7 +2244,7 @@ html { scroll-behavior: smooth; }
   border-color: var(--border-mid);
   transform: perspective(600px) rotateY(4deg) rotateX(-2deg) translateZ(6px);
   box-shadow:
-    4px 6px 16px oklch(13% 0.008 245 / 0.10),
+    4px 6px 16px color-mix(in oklch, var(--accent) 10%, transparent),
     inset 0 1px 0 var(--gloss);
 }
 
@@ -2052,8 +2273,8 @@ html { scroll-behavior: smooth; }
 }
 
 .brief-section-num { font-family: var(--font-mono); font-size: 10px; font-weight: 700; color: var(--signal); letter-spacing: 0.06em; flex-shrink: 0; }
-.brief-section-dash { font-family: var(--font-mono); font-size: 11px; color: var(--border-strong); flex-shrink: 0; }
-.brief-section-name { font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-secondary); flex: 1; }
+.brief-section-sep { font-family: var(--font-mono); font-size: 12px; color: var(--border-strong); flex-shrink: 0; line-height: 1; transform: translateY(-1px); }
+.brief-section-name { font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-secondary); flex: 1; }
 .brief-section-count { font-family: var(--font-mono); font-size: 10px; color: var(--text-muted); margin-left: auto; white-space: nowrap; }
 
 /* ── Competitor table ─────────────────────────────────── */
@@ -2121,14 +2342,8 @@ html { scroll-behavior: smooth; }
   border-radius: var(--radius-lg);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-left-width: 3px;
   overflow: hidden;
 }
-
-.comp-card--dominant { border-left-color: var(--danger); }
-.comp-card--strong   { border-left-color: var(--warning); }
-.comp-card--moderate { border-left-color: var(--accent); }
-.comp-card--niche    { border-left-color: var(--success); }
 
 .comp-card-header {
   display: flex; align-items: center; gap: 10px;
@@ -2166,12 +2381,12 @@ html { scroll-behavior: smooth; }
 .gap-row {
   display: grid; grid-template-columns: 1fr 60px;
   gap: 20px; align-items: start;
-  padding: 18px 0 18px 12px; border-bottom: 1px solid var(--border);
-  border-left: 2px solid transparent;
-  transition: background 0.15s, border-color 0.15s;
+  padding: 18px 12px; border-bottom: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  transition: background 0.15s;
 }
 
-.gap-row:hover { background: var(--surface-alt); border-left-color: var(--accent-border); }
+.gap-row:hover { background: var(--surface-alt); }
 .gap-row:last-child { border-bottom: none; }
 
 .gap-index { font-family: var(--font-mono); font-size: 10px; font-weight: 500; color: var(--text-muted); margin-bottom: 5px; letter-spacing: 0.05em; }
@@ -2199,13 +2414,13 @@ html { scroll-behavior: smooth; }
 
 .roadmap-phase {
   display: grid; grid-template-columns: 200px 1fr;
-  gap: 24px; padding: 18px 0 18px 12px; border-bottom: 1px solid var(--border);
+  gap: 24px; padding: 18px 12px; border-bottom: 1px solid var(--border);
   align-items: start;
-  border-left: 2px solid transparent;
-  transition: background 0.15s, border-color 0.15s;
+  border-radius: var(--radius-md);
+  transition: background 0.15s;
 }
 
-.roadmap-phase:hover { background: var(--surface-alt); border-left-color: var(--accent-border); }
+.roadmap-phase:hover { background: var(--surface-alt); }
 .roadmap-phase:last-child { border-bottom: none; }
 
 .roadmap-phase-num   { font-family: var(--font-mono); font-size: 10px; font-weight: 500; color: var(--text-muted); letter-spacing: 0.06em; margin-bottom: 4px; text-transform: uppercase; }
@@ -2267,10 +2482,10 @@ html { scroll-behavior: smooth; }
 
 /* ── Recommendation block ─────────────────────────────── */
 .reco-block {
-  padding: 16px 18px;
-  background: var(--surface-alt);
-  border-left: 3px solid var(--signal);
-  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  padding: 18px 20px;
+  background: var(--signal-light);
+  border: 1px solid var(--signal-border);
+  border-radius: var(--radius-lg);
   margin: 0 0 20px;
 }
 .reco-eyebrow {
@@ -2313,19 +2528,22 @@ html { scroll-behavior: smooth; }
   margin-bottom: 10px;
 }
 .metric-number {
-  font-size: 36px;
+  font-size: 44px;
   font-weight: 600;
   line-height: 1;
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
   color: var(--metric-color, var(--text));
   display: flex;
   align-items: baseline;
   gap: 2px;
 }
 .metric-denom {
-  font-size: 14px;
-  font-weight: 400;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text-muted);
+  letter-spacing: 0.02em;
 }
 .metric-bar-track {
   height: 3px;
@@ -2336,8 +2554,11 @@ html { scroll-behavior: smooth; }
 }
 .metric-bar-fill {
   height: 100%;
+  width: 100%;
   border-radius: 2px;
-  transition: width 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-origin: left;
+  transform: scaleX(0);
+  transition: transform 1.2s cubic-bezier(0.22, 1, 0.36, 1);
 }
 .metric-status {
   font-size: 11px;
@@ -2439,10 +2660,9 @@ html { scroll-behavior: smooth; }
   flex-direction: column;
   align-items: flex-start;
   gap: 14px;
-  padding: 20px 20px 20px 18px;
+  padding: 20px;
   background: var(--danger-light);
-  border: 1px solid oklch(54% 0.20 23 / 0.22);
-  border-left: 3px solid var(--danger);
+  border: 1px solid color-mix(in oklch, var(--danger) 22%, transparent);
   border-radius: var(--radius-lg);
   margin-top: 8px;
 }
@@ -2549,6 +2769,50 @@ html { scroll-behavior: smooth; }
 /* ── Divider ──────────────────────────────────────────── */
 .divider { height: 1px; background: var(--border); margin: 28px 0; }
 
+/* ── Soon affordance ──────────────────────────────────────
+   Pattern for visible-but-not-shipped controls. The control
+   renders normally; this badge marks it as roadmap.
+   ──────────────────────────────────────────────────────── */
+.soon-pill {
+  display: inline-flex;
+  align-items: center;
+  height: 16px;
+  padding: 0 6px;
+  border-radius: var(--radius-full);
+  background: var(--surface-alt);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+  user-select: none;
+  border: 1px solid var(--border);
+}
+
+.soon-pill--inline {
+  margin-left: 6px;
+}
+
+/* Container that holds a control + soon pill */
+.soon-affordance {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Soft-disable: control still visible, click is a no-op or shows tooltip.
+   Cursor stays default (not 'not-allowed') so the control reads as
+   intentional roadmap, not broken. */
+.is-soon {
+  opacity: 0.62;
+}
+.is-soon:hover {
+  opacity: 0.78;
+}
+
 /* ── Animations ───────────────────────────────────────── */
 @keyframes spin { to { transform: rotate(360deg); } }
 .spin { animation: spin 0.9s linear infinite; }
@@ -2632,20 +2896,6 @@ html { scroll-behavior: smooth; }
   /* Touch targets */
   .header-btn-ghost   { min-height: 40px; }
   .report-footer      { padding-bottom: 8px; }
-
-  /* Workspace orbs — still near-invisible on mobile */
-  .shell--workspace .orb-1 {
-    width: 340px; height: 300px;
-    background: radial-gradient(circle, oklch(60% 0.17 47 / 0.04) 0%, transparent 70%);
-  }
-  .shell--workspace .orb-2 {
-    width: 280px; height: 240px;
-    background: radial-gradient(circle, oklch(60% 0.17 47 / 0.025) 0%, transparent 70%);
-  }
-  .shell--workspace .orb-3 {
-    width: 220px; height: 190px;
-    background: radial-gradient(circle, oklch(60% 0.17 47 / 0.02) 0%, transparent 70%);
-  }
 }
 
 /* Desktop: rail mode + hide mobile-only elements */
@@ -2696,114 +2946,205 @@ html { scroll-behavior: smooth; }
   .shell--landing   { padding: 68px 16px 40px; }
   .gap-row          { grid-template-columns: 1fr; }
   .gap-score        { flex-direction: row; gap: 6px; align-items: center; padding-top: 0; margin-top: 4px; }
+
+  /* AI input toolbar: at this width the trigger needs to give up its
+     label so paperclip + Analyse button still fit. Icon + Beta badge +
+     chevron stays — full label is one tap away in the dropdown. */
+  .ai-input__model-label { display: none; }
+  .ai-input__toolbar { gap: 8px; padding: 10px 10px 12px; }
+  .ai-input__send { padding: 0 12px 0 14px; gap: 6px; }
+  .ai-input__send-label { letter-spacing: 0.04em; }
+
+  /* Toolbar in compact (workspace) mode is already tight; no further work */
 }
 
-/* ── Auth Gate Modal ──────────────────────────────────── */
-.auth-gate-backdrop {
+/* ── Upgrade modal: rate-limit hit ──────────────────────
+   Replaces the generic "failed to analyse" error when the
+   user has used their free quota for the day.
+   ──────────────────────────────────────────────────────── */
+.upgrade-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 500;
-  background: color-mix(in oklch, var(--bg) 75%, transparent);
-  backdrop-filter: blur(8px);
+  z-index: 950;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 24px;
+  background: color-mix(in oklch, var(--accent) 22%, transparent);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
-.auth-gate {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 40px 36px 32px;
-  max-width: 420px;
+.upgrade-modal-card {
+  position: relative;
   width: 100%;
+  max-width: 392px;
+  background: var(--surface);
+  border: 1px solid var(--border-mid);
+  border-radius: 20px;
+  padding: 36px 32px 28px;
+  box-shadow: 0 14px 40px color-mix(in oklch, var(--accent) 14%, transparent);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   text-align: center;
-  box-shadow: 0 16px 48px oklch(13% 0.008 245 / 0.12);
 }
 
-.auth-gate-title {
-  font-family: var(--font-display);
-  font-size: 22px;
-  font-weight: 600;
+.upgrade-modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  transition: background 0.15s, color 0.15s;
+}
+
+.upgrade-modal-close:hover {
+  background: var(--surface-alt);
   color: var(--text);
-  margin-bottom: 10px;
+}
+
+.upgrade-modal-meter {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  padding: 6px 14px;
+  margin-bottom: 18px;
+  border-radius: var(--radius-full);
+  background: var(--signal-light);
+  border: 1px solid var(--signal-border);
+  font-family: var(--font-mono);
+  color: var(--signal);
+}
+
+.upgrade-modal-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px 5px 9px;
+  margin-bottom: 18px;
+  border-radius: var(--radius-full);
+  background: var(--signal-light);
+  border: 1px solid var(--signal-border);
+  color: var(--signal);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.upgrade-modal-meter-num {
+  font-size: 16px;
+  font-weight: 700;
   letter-spacing: -0.01em;
 }
 
-.auth-gate-sub {
+.upgrade-modal-meter-denom {
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+.upgrade-modal-meter-label {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  opacity: 0.7;
+  margin-left: 6px;
+}
+
+.upgrade-modal-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  color: var(--text);
+  margin-bottom: 10px;
+}
+
+.upgrade-modal-desc {
+  font-family: var(--font-body);
   font-size: 14px;
+  font-weight: 400;
+  line-height: 1.55;
   color: var(--text-secondary);
-  line-height: 1.6;
-  margin-bottom: 28px;
+  margin-bottom: 24px;
+  max-width: 320px;
 }
 
-.auth-gate-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 20px;
+.upgrade-modal-reset {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
 }
 
-.auth-gate-btn {
+.upgrade-modal-actions {
   display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.upgrade-modal-btn {
+  flex: 1;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
-  height: 44px;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 600;
+  gap: 7px;
+  height: 40px;
+  padding: 0 16px;
+  border-radius: var(--radius-lg);
   font-family: var(--font-body);
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
-  border: 1px solid var(--border-mid);
-}
-
-.auth-gate-btn--google {
-  background: oklch(100% 0 0);
-  color: oklch(25% 0 0);
-  border-color: oklch(85% 0 0);
-}
-
-.auth-gate-btn--google:hover {
-  background: oklch(96% 0 0);
-  box-shadow: 0 2px 12px oklch(0% 0 0 / 0.1);
-}
-
-.auth-gate-btn--google:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--border-focus);
-}
-
-.auth-gate-btn--github {
-  background: oklch(18% 0 0);
-  color: oklch(95% 0 0);
-  border-color: oklch(30% 0 0);
-}
-
-.auth-gate-btn--github:hover {
-  background: oklch(24% 0 0);
-  box-shadow: 0 2px 12px oklch(0% 0 0 / 0.2);
-}
-
-.auth-gate-btn--github:focus-visible {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--border-focus);
-}
-
-.auth-gate-dismiss {
   font-size: 13px;
-  color: var(--text-muted);
-  background: none;
-  border: none;
+  font-weight: 600;
+  letter-spacing: 0.01em;
   cursor: pointer;
-  padding: 8px 16px;
-  transition: color 0.15s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  border: 1px solid transparent;
 }
 
-.auth-gate-dismiss:hover {
+.upgrade-modal-btn--ghost {
+  background: transparent;
+  border-color: var(--border-mid);
   color: var(--text-secondary);
+}
+
+.upgrade-modal-btn--ghost:hover {
+  background: var(--surface-alt);
+  color: var(--text);
+}
+
+.upgrade-modal-btn--primary {
+  background: var(--accent);
+  color: var(--text-inverse);
+}
+
+.upgrade-modal-btn--primary:hover {
+  background: var(--accent-hover);
+}
+
+/* Narrow widths: stack actions and tighten internal padding */
+@media (max-width: 380px) {
+  .upgrade-modal-backdrop { padding: 16px; }
+  .upgrade-modal-card {
+    padding: 30px 22px 22px;
+    border-radius: 16px;
+  }
+  .upgrade-modal-title { font-size: 19px; }
+  .upgrade-modal-desc { font-size: 13.5px; margin-bottom: 20px; }
+  .upgrade-modal-actions { flex-direction: column-reverse; }
+  .upgrade-modal-btn { width: 100%; }
 }
 
 /* ── Auth error banner ───────────────────────────────── */
@@ -2870,7 +3211,7 @@ html { scroll-behavior: smooth; }
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--logo-accent);
+  background: var(--signal);
   flex-shrink: 0;
   animation: pulse-dot 1.4s ease-in-out infinite;
 }
@@ -2947,7 +3288,7 @@ html { scroll-behavior: smooth; }
 .lnd-nav-signin:hover {
   background: var(--accent-hover);
   border-color: var(--accent-hover);
-  box-shadow: 0 2px 8px oklch(13% 0.008 245 / 0.18);
+  box-shadow: 0 2px 8px color-mix(in oklch, var(--accent) 18%, transparent);
 }
 
 .lnd-nav-signin:focus-visible {
@@ -3159,17 +3500,17 @@ html { scroll-behavior: smooth; }
 }
 .pricing-card:hover {
   border-color: var(--border-mid);
-  box-shadow: 0 8px 28px oklch(13% 0.008 245 / 0.08);
+  box-shadow: 0 8px 28px color-mix(in oklch, var(--accent) 8%, transparent);
 }
 
 .pricing-card--highlight {
   border-color: var(--border-mid);
   background: var(--bg);
-  box-shadow: 0 0 0 1.5px var(--border-strong), 0 8px 28px oklch(13% 0.008 245 / 0.10);
+  box-shadow: 0 0 0 1.5px var(--border-strong), 0 8px 28px color-mix(in oklch, var(--accent) 10%, transparent);
 }
 .pricing-card--highlight:hover {
   border-color: var(--border-strong);
-  box-shadow: 0 0 0 1.5px var(--border-strong), 0 14px 40px oklch(13% 0.008 245 / 0.12);
+  box-shadow: 0 0 0 1.5px var(--border-strong), 0 14px 40px color-mix(in oklch, var(--accent) 12%, transparent);
 }
 
 .pricing-card-badge {
@@ -3284,11 +3625,11 @@ html { scroll-behavior: smooth; }
   background: var(--accent);
   color: var(--text-inverse);
   border: none;
-  box-shadow: 0 2px 8px oklch(13% 0.008 245 / 0.14);
+  box-shadow: 0 2px 8px color-mix(in oklch, var(--accent) 14%, transparent);
 }
 .pricing-cta-btn--primary:hover {
   background: var(--accent-hover);
-  box-shadow: 0 4px 14px oklch(13% 0.008 245 / 0.20);
+  box-shadow: 0 4px 14px color-mix(in oklch, var(--accent) 20%, transparent);
 }
 
 .pricing-cta-btn--ghost {
@@ -3451,7 +3792,7 @@ html { scroll-behavior: smooth; }
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: oklch(13% 0.008 245 / 0.22);
+  background: color-mix(in oklch, var(--accent) 22%, transparent);
   backdrop-filter: blur(10px) saturate(1.4);
   -webkit-backdrop-filter: blur(10px) saturate(1.4);
 }
@@ -3464,32 +3805,11 @@ html { scroll-behavior: smooth; }
   border: 1px solid var(--border-mid);
   border-radius: 20px;
   padding: 38px 32px 30px;
-  box-shadow:
-    0 2px 8px oklch(13% 0.008 245 / 0.04),
-    0 12px 36px oklch(13% 0.008 245 / 0.09),
-    0 40px 80px oklch(13% 0.008 245 / 0.07);
+  box-shadow: 0 14px 40px color-mix(in oklch, var(--accent) 14%, transparent);
   display: flex;
   flex-direction: column;
   align-items: center;
   overflow: hidden;
-}
-
-/* Warm amber accent line across the top */
-.signin-modal-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 3px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--logo-accent) 30%,
-    var(--logo-accent-mid) 70%,
-    transparent 100%
-  );
-  border-radius: 20px 20px 0 0;
 }
 
 .signin-modal-close {
@@ -3522,32 +3842,26 @@ html { scroll-behavior: smooth; }
   margin-bottom: 20px;
 }
 
-.signin-modal-mark {
-  width: 44px;
-  height: 44px;
-  flex-shrink: 0;
-}
-
 .signin-modal-badge {
   display: inline-flex;
   align-items: center;
   gap: 7px;
   padding: 4px 12px 4px 9px;
   border-radius: 99px;
-  background: color-mix(in oklch, var(--logo-accent) 7%, transparent);
-  border: 1px solid color-mix(in oklch, var(--logo-accent) 18%, transparent);
+  background: var(--signal-light);
+  border: 1px solid var(--signal-border);
   font-family: var(--font-body);
   font-size: 11.5px;
   font-weight: 500;
   letter-spacing: 0.01em;
-  color: var(--logo-accent-ink);
+  color: var(--signal);
 }
 
 .signin-modal-badge-dot {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--logo-accent);
+  background: var(--signal);
   flex-shrink: 0;
 }
 
@@ -3612,8 +3926,8 @@ html { scroll-behavior: smooth; }
 
 .signin-modal-input:focus {
   outline: none;
-  border-color: color-mix(in oklch, var(--logo-accent) 75%, var(--border-strong));
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--logo-accent) 20%, transparent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light);
 }
 
 .signin-modal-input:disabled {
@@ -3712,29 +4026,14 @@ html { scroll-behavior: smooth; }
   transform: translateY(0) scale(0.99);
 }
 
-/* Google — warm amber primary */
+/* Google — primary accent, icon carries the brand */
 .signin-modal-btn--google {
-  background: var(--logo-accent);
+  background: var(--accent);
   color: var(--text-inverse);
-  box-shadow: 0 2px 10px color-mix(in oklch, var(--logo-accent) 28%, transparent);
 }
 
 .signin-modal-btn--google:hover {
-  background: color-mix(in oklch, var(--logo-accent) 88%, black);
-  box-shadow: 0 4px 18px color-mix(in oklch, var(--logo-accent) 35%, transparent);
-}
-
-/* GitHub — dark ink */
-.signin-modal-btn--github {
-  background: var(--accent);
-  color: var(--text-inverse);
-  border-color: var(--accent);
-  box-shadow: 0 2px 8px color-mix(in oklch, var(--accent) 12%, transparent);
-}
-
-.signin-modal-btn--github:hover {
   background: var(--accent-hover);
-  box-shadow: 0 4px 14px color-mix(in oklch, var(--accent) 18%, transparent);
 }
 
 .signin-modal-btn-icon {
@@ -3776,7 +4075,7 @@ html { scroll-behavior: smooth; }
 }
 
 .signin-modal-legal a:hover {
-  color: var(--logo-accent-ink);
+  color: var(--accent);
 }
 
 .signin-modal-legal-plain {
@@ -3810,6 +4109,12 @@ html { scroll-behavior: smooth; }
   }
 }
 
+@media (max-width: 360px) {
+  .signin-modal-backdrop { padding: 10px; }
+  .signin-modal-card { padding: 26px 18px 22px; }
+  .signin-modal-title { font-size: 1.2rem; }
+}
+
 /* ── Login Page ──────────────────────────────────────── */
 .login-page {
   position: relative;
@@ -3831,7 +4136,7 @@ html { scroll-behavior: smooth; }
   padding: 40px 36px 32px;
   max-width: 400px;
   width: 100%;
-  box-shadow: 0 24px 80px oklch(7% 0.032 245 / 0.6);
+  box-shadow: 0 24px 80px color-mix(in oklch, var(--accent) 24%, transparent);
 }
 
 .login-wordmark {

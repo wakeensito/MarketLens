@@ -1,16 +1,22 @@
-export type ThemePreference = 'light' | 'dark' | 'stealth' | 'system';
-export type ResolvedTheme = 'light' | 'dark' | 'stealth';
+export type ThemePreference = 'light' | 'stealth' | 'system';
+export type ResolvedTheme = 'light' | 'stealth';
 
 const KEY = 'plinths-theme';
 
-export function getSystemResolved(): 'light' | 'dark' {
+export function getSystemResolved(): ResolvedTheme {
   return typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
-    ? 'dark' : 'light';
+    ? 'stealth' : 'light';
 }
 
 export function getThemePref(): ThemePreference {
   if (typeof window === 'undefined') return 'system';
-  return (localStorage.getItem(KEY) as ThemePreference | null) ?? 'system';
+  const stored = localStorage.getItem(KEY);
+  if (stored === 'light' || stored === 'stealth' || stored === 'system') return stored;
+  if (stored === 'dark') {
+    localStorage.setItem(KEY, 'stealth');
+    return 'stealth';
+  }
+  return 'system';
 }
 
 export function getResolved(pref: ThemePreference = getThemePref()): ResolvedTheme {

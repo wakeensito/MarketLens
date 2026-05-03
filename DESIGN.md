@@ -1,36 +1,83 @@
 ---
-name: MarketScout
-description: AI-powered market intelligence tool for founders validating business ideas.
+name: plinths
+description: AI market intelligence tool for founders. Two themes (Pale Intelligence, Stealth), single accent per theme, IBM Plex throughout.
+themes:
+  light:
+    label: "Pale Intelligence"
+    canvas: "warm parchment"
+    accent: "dark ink, amber on the wordmark only"
+    signal: "slate blue (oklch 36 0.10 240)"
+  stealth:
+    label: "Stealth"
+    canvas: "neutral near-black (chroma 0)"
+    accent: "off-white"
+    signal: "warm amber #c9965a (also the logo accent and only colour in the UI)"
 colors:
-  void-midnight:    "oklch(7% 0.032 245)"
-  ink-surface:      "oklch(12% 0.030 244)"
-  surface-raised:   "oklch(17% 0.028 242)"
-  surface-hover:    "oklch(22% 0.026 240)"
-  border-subtle:    "oklch(22% 0.028 242)"
-  border-mid:       "oklch(32% 0.024 240)"
-  border-strong:    "oklch(46% 0.020 238)"
-  frost-white:      "oklch(95% 0.006 220)"
-  text-secondary:   "oklch(68% 0.012 230)"
-  text-muted:       "oklch(48% 0.012 235)"
-  ionosphere-blue:  "oklch(76% 0.22 215)"
-  ionosphere-hover: "oklch(82% 0.20 215)"
-  scanner-violet:   "oklch(74% 0.28 300)"
-  clearance-teal:   "oklch(72% 0.20 168)"
-  caution-amber:    "oklch(80% 0.18 68)"
-  risk-coral:       "oklch(68% 0.22 22)"
+  light:
+    bg:                "oklch(98.5% 0.004 80)"
+    surface:           "oklch(97% 0.006 80)"
+    surface-alt:       "oklch(94% 0.009 80)"
+    surface-hover:     "oklch(91% 0.011 80)"
+    border:            "oklch(88% 0.006 80)"
+    border-mid:        "oklch(80% 0.008 80)"
+    border-strong:     "oklch(68% 0.010 80)"
+    border-focus:      "oklch(13% 0.008 245 / 0.35)"
+    text:              "oklch(13% 0.008 245)"
+    text-secondary:    "oklch(44% 0.006 245)"
+    text-muted:        "oklch(62% 0.005 245)"
+    text-inverse:      "oklch(98.5% 0.004 80)"
+    accent:            "oklch(13% 0.008 245)"
+    accent-light:      "oklch(13% 0.008 245 / 0.06)"
+    accent-border:     "oklch(13% 0.008 245 / 0.14)"
+    accent-hover:      "oklch(7% 0.006 245)"
+    signal:            "oklch(36% 0.10 240)"
+    signal-light:      "oklch(36% 0.10 240 / 0.08)"
+    signal-border:     "oklch(36% 0.10 240 / 0.18)"
+    logo-accent:       "oklch(68% 0.12 65)"
+    logo-accent-mid:   "oklch(73% 0.11 65)"
+    logo-accent-ink:   "oklch(57% 0.10 65)"
+    success:           "oklch(50% 0.15 152)"
+    warning:           "oklch(60% 0.16 67)"
+    danger:            "oklch(54% 0.20 23)"
+  stealth:
+    bg:                "oklch(14% 0 0)"
+    surface:           "oklch(18% 0 0)"
+    surface-alt:       "oklch(22% 0 0)"
+    surface-hover:     "oklch(26% 0 0)"
+    border:            "oklch(27% 0 0)"
+    border-mid:        "oklch(32% 0 0)"
+    border-strong:     "oklch(38% 0 0)"
+    border-focus:      "#c9965a40"
+    text:              "oklch(93% 0 0)"
+    text-secondary:    "oklch(76% 0 0)"
+    text-muted:        "oklch(60% 0 0)"
+    text-inverse:      "oklch(14% 0 0)"
+    accent:            "oklch(93% 0 0)"
+    accent-light:      "oklch(93% 0 0 / 0.07)"
+    accent-border:     "oklch(93% 0 0 / 0.12)"
+    accent-hover:      "oklch(97% 0 0)"
+    signal:            "#c9965a"
+    signal-light:      "#c9965a1e"
+    signal-border:     "#c9965a33"
+    logo-accent:       "#c9965a"
+    logo-accent-mid:   "#d4a76e"
+    logo-accent-ink:   "#a87a3f"
+    success:           "oklch(56% 0.14 152)"
+    warning:           "oklch(68% 0.15 67)"
+    danger:            "oklch(60% 0.18 23)"
 typography:
   display:
     fontFamily: "'IBM Plex Serif', Georgia, serif"
-    fontSize: "clamp(22px, 3vw, 30px)"
+    fontSize: "clamp(28px, 4vw, 44px)"
     fontWeight: 600
-    lineHeight: 1.2
-    letterSpacing: "-0.015em"
+    lineHeight: 1.15
+    letterSpacing: "-0.02em"
   headline:
     fontFamily: "'IBM Plex Serif', Georgia, serif"
-    fontSize: "clamp(20px, 2.8vw, 28px)"
+    fontSize: "clamp(22px, 3vw, 32px)"
     fontWeight: 600
-    lineHeight: 1.3
-    letterSpacing: "-0.01em"
+    lineHeight: 1.25
+    letterSpacing: "-0.015em"
   title:
     fontFamily: "'IBM Plex Serif', Georgia, serif"
     fontSize: "20px"
@@ -41,220 +88,360 @@ typography:
     fontFamily: "'IBM Plex Sans', system-ui, sans-serif"
     fontSize: "14px"
     fontWeight: 400
-    lineHeight: 1.5
+    lineHeight: 1.55
+  body-lg:
+    fontFamily: "'IBM Plex Sans', system-ui, sans-serif"
+    fontSize: "15px"
+    fontWeight: 400
+    lineHeight: 1.6
+  ui:
+    fontFamily: "'IBM Plex Sans', system-ui, sans-serif"
+    fontSize: "13px"
+    fontWeight: 500
+    lineHeight: 1.4
   label:
     fontFamily: "'IBM Plex Mono', 'Courier New', monospace"
-    fontSize: "10px"
-    fontWeight: 700
+    fontSize: "10.5px"
+    fontWeight: 600
     lineHeight: 1
     letterSpacing: "0.10em"
+    textTransform: "uppercase"
+  data:
+    fontFamily: "'IBM Plex Mono', 'Courier New', monospace"
+    fontSize: "12px"
+    fontWeight: 500
+    lineHeight: 1.2
+    letterSpacing: "0.02em"
 rounded:
-  sm:   "3px"
-  md:   "4px"
-  lg:   "6px"
+  sm:    "3px"
+  md:    "4px"
+  lg:    "6px"
+  xl:    "10px"
   input: "16px"
-  full: "9999px"
+  full:  "9999px"
 spacing:
-  xs: "4px"
-  sm: "8px"
-  md: "16px"
-  lg: "24px"
-  xl: "40px"
+  xxs:  "2px"
+  xs:   "4px"
+  sm:   "8px"
+  md:   "12px"
+  base: "16px"
+  lg:   "24px"
+  xl:   "40px"
+  xxl:  "64px"
+motion:
+  ease-out: "cubic-bezier(0.22, 1, 0.36, 1)"
+  ease-out-quart: "cubic-bezier(0.25, 1, 0.5, 1)"
+  duration-fast: "180ms"
+  duration-base: "280ms"
+  duration-slow: "400ms"
+  duration-count-up: "700ms — 1200ms (data only)"
 components:
   button-primary:
-    backgroundColor: "{colors.ionosphere-blue}"
-    textColor: "{colors.void-midnight}"
-    rounded: "10px"
-    padding: "0 16px 0 18px"
+    backgroundColor: "{accent}"
+    textColor: "{text-inverse}"
+    rounded: "{rounded.lg}"
+    padding: "0 16px"
     height: "36px"
-  button-primary-hover:
-    backgroundColor: "{colors.ionosphere-hover}"
-    textColor: "{colors.void-midnight}"
-    rounded: "10px"
-    padding: "0 16px 0 18px"
-    height: "36px"
+    fontSize: "13px"
+    fontWeight: 600
   button-ghost:
-    backgroundColor: "{colors.ink-surface}"
-    textColor: "{colors.text-secondary}"
-    rounded: "{rounded.md}"
-    padding: "0 12px"
-    height: "32px"
-  button-ghost-hover:
-    backgroundColor: "{colors.surface-raised}"
-    textColor: "{colors.frost-white}"
-    rounded: "{rounded.md}"
+    backgroundColor: "transparent"
+    border: "1px solid {border-mid}"
+    textColor: "{text-secondary}"
+    rounded: "{rounded.lg}"
     padding: "0 12px"
     height: "32px"
   chip-pill:
-    backgroundColor: "{colors.ink-surface}"
-    textColor: "{colors.text-secondary}"
+    backgroundColor: "{surface-alt}"
+    border: "1px solid {border}"
+    textColor: "{text-secondary}"
     rounded: "{rounded.full}"
     padding: "0 12px"
     height: "30px"
-  chip-pill-hover:
-    backgroundColor: "oklch(76% 0.22 215 / 0.10)"
-    textColor: "{colors.ionosphere-blue}"
-    rounded: "{rounded.full}"
-    padding: "0 12px"
-    height: "30px"
-  gap-tag:
-    backgroundColor: "oklch(76% 0.22 215 / 0.10)"
-    textColor: "{colors.ionosphere-blue}"
-    rounded: "{rounded.sm}"
-    padding: "2px 8px"
+  ai-input:
+    backgroundColor: "{surface}"
+    border: "1px solid {border}"
+    rounded: "{rounded.input}"
+    padding: "12px 14px"
+    fontSize: "15px"
+    minHeight-hero: "72px"
+    minHeight-compact: "44px"
+  brief-section-header:
+    indexColor: "{signal}"
+    indexFont: "{label}"
+    nameFont: "{label}"
+    nameColor: "{text-muted}"
+    countColor: "{text-muted}"
+    separator: "·"  # NOT em-dash
 ---
 
-# Design System: MarketScout
+# Design System: plinths
 
 ## 1. Overview
 
-**Creative North Star: "The Intelligence Brief"**
+**Creative North Star: "The Brief, calmly delivered."**
 
-MarketScout looks like a professional research deliverable, not a SaaS product. Every screen is structured like an analyst's output — numbered sections, dense tables, conclusions before evidence. A founder who opens a report should feel like they're reading something prepared for them by someone who did the work, not like they're using a dashboard.
+Plinths looks like a private research deliverable that was prepared specifically for the reader. Not a SaaS dashboard, not a chatbot, not a marketing landing. The product earns trust by being calm, specific, and quiet about its own machinery.
 
-The system earns trust through restraint. The deep midnight blue environment sets a focused, low-distraction canvas. The electric sky blue accent (Ionosphere Blue) marks every interactive element, focus state, and running process — its rarity signals importance. The scanner violet (Signal) is reserved for a single role: opportunity scores. No other element shares that hue. Color is communication here, not decoration.
+Two themes are first-class:
 
-Motion is controlled and intentional. Data cards lift and tilt on hover to acknowledge presence — not to animate for its own sake. Stage indicators glow when active. Reveals stagger as content enters view. Nothing runs longer than 400ms unless it's a data-driven count-up. The product feels fast because every transition earns its place.
+- **Pale Intelligence** (light, default). Warm parchment surfaces, warm-tinted charcoal text, dark-ink for every interaction, slate-blue for data signals, and a single warm-amber wordmark accent that appears nowhere else in the UI. The reader feels like they are reading a document, not using software.
+- **Stealth** (dark variant). Pure neutral near-black surfaces (chroma 0, no warm or cool tint), pure off-white text and accent. Warm amber `#c9965a` is the only chromatic colour in the entire UI: it is the data signal, the wordmark, and the focus ring. Reads like a calibrated reference monitor at night.
+
+The two themes share the same type system, the same component shapes, the same motion budget, the same content patterns. Only the surface palette and accent role change. Identity is preserved across them by typography and rhythm, not by colour.
+
+There is no third theme. The system was previously also documenting a "warm dark" mode; that has been retired in favour of Stealth.
 
 **Key Characteristics:**
-- Dark environment (void midnight canvas), not dark-as-aesthetic but dark-as-focus
-- Monospaced section numbering and metadata strips that read like a file system
-- Progressive tonal depth: void-midnight → ink-surface → surface-raised, no shadows at rest
-- Two accent roles: Ionosphere Blue (interaction) and Scanner Violet (opportunity/signal), never mixed
-- IBM Plex type family throughout — Serif for display and verdicts, Sans for body, Mono for metadata and counts
-- State feedback that's tactile but controlled: 3D tilts, focus glows, accent left-borders on hover rows
+- Two-theme system, both first-class, both quiet
+- IBM Plex Serif / Sans / Mono — three roles, never mixed
+- Tonal surface ladder for elevation, no shadows at rest
+- One accent role per theme: dark-ink (light) or off-white (stealth)
+- One signal role per theme: slate-blue (light) or warm-amber (stealth)
+- Logo wordmark amber is the only ornamental colour in light mode and is restricted to the wordmark
+- Animation budget: 280ms default, 400ms ceiling, 700-1200ms only for data count-ups
+- The shared input layoutId pattern that morphs from landing-centre to workspace-bottom is the system's most distinctive interaction
 
-## 2. Colors: The Night Sky Aurora Palette
+## 2. Colours
 
-A dark palette built from blue-shifted OKLCH neutrals. Two accent roles, three semantic signals — all reserved. No color appears without a specific job.
+A two-palette system. Each theme picks one chromatic role and one logo role; everything else is a neutral on a deliberate hue axis.
 
-### Primary
+### Pale Intelligence (light, default)
 
-- **Ionosphere Blue** (`oklch(76% 0.22 215)`): The primary interaction color. Every clickable element, focus state, running process indicator, active border, and accent tag uses this hue. Its chroma is high for a dark system — it reads as genuinely electric without veering violet. Interactive elements at rest are neutral; Ionosphere Blue appears on hover, active, and running states only.
+The canvas is warm parchment, biased toward hue 80 (warm yellow-cream), with very low chroma (0.004 to 0.011) so the warmth reads as paper rather than as colour. Text is warm charcoal on hue 245 (the one cool axis in the palette), giving readable contrast that doesn't feel synthetic.
 
-- **Scanner Violet** (`oklch(74% 0.28 300)`): The signal color. Used exclusively for opportunity scores (gap scores and brief IDs). No button, link, or label uses this color. Its job is to make the number you're evaluating for market entry unmissable. When you see violet, the product is scoring something for you.
+- **Foundation neutrals (hue 80, low chroma):** `--bg` `oklch(98.5% 0.004 80)` → `--surface` `oklch(97% 0.006 80)` → `--surface-alt` `oklch(94% 0.009 80)` → `--surface-hover` `oklch(91% 0.011 80)`. Each step is a real elevation level.
+- **Borders:** `--border` `oklch(88% 0.006 80)` (default), `--border-mid` `oklch(80% 0.008 80)`, `--border-strong` `oklch(68% 0.010 80)`. Borders carry hierarchy; shadows are reserved for state.
+- **Text:** `--text` `oklch(13% 0.008 245)` (warm charcoal), `--text-secondary` `oklch(44% 0.006 245)`, `--text-muted` `oklch(62% 0.005 245)`. The cool-shifted dark on warm-shifted background is the source of the "expensive paper" feeling.
+- **Accent (interaction):** `--accent` `oklch(13% 0.008 245)` — the same dark ink as body text. Every interactive element (buttons, links, focus rings, send affordances) uses this colour. It is the only "non-neutral" treatment in the light theme. Hover lifts to `--accent-hover` `oklch(7% 0.006 245)`.
+- **Signal (data):** `--signal` `oklch(36% 0.10 240)` slate blue. Used on report scores, data callouts, the brief-section-header index. Distinct from accent so a "this is data" beat is visible.
+- **Logo accent (wordmark only):** `--logo-accent` `oklch(68% 0.12 65)` warm amber. Restricted by rule to the four-bar mark in the wordmark. Never used on a button, never used on a score, never used on a status. The amber's job is to ID the brand and nothing else.
 
-### Secondary
+### Stealth (dark variant)
 
-- **Clearance Teal** (`oklch(72% 0.20 168)`): Semantic success. Saturation score ≤40 (open market), completed pipeline stages, positive stat direction. The "go" signal.
+The canvas is pure neutral. Chroma 0 across all neutrals. The eye reads it as graphite or obsidian, not as "dark mode." The single chromatic colour, warm amber `#c9965a`, takes on three jobs at once: data signal, focus ring, and wordmark accent.
 
-- **Caution Amber** (`oklch(80% 0.18 68)`): Semantic warning. Saturation score 41–65 (contested market). Also used in the Recommendation card at report bottom. High lightness ensures legibility on dark surface at small sizes.
+- **Foundation neutrals (chroma 0):** `--bg` `oklch(14% 0 0)` ≈ `#1c1c1c` → `--surface` `oklch(18% 0 0)` → `--surface-alt` `oklch(22% 0 0)` → `--surface-hover` `oklch(26% 0 0)`.
+- **Borders:** `--border` `oklch(27% 0 0)`, `--border-mid` `oklch(32% 0 0)`, `--border-strong` `oklch(38% 0 0)`. `--border-focus` is the warm amber at 25% opacity.
+- **Text:** `--text` `oklch(93% 0 0)` (off-white), `--text-secondary` `oklch(76% 0 0)`, `--text-muted` `oklch(60% 0 0)`. Pure neutral, no warm shift in stealth.
+- **Accent (interaction):** `--accent` `oklch(93% 0 0)` — off-white, the inversion of light's dark-ink rule. Buttons and interactive surfaces use the off-white treatment.
+- **Signal + logo (single role):** `--signal` and `--logo-accent` both equal `#c9965a` in stealth. This consolidation is intentional: stealth has one accent and one accent only. Data scores, focus rings, the wordmark mark, and any ornamental highlight all use this exact value.
 
-- **Risk Coral** (`oklch(68% 0.22 22)`): Semantic danger. Saturation score >65 (crowded market), error states, pipeline failures, dominant competitor labels. Never used decoratively.
+### Semantic colours (both themes)
 
-### Neutral
+Three semantic roles, both themes. Each is OKLCH-tuned for the theme it appears in.
 
-- **Void Midnight** (`oklch(7% 0.032 245)`): The canvas. The lowest surface in the system. Blue-shifted to avoid the deadness of true black.
-- **Ink Surface** (`oklch(12% 0.030 244)`): Card surfaces — the primary elevated layer above the canvas.
-- **Surface Raised** (`oklch(17% 0.028 242)`): Secondary elevation. Table headers, toolbar backgrounds, mini-card containers.
-- **Surface Hover** (`oklch(22% 0.026 240)`): State feedback on row hovers.
-- **Border Subtle** (`oklch(22% 0.028 242)`): Dividers, section boundaries. Nearly invisible — structural, not decorative.
-- **Border Mid** (`oklch(32% 0.024 240)`): Scrollbar thumbs, separators that need more visual weight.
-- **Border Strong** (`oklch(46% 0.020 238)`): Milestone dots, content dividers that need to read at text size.
-- **Frost White** (`oklch(95% 0.006 220)`): Primary text. Cool-tinted rather than pure white.
-- **Text Secondary** (`oklch(68% 0.012 230)`): Supporting body copy, labels, non-critical metadata.
-- **Text Muted** (`oklch(48% 0.012 235)`): UPPERCASE labels, timestamps, placeholders, counts. Intentionally low-contrast relative to dark surfaces.
+| Role | Light | Stealth | Use |
+|---|---|---|---|
+| `--success` | `oklch(50% 0.15 152)` | `oklch(56% 0.14 152)` | Saturation ≤40 (open market), completed pipeline stages |
+| `--warning` | `oklch(60% 0.16 67)` | `oklch(68% 0.15 67)` | Saturation 41–65 (contested), recommendation block tint |
+| `--danger`  | `oklch(54% 0.20 23)` | `oklch(60% 0.18 23)` | Saturation >65 (crowded), errors, pipeline failures |
+
+Score colour direction is **inverted for opportunity**: high opportunity is success-coloured, not danger-coloured. The codebase already implements this via `scoreColor(score, invert)`.
 
 ### Named Rules
 
-**The Two Accent Rule.** Ionosphere Blue is interaction. Scanner Violet is scoring. These two roles never share a color, and no other roles borrow from either hue. A designer who reaches for violet on a button, or blue on an opportunity score, has broken the system.
+**The Single Accent Rule.** Each theme has exactly one interaction colour. Light: dark ink. Stealth: off-white. Never mix or layer accents within a theme.
 
-**The Dark Tint Rule.** Every neutral surface in this system is tinted toward hue 240–245. There is no true-black or pure-grey anywhere. The blue shift unifies the palette and prevents the flat deadness of neutral dark modes.
+**The Single Signal Rule.** Each theme has exactly one data colour. Light: slate blue. Stealth: warm amber. Score colours (success/warning/danger) are not signals; they are categorical labels and only appear on saturation/difficulty/opportunity scores.
+
+**The Logo-Accent Rule (light theme).** Warm amber `oklch(68% 0.12 65)` appears only on the wordmark mark in the light theme. Never on a button, never on a score, never on an alert, never on a tooltip. If amber appears anywhere else in light mode, it is a bug.
+
+**The Stealth Mono-Chroma Rule.** Stealth has exactly one chromatic colour: amber `#c9965a`. The wordmark, the signal, the focus ring, and the data emphasis all use this exact value. The semantic palette (success/warning/danger) is the only exception, and only on score surfaces.
+
+**The Cool-Text-on-Warm-Surface Rule (light theme).** Body text in light mode is biased toward hue 245 (cool charcoal); surfaces are biased toward hue 80 (warm cream). The contrast between the two hue families is the source of the "Pale Intelligence" character. Don't move text colour onto the warm axis or surfaces onto the cool axis.
 
 ## 3. Typography
 
-**Display Font:** IBM Plex Serif (Georgia fallback) — used for report titles, verdict statements, score numbers, stat values, and roadmap phase titles.
-**Body Font:** IBM Plex Sans (system-ui fallback) — used for all running copy, UI labels, and interactive controls.
-**Label / Mono Font:** IBM Plex Mono (Courier New fallback) — used for section numbers, timestamps, metadata strips, elapsed timers, and any data value that needs fixed-width legibility.
+**Display:** IBM Plex Serif (Georgia fallback). Used for landing wordmark, report titles, verdict statements, score values, roadmap phase titles.
+**Body:** IBM Plex Sans (system-ui fallback). Used for all running copy, UI labels, and interactive controls.
+**Data / Label:** IBM Plex Mono (Courier New fallback). Used for system-generated data: timestamps, brief IDs, elapsed timers, scores, section index numbers, uppercase metadata labels.
 
-**Character:** The Plex family reads like a research institution's house type — authoritative and neutral, without personality overreach. Serif for the conclusions that matter; sans for the scaffolding; mono for the data that needs to be read at a glance. The three variants create clear hierarchy without ever changing families.
+The Plex family is the only typeface in the system. Three variants, three roles, no exceptions.
 
 ### Hierarchy
 
-- **Display** (IBM Plex Serif, 600, clamp(22px, 3vw, 30px), lh 1.2, ls -0.015em): Report titles and analysis headers. Not a hero typeface — it appears when a named deliverable needs a headline.
-- **Headline** (IBM Plex Serif, 600, italic, clamp(20px, 2.8vw, 28px), lh 1.3, ls -0.01em): Verdict statements — the single conclusive sentence above each report's scoring summary. Italic signals a judgment, not a label.
-- **Title** (IBM Plex Serif, 600, 20px, lh 1.35, ls -0.01em): Section titles like "Analysing…" in the pipeline view.
-- **Body** (IBM Plex Sans, 400, 14px, lh 1.5): All descriptive copy — gap descriptions, roadmap milestones, competitor analysis. Max-width 580–640px to hold line length.
-- **Label** (IBM Plex Mono, 700, 10px, ls 0.10em, UPPERCASE): Section metadata — stage numbers, "PRIMARY FINDING", competitor headers, report eyebrows. The uppercase mono register signals system-generated data, not authored prose.
+| Role | Font | Size | Weight | Line height | Letter spacing | Use |
+|---|---|---|---|---|---|---|
+| Display | Plex Serif | clamp(28px, 4vw, 44px) | 600 | 1.15 | -0.02em | Landing wordmark, report idea title |
+| Headline | Plex Serif | clamp(22px, 3vw, 32px) | 600 | 1.25 | -0.015em | Section heads, verdict statements |
+| Title | Plex Serif | 20px | 600 | 1.35 | -0.01em | Pipeline title, modal title, sub-section titles |
+| Body Large | Plex Sans | 15px | 400 | 1.6 | 0 | Recommendation copy, report one-liner, modal body |
+| Body | Plex Sans | 14px | 400 | 1.55 | 0 | All running copy, gap descriptions, roadmap milestones |
+| UI | Plex Sans | 13px | 500 | 1.4 | 0 | Buttons, controls, sidebar labels, nav items |
+| Label | Plex Mono | 10.5px | 600 | 1 | 0.10em UPPERCASE | Section index, eyebrows, "PRIMARY FINDING", category tags |
+| Data | Plex Mono | 12px | 500 | 1.2 | 0.02em | Brief IDs, timestamps, scores, elapsed timers |
 
 ### Named Rules
 
-**The Italic Verdict Rule.** IBM Plex Serif italic appears in exactly one place: the verdict statement that opens each report. It signals judgment. Applying italic to any other element breaks the signal.
+**The Mono-for-Data Rule.** Anything generated by the system uses Plex Mono. Anything authored by the AI or the user uses Plex Sans (body) or Plex Serif (titles, verdicts). The split is non-negotiable and is the single most important typographic signal in the system.
 
-**The Mono-for-Data Rule.** If a number or label comes from the system (timestamps, counts, scores, IDs), it uses IBM Plex Mono. If it comes from the AI analysis or the user (ideas, competitor names, gap titles), it uses Sans or Serif. The distinction is immediate and consistent.
+**The Italic Verdict Rule.** Plex Serif italic appears in exactly one place: the one-sentence recommendation that opens each report. Italic anywhere else dilutes that signal.
 
-## 4. Elevation
+**The Body-Width Rule.** Long-form copy is capped at 65–75ch (approximately 580–640px at 14px). Reports are read, not scanned across a wide viewport.
 
-This system is flat by default. Depth is expressed through the tonal surface ladder — void-midnight → ink-surface → surface-raised → surface-hover — not through shadows. Shadows are state feedback, not ambient decoration.
+**The No-Gradient-Text Rule.** No `background-clip: text` anywhere. Hierarchy is built from size, weight, and family, not from colour treatment.
 
-At rest, every card sits flush on its surface. The boundary between levels is communicated by background tint, a 1px border (border-subtle or border-mid), and occasionally an inset gloss layer (`oklch(100% 0 0 / 0.04)` — barely visible, adds micro-definition to card tops).
+## 4. Elevation & Surface
 
-### Shadow Vocabulary
+The system is flat at rest. Depth lives in the tonal surface ladder, not in shadows.
 
-- **Focus Glow** (`0 0 50px oklch(76% 0.22 215 / 0.12)`): Applied to the AI input field on focus. Communicates active state without hard geometry.
-- **Stage Active Glow** (`0 0 14px oklch(76% 0.22 215 / 0.40)`): Applied to pipeline stage indicator dots when their stage is running. Signals live activity.
-- **3D Tilt Shadow** (`6px 8px 20px oklch(7% 0.032 245 / 0.55), inset 0 1px 0 oklch(100% 0 0 / 0.04)`): Applied to stat cards on hover, combined with `perspective(600px) rotateY(4deg) rotateX(-2deg) translateZ(6px)`. The only decorative lift in the system — used specifically on data stat cards as tactile feedback.
-- **Send Button Glow** (`0 0 28px oklch(76% 0.22 215 / 0.35)`): Applied to the primary send button on hover. Reinforces the action state of the most important control on screen.
+### Surface ladder (both themes)
+
+| Layer | Role |
+|---|---|
+| `--bg` | Page canvas. The lowest surface. |
+| `--surface` | Primary card / panel. The default elevated layer above the canvas. |
+| `--surface-alt` | Secondary elevation: nested containers, table headers, mini-cards inside cards. |
+| `--surface-hover` | State feedback on row hovers and pill hovers. |
+
+Going up one layer means going up one level of importance. Don't skip layers, don't double-stack identical surfaces.
+
+### Shadow vocabulary (state only, never at rest)
+
+- **Focus glow.** Applied to the AI input on `:focus-within`. Light: `0 0 0 3px oklch(13% 0.008 245 / 0.10)` (subtle dark-ink halo). Stealth: `0 0 0 3px #c9965a40` (warm amber halo).
+- **Send-button hover lift.** Applied to the primary send affordance on hover only. Light: `0 4px 14px oklch(13% 0.008 245 / 0.18)`. Stealth: `0 4px 14px #00000060`.
+- **Modal scrim.** `backdrop-filter: blur(6px)` on the modal backdrop. Both themes.
 
 ### Named Rules
 
-**The Flat-By-Default Rule.** Surfaces are flat at rest. If a shadow appears on initial render, it's wrong. Shadows enter only as a response to user action (hover, focus, active pipeline state).
+**The Flat-By-Default Rule.** Surfaces are flat at rest. If a shadow appears on initial render, it is wrong. Shadows are state feedback only.
+
+**The No-Glassmorphism Rule.** `backdrop-filter` is allowed on the modal scrim only. Card surfaces are solid. Decorative blurs do not appear in the system.
 
 ## 5. Components
 
 ### Buttons
 
-Primary is action; ghost is secondary action; chip is suggestion.
+Three roles: primary, ghost, pill.
 
-- **Shape:** Ghost and ghost-variant buttons are gently squared (4px, `--radius-md`). The primary send button is slightly more rounded (10px) to distinguish it as the dominant action. Chip/pill buttons are fully rounded (9999px) for suggestion affordance.
-- **Primary (Send / Analyse):** Ionosphere Blue background, Void Midnight text, 10px radius, 36px height. All-caps IBM Plex Sans at 12px, letter-spacing 0.08em. On hover: `ionosphere-hover` background + blue glow (`0 0 28px oklch(76% 0.22 215 / 0.35)`).
-- **Ghost:** `ink-surface` background, 1px `border-subtle` border, `text-secondary` text, `radius-md`. On hover: `surface-raised` background, `border-mid` border, `frost-white` text. 32px height.
-- **Chip / Pill:** Full radius, `ink-surface` background, `border-mid` border. On hover: `accent-light` background, `ionosphere-blue` text, `accent-border` border. Used for example queries and suggestion affordances.
+- **Primary (Send / Analyse / sign-in CTA).** `--accent` background, `--text-inverse` foreground, 36px height, 6px radius (`{rounded.lg}`), 13px Plex Sans 600. On hover: `--accent-hover` background plus the send-button hover lift shadow. Disabled: 40% opacity, cursor not-allowed.
+- **Ghost (secondary actions, top-nav buttons).** Transparent background, 1px `--border-mid`, `--text-secondary` foreground, 32px height, 6px radius (`{rounded.lg}`). On hover: `--surface-alt` fill, `--text` foreground.
+- **Pill / Chip (example queries, suggestions).** `--surface-alt` background, 1px `--border`, `--text-secondary` foreground, 30px height, full radius. On hover: `--accent-light` background, `--text` foreground, `--accent-border` border.
 
-### Cards / Containers
+### AI Input (signature component)
 
-- **Score Card:** `ink-surface` background, 1px `border-subtle`, `radius-lg` (6px). A 3px colored top border encodes the saturation level — clearance teal for open, caution amber for moderate, risk coral for crowded. 24px internal padding.
-- **Stat Card:** `ink-surface` background, 1px `border-subtle`, `radius-md` (4px). On hover: 3D perspective tilt (`rotateY(4deg) rotateX(-2deg) translateZ(6px)`) plus directional shadow. This is the only component in the system with a 3D hover transform.
-- **Bottom Cards (Trend / Recommendation):** Use semantic tinted backgrounds — `accent-light` for trend, `warning-light` for recommendation. Internal borders match (`accent-border`, `warning-border`). These are read-only informational surfaces, never interactive.
-- **Pipeline Stage (active):** Adds `accent-light` background tint and a 2px left `ionosphere-blue` border when the stage is running. At rest: no decoration.
+The single most important component in the system. One implementation, two sizes.
 
-### Inputs / Fields
+- **Hero size.** Used on landing and workspace empty state. Min height 72px, max 280px (auto-resize). Toolbar row beneath the textarea with: model badge (left), attach affordance (left, only if attachments are wired), Analyse button (right) with text label.
+- **Compact size.** Used as the workspace bottom rail during analysis and after a report. Min height 44px, max 180px. Same toolbar pattern but the send button shows arrow only (no label).
 
-- **AI Input:** `ink-surface` (78% opacity) background with `backdrop-filter: blur(24px)`. 16px border radius. Default border: `oklch(76% 0.22 215 / 0.22)` + a 3px left border in `ionosphere-blue`. On focus: border brightens to `oklch(76% 0.22 215 / 0.55)` and a diffuse glow (`0 0 50px oklch(76% 0.22 215 / 0.12)`) expands outward.
-- **Style:** The 3px left border accent is the identity element for this input. It persists at rest and on focus, distinguishing it from a generic input. The rest of the border is subtle at rest.
-- **Disabled:** 32% opacity, cursor not-allowed.
+The same component instance is shared across landing and workspace via `layoutId="ml-input"` on its motion wrapper. The morph from landing-centre to workspace-bottom is the system's most distinctive interaction.
 
-### Navigation
+Visual treatment: `--surface` background, 1px `--border`, 16px radius. On focus-within: `--accent` border, focus-glow halo.
 
-- **Workspace Header:** Fixed 52px bar. `oklch(9% 0.030 244 / 0.88)` background with `backdrop-filter: blur(18px) saturate(150%)`. 1px `border-subtle` bottom border. Logo: IBM Plex Sans (word) + IBM Plex Serif (accent word). Nav badge: IBM Plex Mono, 10px, uppercase, `ionosphere-blue` on `accent-light` background, full-radius.
+### Brief Section Header (signature pattern)
 
-### Signature Components
+Every report section opens with a row that reads like an appendix index entry:
 
-**Brief Section Header.** Every report section opens with a numbered header — mono index in `ionosphere-blue`, an em-dash in `border-strong`, section name in `text-secondary` uppercase at 10px, and an optional count in `text-muted` mono at right. This pattern (01 — COMPETITORS 8 found) is the system's most distinctive recurring element. It reads like a brief appendix index.
+```text
+01 · COMPETITIVE LANDSCAPE · 8 COMPANIES IDENTIFIED
+```
 
-**Pipeline Stage Indicator.** A 24px circle with a 1.5px border sits on a vertical 1px line. At rest: `ink-surface` fill, `border-mid` stroke. Running: `accent-light` fill, `ionosphere-blue` stroke, 14px glow halo. Done: `success-light` fill, `clearance-teal` stroke. The state transitions are animated via Framer Motion.
+- **Index** (`01`, `02`, `03`): Plex Mono, `--signal` colour, 12px.
+- **Separator**: middle dot `·` in `--border-strong`. NOT an em-dash.
+- **Name**: Plex Mono uppercase, 10.5px, 0.10em letter-spacing, `--text-muted`.
+- **Count** (optional, right-aligned): Plex Mono, `--text-muted`, same size as name.
 
-## 6. Do's and Don'ts
+The middle-dot separator replaces the em-dash used in the previous design system. Em-dashes are banned in user-facing copy and structural patterns.
 
-### Do:
+### Score Cards (Hero Metrics)
 
-- **Do** use IBM Plex Mono for all system-generated data: timestamps, counts, section numbers, IDs, elapsed timers. Never body copy.
-- **Do** use the tonal surface ladder (void-midnight → ink-surface → surface-raised) to communicate hierarchy. One step up = one level of importance.
-- **Do** limit Ionosphere Blue to interactive and active states. It should appear infrequently enough that its presence always signals something clickable or running.
-- **Do** reserve Scanner Violet for opportunity scores only. No other element in the interface takes that hue.
-- **Do** use semantic color (teal/amber/coral) to encode market saturation status on score cards — the colored top border is the only decoration those cards carry.
-- **Do** keep body copy max-width at 580–640px. The reports are meant to be read, not scanned across a wide viewport.
-- **Do** use the brief-section-header pattern (mono index + dash + uppercase label) for every report section. Consistency here is what makes the report feel like a structured deliverable.
-- **Do** apply `prefers-reduced-motion` to all Framer Motion animations. The cosmetic pipeline animation especially must respect this.
+Three numeric scores rendered in a row: Saturation, Entry Difficulty, Opportunity. Each is a column with: column label (Plex Sans 13px secondary), score number (Plex Serif 600, count-up animated), bar track + fill (semantic colour), status label (Plex Sans, semantic colour).
 
-### Don't:
+The hero metrics row is the single allowed instance of "big number" treatment in the system. It is not the report's lead; the verdict and recommendation precede it.
 
-- **Don't** use gradient text on any UI copy or labels. The wordmark logo is the sole exception and is a locked identity element, not a pattern.
-- **Don't** build generic SaaS dashboard surfaces: pastel cards, excessive border-radius, icon + heading + body card grids, "Get started" button energy. MarketScout looks like a research tool, not a B2B SaaS product.
-- **Don't** use a chat-bubble or conversational framing for any part of the analysis flow. The interface is structured output, not a dialogue.
-- **Don't** add confetti, gradient CTAs, progress celebrations, or growth-hacker marketing copy patterns.
-- **Don't** use shadows at rest. Elevation is communicated through surface tint and borders. A card that starts with a drop-shadow looks wrong here.
-- **Don't** reuse Scanner Violet outside gap/opportunity scores. It is a single-purpose semantic signal.
-- **Don't** apply the 3D tilt transform to anything other than stat data cards. It is a purposeful exception that communicates "this data is interactive," not a card hover template.
-- **Don't** introduce a fourth typeface or use system-ui serif as a display face. The Plex family is complete: Serif for display, Sans for copy, Mono for data.
-- **Don't** animate layout properties (width, height, top, left). All motion uses `opacity`, `transform`, and `filter` only.
+### Pipeline Tracker
+
+Vertical stack of stage rows, with optional "parallel block" wrappers for stages that run concurrently (e.g., Brave Search and Bedrock Parse in parallel).
+
+Each stage row: 24px circular indicator (left) on a vertical 1px line, body to the right with stage label, elapsed timer (mono), description, and a 1px progress bar that fills during the running state.
+
+Indicator states: pending (`--surface` fill, `--border-mid` stroke, muted minus icon), running (`--accent-light` fill, `--accent` stroke, spinning loader, no glow), done (`--success-light` fill, `--success` stroke, check icon).
+
+### Sidebar (Recent Reports)
+
+Two modes: collapsed (rail, ~52px wide, only mark + new-analysis + avatar) and expanded (~280px wide, full thread list + profile).
+
+Thread item: relative date (Plex Mono, muted), idea text (Plex Sans 14px, `--text`, two-line clamp), saturation score (Plex Mono, semantic colour, with `score · saturation` label).
+
+Section heading "Reports" (renamed from "Briefings"), Plex Mono uppercase 10.5px, `--text-muted`, with a count chip.
+
+### Profile Footer
+
+Avatar circle (logo-accent background in stealth, surface-alt in light), name, plan badge with lightning glyph. Click opens upward-flying menu (theme picker, settings, sign out).
+
+### Modals
+
+Centred dialog on a blurred backdrop. Card surface with 16px radius, 1px `--border`, generous internal padding (24px on mobile, 32px on desktop). Close button top-right at 14px. Modal title in Plex Serif 20px. Body in Plex Sans 15px.
+
+Focus is trapped while open and restored on close. Backdrop click and Escape both close.
+
+## 6. Motion
+
+Motion budget is strict. The product feels expensive because nothing is gratuitous.
+
+### Curve
+
+Single curve: `cubic-bezier(0.22, 1, 0.36, 1)` (ease-out-quart). Applied to every transition. No bounce, no elastic, no spring physics outside the layoutId morph.
+
+### Durations
+
+| Token | Value | Use |
+|---|---|---|
+| `duration-fast` | 180ms | Hover state changes, focus rings, dropdown opens |
+| `duration-base` | 280ms | Most enter/exit transitions, content reveals |
+| `duration-slow` | 400ms | Page-level transitions, modal enter/exit (ceiling) |
+| `duration-count-up` | 700ms — 1200ms | Score count-up animations (data only) |
+
+Anything longer than 400ms must be data-driven.
+
+### Patterns
+
+- **Entry.** `opacity 0 → 1` and `translateY 8px → 0`, ease-out-quart, 280ms.
+- **Stagger.** 60–90ms between siblings on lists and section reveals.
+- **Score count-up.** RAF loop, cubic ease-out, 700–1200ms depending on value range.
+- **Layout morph.** The shared input uses `layoutId="ml-input"` with `type: 'spring', stiffness: 280, damping: 36`. This is the only spring in the system.
+- **Reduced motion.** When `prefers-reduced-motion: reduce` is set: no parallax, count-ups settle to final values immediately, sequential reveals collapse to instant fade-ins.
+
+### Banned
+
+- Bounce / elastic curves
+- Animating layout properties (width, height, top, left). Use transform or opacity.
+- Looping idle animations on UI chrome (orbital glows, pulsing dots that aren't status indicators)
+- Mouse parallax on hero elements (recently retired from the landing wordmark)
+- Anything that animates "AI is working" beyond the pipeline tracker's running state
+
+## 7. Iconography
+
+Single icon library: **lucide-react**. Stroke widths: 1.8 default, 2 for emphasis, 2.5 for status indicators (check, dot). Sizes: 11px (sidebar microcopy), 13px (UI controls), 15px (primary controls), 24px (pipeline indicators).
+
+No emoji glyphs in UI chrome. Use lucide icons or coloured dots.
+
+## 8. Do's and Don'ts
+
+### Do
+
+- Use Plex Mono for all system-generated data: timestamps, brief IDs, scores, section index numbers, elapsed timers.
+- Use the tonal surface ladder for elevation. Borders carry hierarchy; shadows carry state.
+- Restrict the wordmark amber to the wordmark mark in light mode.
+- In stealth, use `#c9965a` as the single chromatic colour for signal, focus, and brand.
+- Use middle-dots `·` as separators in structural patterns. Never em-dashes.
+- Cap body line length at 65–75ch.
+- Lead reports with the recommendation. The metrics come second.
+- Honour `prefers-reduced-motion` everywhere motion appears.
+- Keep both themes equally polished. Test every change in both before declaring done.
+
+### Don't
+
+- Don't use a third theme. Light + Stealth are the only two. The previously-shipped warm "dark" theme is retired.
+- Don't introduce a fourth typeface. Plex Serif / Sans / Mono is complete.
+- Don't use gradient text, gradient buttons, or gradient backgrounds anywhere.
+- Don't use side-stripe borders (`border-left: 3px solid …` as a card decoration). Use full borders, semantic backgrounds, or numeric prefixes.
+- Don't use the hero-metric template (big number + small label + supporting stats + accent gradient). The hero in plinths is the recommendation sentence.
+- Don't ship decorative controls. If a button has no behaviour, remove it. If a dropdown has no working alternates, render it as static text.
+- Don't add idle-loop animations to UI chrome. The product is fast; the chrome doesn't need to perform speed.
+- Don't use em-dashes in user-facing copy or structural patterns. Use commas, colons, periods, or middle-dots.
+- Don't use the words "drop", "vibe", "magic", "supercharge", "10x", or "unlock" in copy.
+- Don't use a chat-bubble or streaming-text framing on report output. The output is structured, not conversational.
+- Don't apply `outline: none` without a visible focus replacement. Accessibility ahead of aesthetics, every time.

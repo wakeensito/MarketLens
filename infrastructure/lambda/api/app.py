@@ -134,7 +134,12 @@ def list_reports():
     result = table.query(
         IndexName="gsi1",
         KeyConditionExpression="gsi1pk = :pk",
-        ExpressionAttributeValues={":pk": f"ORG#{org_id}#REPORTS"},
+        FilterExpression="#s <> :deleted",
+        ExpressionAttributeNames={"#s": "status"},
+        ExpressionAttributeValues={
+            ":pk": f"ORG#{org_id}#REPORTS",
+            ":deleted": "deleted",
+        },
         ScanIndexForward=False,
     )
     reports = result.get("Items", [])
@@ -229,7 +234,7 @@ def get_report(report_id: str):
     )
     item = result.get("Item")
 
-    if not item:
+    if not item or item.get("status") == "deleted":
         return {"error": "Report not found"}, 404
 
     return item
