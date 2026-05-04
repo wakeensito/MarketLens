@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import type { ApiReport } from '../api';
 import { listReports, deleteReport } from '../api';
+import type { AppState } from '../types';
 import { useAuthContext } from '../hooks/useAuth';
 import { BrandWordmarkInner, PlinthsMark } from './BrandWordmark';
 import { MOCK_HISTORY } from '../mockData';
@@ -75,6 +76,7 @@ interface Props {
   onOpen:         () => void;
   onNewChat:      () => void;
   activeId:       string | null;
+  screen:         AppState;
   onSelect:       (reportId: string) => void;
   /** Fires when the user clicks "Upgrade Plan" in the profile menu. */
   onUpgradeClick: () => void;
@@ -215,7 +217,7 @@ function ThreadItem({
   );
 }
 
-export default function RecentThreads({ isOpen, onClose, onOpen, onNewChat, activeId, onSelect, onUpgradeClick }: Props) {
+export default function RecentThreads({ isOpen, onClose, onOpen, onNewChat, activeId, screen, onSelect, onUpgradeClick }: Props) {
   const auth = useAuthContext();
   const [reports, setReports] = useState<ApiReport[]>([]);
   const [loading, setLoading] = useState(false);
@@ -275,23 +277,29 @@ export default function RecentThreads({ isOpen, onClose, onOpen, onNewChat, acti
       : isOpen;
     if (!shouldLoad) return;
 
+    const isInitialLoad = reports.length === 0;
+
     let cancelled = false;
     queueMicrotask(() => {
       if (cancelled) return;
       void (async () => {
-        setLoading(true);
+        if (isInitialLoad) setLoading(true);
         try {
           if (USE_MOCK) {
-            await new Promise<void>(resolve => { setTimeout(resolve, 350); });
+            if (isInitialLoad) await new Promise<void>(resolve => { setTimeout(resolve, 350); });
             if (cancelled) return;
             setReports(MOCK_HISTORY);
           } else {
             const r = await listReports();
             if (cancelled) return;
-            setReports(r.slice().reverse());
+            setReports(
+              r.slice().sort((a, b) =>
+                new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+              )
+            );
           }
         } catch {
-          if (!cancelled) setReports([]);
+          if (!cancelled && isInitialLoad) setReports([]);
         } finally {
           if (!cancelled) setLoading(false);
         }
@@ -299,7 +307,8 @@ export default function RecentThreads({ isOpen, onClose, onOpen, onNewChat, acti
     });
 
     return () => { cancelled = true; };
-  }, [isOpen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, screen]);
 
   const handleDelete = useCallback(async (reportId: string) => {
     setDeletingId(reportId);

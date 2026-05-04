@@ -313,6 +313,7 @@ export default function App() {
             onOpen={() => setSidebarOpen(true)}
             onNewChat={onNewChat}
             activeId={reportId}
+            screen={screen}
             onSelect={id => {
               loadHistoricalReport(id);
               if (window.innerWidth <= 680) setSidebarOpen(false);
