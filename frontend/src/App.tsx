@@ -418,7 +418,13 @@ export default function App() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1, transition: { duration: 0.4 } }}
                   >
-                    {report && reportId && <ReportView report={report} reportId={reportId} />}
+                    {report && reportId && (
+                      <ReportView
+                        report={report}
+                        reportId={reportId}
+                        onRequestUpgrade={() => setProactiveUpgrade(true)}
+                      />
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>

@@ -19,12 +19,107 @@ import requests
 from datetime import datetime
 from decimal import Decimal
 
-from aws_lambda_powertools import Logger, Tracer
+from aws_lambda_powertools import Logger, Tracer, Metrics
+from aws_lambda_powertools.metrics import MetricUnit
 from aws_durable_execution_sdk_python import durable_execution, DurableContext
 from botocore.exceptions import BotoCoreError, ClientError
 
 logger = Logger()
 tracer = Tracer()
+metrics = Metrics()
+
+# ── Token usage tracking ──
+# Per-model cost rates (USD per 1M tokens) — keep in sync with pricing
+_MODEL_COST_PER_1M = {
+    "input": {
+        "amazon.nova-micro": 0.035,
+        "deepseek": 0.62,
+        "anthropic.claude-3-haiku": 0.25,
+    },
+    "output": {
+        "amazon.nova-micro": 0.14,
+        "deepseek": 1.85,
+        "anthropic.claude-3-haiku": 1.25,
+    },
+}
+
+
+def _model_cost_key(model_id: str) -> str:
+    """Map a full Bedrock model ID to a cost-table key."""
+    mid = model_id.lower()
+    if "nova-micro" in mid:
+        return "amazon.nova-micro"
+    if "nova-lite" in mid:
+        return "amazon.nova-micro"  # TODO: add nova-lite pricing when used
+    if "nova-pro" in mid:
+        return "amazon.nova-micro"  # TODO: add nova-pro pricing when used
+    if "deepseek" in mid:
+        return "deepseek"
+    if "claude" in mid and "haiku" in mid:
+        return "anthropic.claude-3-haiku"
+    # Fallback: use Haiku pricing as conservative default
+    return "anthropic.claude-3-haiku"
+
+
+def _estimate_cost_usd(model_id: str, input_tokens: int, output_tokens: int) -> float:
+    """Estimate LLM cost in USD for a single call."""
+    key = _model_cost_key(model_id)
+    input_cost = (input_tokens / 1_000_000) * _MODEL_COST_PER_1M["input"].get(key, 0.25)
+    output_cost = (output_tokens / 1_000_000) * _MODEL_COST_PER_1M["output"].get(key, 1.25)
+    return input_cost + output_cost
+
+
+class TokenTracker:
+    """Accumulates token usage across pipeline stages."""
+
+    def __init__(self):
+        self.stages: dict[str, dict] = {}
+        self.total_input = 0
+        self.total_output = 0
+        self.total_cost_usd = 0.0
+
+    def record(self, stage: str, model_id: str, input_tokens: int, output_tokens: int):
+        cost = _estimate_cost_usd(model_id, input_tokens, output_tokens)
+        if stage not in self.stages:
+            self.stages[stage] = {
+                "model_id": model_id,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cost_usd": 0.0,
+                "calls": 0,
+            }
+        s = self.stages[stage]
+        s["input_tokens"] += input_tokens
+        s["output_tokens"] += output_tokens
+        s["cost_usd"] += cost
+        s["calls"] += 1
+        self.total_input += input_tokens
+        self.total_output += output_tokens
+        self.total_cost_usd += cost
+
+        logger.info(
+            "LLM token usage",
+            extra={
+                "stage": stage,
+                "model_id": model_id,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "cost_usd": round(cost, 6),
+            },
+        )
+
+    def summary(self) -> dict:
+        return {
+            "total_input_tokens": self.total_input,
+            "total_output_tokens": self.total_output,
+            "total_tokens": self.total_input + self.total_output,
+            "total_cost_usd": round(self.total_cost_usd, 6),
+            "stages": self.stages,
+        }
+
+
+# Module-level tracker — reset per invocation in handler
+_token_tracker: TokenTracker | None = None
 
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(os.environ["REPORTS_TABLE"])
@@ -366,8 +461,28 @@ def _extract_text(model_id: str, response_body: dict) -> str:
     return response_body["output"]["message"]["content"][0]["text"]
 
 
-def call_llm(prompt: str, model_id: str, max_tokens: int = 1024, temperature: float = 0.2) -> str:
-    """Call a Bedrock model and return the text response. Handles retries with backoff."""
+def _extract_token_usage(model_id: str, response_body: dict) -> tuple[int, int]:
+    """Extract (input_tokens, output_tokens) from model response. Returns (0, 0) on failure."""
+    try:
+        if "anthropic" in model_id:
+            usage = response_body.get("usage", {})
+            return usage.get("input_tokens", 0), usage.get("output_tokens", 0)
+        if "deepseek" in model_id:
+            usage = response_body.get("usage", {})
+            return usage.get("prompt_tokens", 0), usage.get("completion_tokens", 0)
+        # Amazon Nova
+        usage = response_body.get("usage", {})
+        return usage.get("inputTokens", 0), usage.get("outputTokens", 0)
+    except Exception:
+        return 0, 0
+
+
+def call_llm(prompt: str, model_id: str, max_tokens: int = 1024, temperature: float = 0.2, stage: str = "unknown") -> str:
+    """Call a Bedrock model and return the text response. Handles retries with backoff.
+
+    Also records token usage to the module-level TokenTracker if active.
+    """
+    global _token_tracker
     max_attempts = int(os.environ.get("LLM_MAX_ATTEMPTS", "3"))
     backoff_base_ms = int(os.environ.get("LLM_BACKOFF_BASE_MS", "400"))
     backoff_cap_ms = int(os.environ.get("LLM_BACKOFF_CAP_MS", "4000"))
@@ -398,6 +513,11 @@ def call_llm(prompt: str, model_id: str, max_tokens: int = 1024, temperature: fl
                 parsed = json.loads(raw)
             except Exception as e:
                 raise ValueError(f"Bedrock response JSON parse failed: {e}") from e
+
+            # Extract token usage and record
+            input_tokens, output_tokens = _extract_token_usage(model_id, parsed)
+            if _token_tracker is not None:
+                _token_tracker.record(stage, model_id, input_tokens, output_tokens)
 
             return _extract_text(model_id, parsed)
 
@@ -463,7 +583,7 @@ Return ONLY valid JSON with these fields:
 
 Business idea: <<<{cleaned_idea}>>>"""
 
-    response = call_llm(prompt, model_id=MODEL_ID_PARSE, max_tokens=512, temperature=0.1)
+    response = call_llm(prompt, model_id=MODEL_ID_PARSE, max_tokens=512, temperature=0.1, stage="parse")
     try:
         return json.loads(response)
     except json.JSONDecodeError:
@@ -658,7 +778,7 @@ RULES:
 - For user pain points, extract real complaints from the community/review results.
 - If a data point isn't in the search results or structured data, set it to null — do not guess."""
 
-    response = call_llm(prompt, model_id=MODEL_ID_PARSE, max_tokens=2048, temperature=0.1)
+    response = call_llm(prompt, model_id=MODEL_ID_PARSE, max_tokens=2048, temperature=0.1, stage="search")
     try:
         result = json.loads(response)
         competitors = result.get("competitors", [])
@@ -719,7 +839,7 @@ RULES:
 - For market size, use your best estimate. Set to null if truly unknown.
 - For growth rate, estimate based on industry knowledge. Set to null if unknown."""
 
-    response = call_llm(prompt, model_id=MODEL_ID_PARSE, max_tokens=2048, temperature=0.2)
+    response = call_llm(prompt, model_id=MODEL_ID_PARSE, max_tokens=2048, temperature=0.2, stage="search")
     try:
         result = json.loads(response)
         competitors = result.get("competitors", [])
@@ -798,7 +918,7 @@ RULES:
 - For the 1-10 scores: use the FULL range. A 3 and a 7 should feel meaningfully different. Don't default to 5.
 - estimated_tam_usd and estimated_growth_pct: infer from competitor scale, funding levels, and market context. Set to null ONLY if you truly cannot estimate."""
 
-    response = call_llm(prompt, model_id=MODEL_ID_ANALYSE, max_tokens=2048, temperature=0.3)
+    response = call_llm(prompt, model_id=MODEL_ID_ANALYSE, max_tokens=2048, temperature=0.3, stage="analyse")
     try:
         return json.loads(response)
     except json.JSONDecodeError:
@@ -1125,7 +1245,7 @@ Return ONLY valid JSON with:
 
 Include 2-3 gaps, and 3-4 roadmap phases."""
 
-    response = call_llm(prompt, model_id=MODEL_ID_SUMMARISE, max_tokens=1500, temperature=0.6)
+    response = call_llm(prompt, model_id=MODEL_ID_SUMMARISE, max_tokens=1500, temperature=0.6, stage="summarise")
     try:
         return json.loads(response)
     except json.JSONDecodeError:
@@ -1164,6 +1284,9 @@ def handler(event: dict, context: DurableContext) -> dict:
     Each context.step() is checkpointed — if the function is interrupted,
     it resumes from the last completed step.
     """
+    global _token_tracker
+    _token_tracker = TokenTracker()
+
     report_id = event.get("report_id")
     idea_text = event.get("idea_text")
     org_id = event.get("org_id", "anonymous")
@@ -1213,23 +1336,60 @@ def handler(event: dict, context: DurableContext) -> dict:
         )
         _set_stage(report_id, "assemble", org_id)
 
-        # Write final result to DynamoDB
+        # ── Token usage: persist + emit metrics ──
+        token_summary = _token_tracker.summary()
+
+        # Write final result + token usage to DynamoDB
         now = datetime.utcnow().isoformat()
         table.update_item(
             Key={"pk": pk, "sk": sk},
-            UpdateExpression="SET #s = :status, result_json = :result, completed_at = :now",
+            UpdateExpression=(
+                "SET #s = :status, result_json = :result, completed_at = :now, "
+                "total_tokens_input = :ti, total_tokens_output = :to, "
+                "total_cost_usd = :cost, token_usage = :usage"
+            ),
             ExpressionAttributeNames={"#s": "status"},
             ExpressionAttributeValues={
                 ":status": "complete",
                 ":result": _floats_to_decimal(result),
                 ":now": now,
+                ":ti": token_summary["total_input_tokens"],
+                ":to": token_summary["total_output_tokens"],
+                ":cost": _floats_to_decimal(token_summary["total_cost_usd"]),
+                ":usage": _floats_to_decimal(token_summary["stages"]),
             },
         )
 
-        logger.info("Pipeline completed", extra={"report_id": report_id, "org_id": org_id})
+        # Emit CloudWatch metrics
+        metrics.add_metric(name="TokensInput", unit=MetricUnit.Count, value=token_summary["total_input_tokens"])
+        metrics.add_metric(name="TokensOutput", unit=MetricUnit.Count, value=token_summary["total_output_tokens"])
+        metrics.add_metric(name="TokensTotal", unit=MetricUnit.Count, value=token_summary["total_tokens"])
+        metrics.add_metric(name="EstimatedCostUsd", unit=MetricUnit.Count, value=token_summary["total_cost_usd"])
+        metrics.add_metric(name="ReportCompleted", unit=MetricUnit.Count, value=1)
+        metrics.add_dimension(name="org_id", value=org_id)
+        metrics.flush_metrics()
+
+        logger.info(
+            "Pipeline completed",
+            extra={
+                "report_id": report_id,
+                "org_id": org_id,
+                "token_usage": token_summary,
+            },
+        )
         return {"report_id": report_id, "status": "complete"}
     except Exception as e:
-        logger.exception("Pipeline failed", extra={"report_id": report_id})
+        # Emit failure metric with whatever tokens were consumed
+        token_summary = _token_tracker.summary() if _token_tracker else {}
+        metrics.add_metric(name="ReportFailed", unit=MetricUnit.Count, value=1)
+        if token_summary:
+            metrics.add_metric(name="TokensInput", unit=MetricUnit.Count, value=token_summary.get("total_input_tokens", 0))
+            metrics.add_metric(name="TokensOutput", unit=MetricUnit.Count, value=token_summary.get("total_output_tokens", 0))
+            metrics.add_metric(name="EstimatedCostUsd", unit=MetricUnit.Count, value=token_summary.get("total_cost_usd", 0))
+        metrics.add_dimension(name="org_id", value=org_id)
+        metrics.flush_metrics()
+
+        logger.exception("Pipeline failed", extra={"report_id": report_id, "token_usage": token_summary})
         if report_id:
             now = datetime.utcnow().isoformat()
             table.update_item(

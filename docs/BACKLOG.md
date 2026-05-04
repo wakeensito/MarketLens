@@ -30,30 +30,45 @@ Changes:
 
 **Status:** Done — May 2026
 
-Implemented BFF (Backend-for-Frontend) auth pattern with Cognito, Google SSO, and GitHub SSO. All API traffic goes through a Lambda Authorizer that validates JWT cookies and injects auth context (`user_id`, `org_id`, `plan`, `email`) into every request. User and org records auto-created on first login. All DynamoDB queries org-scoped. Anonymous users get 1 free report; signed-in free tier users get 3/day.
+Implemented passwordless email OTP + Google SSO via BFF (Backend-for-Frontend) pattern. Sign-in required for all API access — no anonymous usage. All DynamoDB queries org-scoped.
 
 **What was built:**
-- Cognito User Pool with Google SSO (native) + GitHub SSO (OIDC), mandatory TOTP MFA, 30-day device remembering
-- BFF Auth Lambda: `/auth/login`, `/auth/callback`, `/auth/refresh`, `/auth/logout`, `/auth/me`
-- Lambda Authorizer (REQUEST type, 300s cache): JWT validation, DynamoDB user lookup, auth context injection
-- HttpOnly/Secure/SameSite=Strict cookies (`ml_access`, `ml_refresh`, `ml_logged_in`) — tokens never touch JavaScript
-- CloudFront cookie forwarding on `/api/*` and `/auth/*` paths
-- Org-scoped DynamoDB key schema: `PK: ORG#{org_id}#REPORT#{report_id}`
-- Frontend: `useAuth` hook, `AuthProvider` context, auth gate modal, silent token refresh every 50 min
-- Application-level rate limiting (anonymous: 1 total, free tier: 3/day)
+- Passwordless email OTP: 3 Cognito trigger Lambdas (define, create, verify) + SES (`noreply@plinths.net`)
+- Google SSO via Cognito with custom domain (`auth.plinths.net`)
+- BFF Auth Lambda: `/auth/initiate`, `/auth/verify`, `/auth/login`, `/auth/callback`, `/auth/refresh`, `/auth/logout`, `/auth/me`
+- Lambda Authorizer: denies all anonymous requests, validates JWT with issuer + token_use checks
+- HttpOnly/Secure/SameSite cookies — tokens never touch JavaScript
+- Transactional user+org creation (DynamoDB TransactWriteItems)
+- Plan-aware rate limiting: free=3/day, pro=15/day, team=50/day, admin=9999/day
+- Secrets in SSM Parameter Store (API key, Cognito client secret, sender email, Google OAuth creds)
+- Custom domain: `plinths.net` (CloudFront + ACM) + `auth.plinths.net` (Cognito + ACM)
+- Security: CVE patches (PyJWT, cryptography), OAuth CSRF state, verified ID token decode, atomic rate limiting
 
-**Deferred to post-beta:**
-- ECS Fargate Auth Service (using BFF Lambda instead)
-- Permission Engine / RBAC (single role for now — free tier user)
-- Org & User Service (user/org records created inline by BFF callback, no invite flow or team management)
-- RDS Postgres (still DynamoDB only)
-- ElastiCache / Redis (no session cache — stateless JWT via cookies)
-- WAF per-tenant rate limiting (application-level only)
-- DynamoDB sessions table (stateless cookies instead)
-- API key auth for developers
-- SAML/OIDC enterprise SSO
-- Team/role management UI
-- Scoped CORS (using `AllowOrigin: '*'` — acceptable because all traffic is same-origin via CloudFront)
+**Deferred:**
+- GitHub SSO (requires Lambda-backed OIDC proxy — GitHub doesn't support standard OIDC for user login)
+- Permission Engine / RBAC (single role for now)
+- Team management, invite flow, self-service profile editing
+
+---
+
+## ✅ Scoring Algorithm & Data Enrichment (Completed)
+
+**Status:** Done — May 2026
+
+Rewrote the scoring algorithm to produce continuous scores across 0-100 instead of clustering at 10 and 75. Added Wikipedia + Wikidata as free data sources alongside Brave Search.
+
+**Scoring changes:**
+- Analyse prompt: binary booleans (true/false) → 1-10 gradient signals (funding_maturity, market_consolidation, switching_cost, cac_pressure, innovation_velocity)
+- LLM now estimates TAM and growth when Brave Search doesn't find data
+- Logarithmic competitor scaling (diminishing returns after 8 competitors)
+- No fixed base score — all factors are data-driven
+- New factors: switching cost, innovation velocity, fragmentation bonus
+
+**Data enrichment:**
+- Wikipedia REST API: company summaries and descriptions
+- Wikidata SPARQL: founding year, employee count, revenue, industry, HQ, parent org
+- Parallel lookups via ThreadPoolExecutor (8 workers, ~1s for 15 companies)
+- Structured data formatted into LLM prompt as separate verified-facts section
 
 ---
 
@@ -113,5 +128,96 @@ Add Crunchbase Basic API ($500/month) as a premium data source for an Investor-g
 - Add investor-specific Summarise prompt (TAM breakdown, risk assessment, comparable exits, investment thesis)
 
 **Pairs with:** Persona-Based Reports (Investor persona) + Tiered Model Selection (Enterprise tier models)
+
+---
+
+## Enterprise Hardening & Scalability
+
+> Tasks from the original milestones that are not in scope for the current sprint but are relevant to production readiness and scale. Nothing here is cancelled — it's deferred until the core product is working and has users.
+
+### Infrastructure (original Phase 1, Days 6-9)
+- [ ] Create Terraform repo (`marketlens-infra`) with remote state in S3 + DynamoDB lock table
+- [ ] AWS account structure: `dev`, `staging`, `prod` accounts via AWS Organizations
+- [ ] Enable CloudTrail (all regions), GuardDuty, S3 Block Public Access — account level
+- [ ] Bootstrap VPC: public subnet (ALB), private app subnet (ECS), private data subnet (RDS/DynamoDB)
+- [ ] Security groups: default deny-all; explicit allow rules per service pair only
+- [ ] Create KMS CMKs: one per environment (`dev`, `staging`, `prod`)
+- [ ] Create remaining S3 buckets: audit-archive, search-cache, iac-state
+- [ ] Enable Object Lock on `audit-archive` bucket (cannot be added retroactively)
+- [ ] Provision RDS PostgreSQL (Multi-AZ off for dev, on for staging/prod)
+- [ ] Run initial schema migration — all tables from data model doc
+- [ ] Enable RLS on every table
+- [ ] Create DynamoDB tables: `audit_events`, `sessions`, `pipeline_executions`, `notification_log`, `notification_preferences`
+- [ ] Provision ElastiCache Redis cluster
+- [ ] Migrate pipeline from DynamoDB to Postgres `market_reports` table
+
+### Audit Service (original Phase 1, Days 10-11)
+- [ ] Build Audit Service: SQS consumer Lambda
+- [ ] Implement hash chain: each event gets `checksum` + `prev_checksum` from day one
+- [ ] Write to DynamoDB `audit_events` table
+- [ ] Stream to S3 `audit-archive` via DynamoDB Streams → Lambda
+- [ ] Wire pipeline Lambda to emit audit events on: report created, pipeline complete
+- [ ] Integrity check Lambda: scheduled every 6h, SNS alert on chain break
+
+### Local Dev & Testing (original Phase 1, Days 12-13)
+- [ ] Local dev: `docker-compose.yml` with Postgres, Redis, LocalStack (for SQS/S3/DynamoDB)
+- [ ] Shared packages: `logger` (structured JSON), `errors` (typed error classes), `db` (connection pool + RLS context setter)
+- [ ] `.env.example` with all required env vars documented
+- [ ] Wire ElastiCache cache for search results: key pattern `search_cache:{sub_stage}:{query_hash}`, 1hr TTL
+
+### Unit Tests (original Phase 0, unchecked)
+- [ ] Unit tests: sanitize rejects bad inputs, parse returns valid schema
+- [ ] Unit test scoring algorithm: known inputs → expected outputs
+- [ ] End-to-end test: open browser → type idea → watch it process → read the report
+
+### WAF & Throttling (original Phase 3)
+- [ ] Wire AWS API Gateway in front of all services (WAF entry point)
+- [ ] Attach WAF: OWASP Core Rule Set, rate limiting per `org_id`
+- [ ] Per-client throttling: free tier = 10 reports/hr, Pro = 100/hr
+- [ ] Error messages: every error the user might see has a human-readable message (not a stack trace)
+
+### Beta Operations (original Phase 3)
+- [ ] Invite list: 10–20 people who will give you honest feedback
+- [ ] Feedback mechanism: simple thumbs up/down on reports + optional free text
+- [ ] Basic analytics: how many reports run, which ideas, where does the pipeline fail
+- [ ] `staging` environment fully deployed — beta users hit staging, not dev
+- [ ] On-call: PagerDuty or simple CloudWatch alarm → SMS
+
+### Token Tracking (original Phase 0 Day 4)
+- [ ] AI Lambda: sum input/output tokens per LLM call across all stages
+- [ ] Write `total_tokens_input`, `total_tokens_output`, `cost_usd_cents` to report record in DynamoDB
+- [ ] Log token breakdown per stage in CloudWatch
+
+### RBAC Expansion (original Phase 5)
+- [ ] Add remaining roles: `team_manager`, `api_developer`, `auditor`, `billing_admin`
+- [ ] Add all 6 platform roles: `super_admin`, `platform_ops`, `platform_support`, etc.
+- [ ] Custom role builder: org owners compose permission strings via UI
+- [ ] MFA step-up enforcement for privileged actions (delete, purge, admin, impersonate)
+
+### Audit Depth Expansion (original Phase 5)
+- [ ] Add all 8 event categories (currently only: data access + data mutation)
+- [ ] Add: auth events, access control changes, billing events, security events, system events
+- [ ] Audit log query UI for org `auditor` role
+- [ ] Scheduled chain integrity report: weekly email to `org_owner`
+
+### Multi-Tenancy Hardening (original Phase 5)
+- [ ] Test RLS with 10+ concurrent orgs
+- [ ] Verify cross-tenant query is impossible (automated test suite)
+- [ ] Separate KMS keys per org (Enterprise tier only)
+- [ ] S3 prefix isolation tested under load
+
+### Disaster Recovery (original Phase 5)
+- [ ] Enable RDS Multi-AZ in prod
+- [ ] Enable DynamoDB Global Tables (replicate to `us-west-2`)
+- [ ] S3 cross-region replication
+- [ ] Route 53 health checks + failover routing
+- [ ] First GameDay exercise: simulate `us-east-1` outage, verify failover
+
+### Compliance Runway (original Phase 5)
+- [ ] Set up Vanta (SOC 2 evidence automation)
+- [ ] Security Hub: CIS L1 findings remediated
+- [ ] Privacy policy + DPA published
+- [ ] GDPR deletion workflow live
+- [ ] Penetration test (external, before SOC 2 audit)
 
 ---

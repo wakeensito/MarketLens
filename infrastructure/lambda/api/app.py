@@ -14,7 +14,7 @@ import re
 import boto3
 from botocore.exceptions import ClientError
 from uuid import uuid4
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from aws_lambda_powertools import Logger, Tracer, Metrics
 from aws_lambda_powertools.event_handler import APIGatewayRestResolver
@@ -124,26 +124,48 @@ def _atomic_check_and_increment(auth: dict) -> str | None:
 @app.get("/reports")
 @tracer.capture_method
 def list_reports():
-    """List reports scoped to the user's org."""
+    """List reports scoped to the user's org. Free tier sees last 7 days only."""
     auth = _get_auth_context()
     org_id = auth["org_id"]
 
     if not auth["is_authenticated"]:
         return {"reports": []}
 
-    result = table.query(
-        IndexName="gsi1",
-        KeyConditionExpression="gsi1pk = :pk",
-        FilterExpression="#s <> :deleted",
-        ExpressionAttributeNames={"#s": "status"},
-        ExpressionAttributeValues={
+    plan = auth.get("plan", "free")
+
+    query_params = {
+        "IndexName": "gsi1",
+        "KeyConditionExpression": "gsi1pk = :pk",
+        "FilterExpression": "#s <> :deleted",
+        "ExpressionAttributeNames": {"#s": "status"},
+        "ExpressionAttributeValues": {
             ":pk": f"ORG#{org_id}#REPORTS",
             ":deleted": "deleted",
         },
-        ScanIndexForward=False,
-    )
-    reports = result.get("Items", [])
-    return {"reports": reports}
+        "ScanIndexForward": False,
+    }
+
+    # Free tier: limit to last 7 days via sort key range on gsi1sk (ISO timestamp)
+    if plan == "free":
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+        query_params["KeyConditionExpression"] = "gsi1pk = :pk AND gsi1sk >= :cutoff"
+        query_params["ExpressionAttributeValues"][":cutoff"] = cutoff
+
+    # Paginate until all results are fetched
+    reports = []
+    while True:
+        result = table.query(**query_params)
+        reports.extend(result.get("Items", []))
+        last_key = result.get("LastEvaluatedKey")
+        if not last_key:
+            break
+        query_params["ExclusiveStartKey"] = last_key
+
+    # Add metadata so frontend knows if history is truncated
+    return {
+        "reports": reports,
+        "history_limited": plan == "free",
+    }
 
 
 @app.post("/reports")
