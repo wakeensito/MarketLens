@@ -2812,10 +2812,14 @@ textarea:focus-visible {
   transition: background 0.12s, color 0.12s;
 }
 
-.report-export-menu-item:hover:not(:disabled),
-.report-export-menu-item:focus-visible {
+.report-export-menu-item:hover:not(:disabled) {
   background: var(--surface-hover);
+}
+
+.report-export-menu-item:focus-visible {
   outline: none;
+  background: var(--surface-hover);
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--border-focus);
 }
 
 .report-export-menu-item:disabled {

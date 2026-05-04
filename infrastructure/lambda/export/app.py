@@ -113,8 +113,8 @@ def generate_markdown(report: dict) -> str:
     # Scores
     lines.append("## Scores")
     lines.append("")
-    lines.append(f"| Metric | Score |")
-    lines.append(f"|---|---|")
+    lines.append("| Metric | Score |")
+    lines.append("|---|---|")
     lines.append(f"| Saturation | {result.get('saturation_score', 'N/A')}/100 ({result.get('saturation_label', '')}) |")
     lines.append(f"| Difficulty | {result.get('difficulty_score', 'N/A')}/100 ({result.get('difficulty_label', '')}) |")
     lines.append(f"| Opportunity | {result.get('opportunity_score', 'N/A')}/100 ({result.get('opportunity_label', '')}) |")
@@ -128,10 +128,10 @@ def generate_markdown(report: dict) -> str:
         lines.append("| Name | Strength | Weakness | Position |")
         lines.append("|---|---|---|---|")
         for c in competitors:
-            name = c.get("name", "")
-            strength = c.get("strength", "")
-            weakness = c.get("weakness", "")
-            position = c.get("market_position", "")
+            name = c.get("name", "").replace("|", "\\|")
+            strength = c.get("strength", "").replace("|", "\\|")
+            weakness = c.get("weakness", "").replace("|", "\\|")
+            position = c.get("market_position", "").replace("|", "\\|")
             lines.append(f"| {name} | {strength} | {weakness} | {position} |")
         lines.append("")
 

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-**MarketLens** — AI-powered market intelligence platform. Users type a business idea and receive a competitive landscape, saturation score, and entry roadmap.
+**Plinths** — AI-powered market intelligence platform (beta, live on production domain). Users type a business idea and receive a competitive landscape, saturation score, and entry roadmap. A conversational agent ("Muse") is in active development — see the **Muse** section below.
 
 ## Repository Structure
 
@@ -15,7 +15,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │   └── lambda/
 │       ├── api/                   # REST API Lambda (Python, Powertools)
 │       ├── ai-orchestration/      # AI pipeline Lambda (Python, Durable Function)
-│       └── export/                # CSV export Lambda (Python, Powertools)
+│       ├── auth-create/           # Cognito custom auth: create-challenge trigger
+│       ├── auth-define/           # Cognito custom auth: define-challenge trigger
+│       ├── auth-verify/           # Cognito custom auth: verify-challenge-response trigger
+│       ├── authorizer/            # API Gateway JWT authorizer (always-Deny on uncertainty)
+│       ├── bff/                   # Backend-for-frontend (Hosted UI ↔ HttpOnly cookies, OTP exchange)
+│       ├── export/                # CSV export Lambda (Python, Powertools)
+│       └── muse/                  # Chat agent Lambda (planned — see Muse section)
 ├── infra/
 │   └── iam/                       # Terraform (CD role, OIDC provider)
 ├── frontend/                      # React + Vite + TypeScript
@@ -115,6 +121,9 @@ Scores are STRING numbers (e.g. `"10"` not `10`). The adapter in `frontend/src/a
 - `src/types.ts` — frontend-only types (`MarketReport`, `PipelineStage`, etc.)
 - `src/motion.ts` — shared Framer Motion presets (`landingEntryInitial`, `landingEntryAnimate`)
 - `src/theme.ts` — theme preference helpers (`getThemePref`, `setThemePref`, `initTheme`)
+- `src/mockData.ts` — fixture `MarketReport` used by `VITE_USE_MOCK` and demo states
+
+**Auth context split:** `src/authContext.ts` holds the bare `createContext`; `src/AuthContext.tsx` holds the `<AuthProvider>` component. They are intentionally separate so React Fast Refresh stays clean — don't merge them.
 
 **State machine** (`useAnalysis.ts`): `'landing' | 'analysis' | 'report'`
 - On search: POST `/api/reports` → get `report_id` → poll GET `/api/reports/{id}` every 3s
@@ -141,6 +150,28 @@ Scores are STRING numbers (e.g. `"10"` not `10`). The adapter in `frontend/src/a
 
 **Dev shortcut**: set `VITE_USE_MOCK=true` in `.env` to enable `mockLogin()` — instant auth bypass.
 No real Cognito call is made; `AuthUser` fields are stubbed. Integrations should prefer `continueWithEmail` / `verifyCode`; under mock, those APIs stub the OTP steps (no real email/code) rather than password auth.
+
+## Muse — Chat Agent (in progress)
+
+Conversational agent that lets authenticated users ask questions about a generated report and run general market-research Q&A. **Muse** is the brand/UI name; older docs (`docs/BACKLOG.md`, `docs/05-milestones-and-sprints.md`) still call it "chat" — both refer to the same surface.
+
+**Status:** architecture in progress. Backend is not yet scaffolded; UI placement and transport are not yet decided. Do not assume either when generating code — ask.
+
+**Decided:**
+- Auth: required (Cognito SSO + existing JWT authorizer); no anonymous access
+- Persistence: per-user conversation history in DynamoDB, durable across sessions
+- Models: same Bedrock pipeline as the report (Nova Micro / DeepSeek V3.2 / Claude 3 Haiku) for now; per-task model selection is a later phase
+- Tools: Brave Search API for live retrieval (reuse existing SSM-stored key + scoped IAM)
+- Tier-gated paid feature (see `docs/05-milestones-and-sprints.md`); free tier sees a locked placeholder
+
+**TBD — flag rather than guess:**
+- UI surface — side panel on report? floating widget? dedicated `/muse` route? Owner is architecting next.
+- Transport — SSE / WebSocket / Lambda response streaming / plain JSON. Pending research; affects API Gateway type and Lambda config.
+- History scope — current direction is **per user across sessions**. The older planning docs describe history as **per report** with message caps (~30 Pro / ~100 Plus). Reconcile with the user before designing the DynamoDB key schema.
+
+**Naming convention when scaffolding:** Lambda dir `infrastructure/lambda/muse/`, API route prefix `/api/muse`, frontend hook `useMuse`, types prefixed `Muse*` (e.g., `MuseMessage`, `MuseConversation`). Keep "chat" only inside the older docs until those are revised.
+
+**Out of scope for CLAUDE.md:** the system prompt / training behavior of Muse is owned by the user and will be engineered separately — do not invent prompt rules here.
 
 ## TypeScript Rules (verbatimModuleSyntax is ON)
 

@@ -43,7 +43,7 @@ This plan starts with the simplest possible AWS deployment — Lambda Durable Fu
 
 ## Phase 0 — PoC: Prove the Pipeline ✅ DONE
 
-All items completed. See previous version for full checklist.
+All items completed. See [Phase 0 checklist in v1.0](docs/05-milestones-and-sprints.md at tag `v1.0-poc`) for the full task list.
 
 **Result:** Full 7-stage AI pipeline (sanitize → parse → search → analyse → score → summarise → assemble) running on Lambda Durable Functions with multi-model setup (Nova Micro + DeepSeek V3.2 + Claude 3 Haiku). Per-report cost: ~$0.007.
 
@@ -151,7 +151,7 @@ All items completed. See previous version for full checklist.
 - [x] Cognito custom domain: `auth.plinths.net` (ACM cert + Route 53 alias)
 - [x] SES: `noreply@plinths.net` (DKIM + SPF + DMARC)
 
-### Pricing & Gates (defined, not yet enforced in code)
+### Pricing & Gates (partially enforced)
 Tier structure decided:
 
 | | Free | Pro ($20/mo) | Team ($100/mo) |
@@ -165,13 +165,15 @@ Tier structure decided:
 | Sharing | ❌ | ✅ | ✅ |
 | Seats | 1 | 1 | 5 included |
 
+### Gate enforcement status:
+- [x] Export gate: CSV/PDF blocked for free tier, MD allowed (enforced in Export Lambda)
+- [x] History gate: `list_reports` filters to 7 days for free tier (enforced in API Lambda)
+- [x] Basic analytics: token usage tracking + CloudWatch metrics (enforced in AI Orchestration Lambda)
+
 ### Still TODO for beta:
-- [ ] Export gate: block CSV/PDF for free tier, allow MD
-- [ ] History gate: filter list_reports to 7 days for free tier
 - [ ] Frontend upgrade prompts at each gate
 - [ ] Locked chat placeholder on report view ("Upgrade to Pro")
 - [ ] Feedback mechanism: thumbs up/down on reports
-- [ ] Basic analytics: report count, failure rate, cost tracking
 - [ ] Invite 10-20 beta testers
 
 ---

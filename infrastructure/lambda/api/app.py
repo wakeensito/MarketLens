@@ -14,7 +14,7 @@ import re
 import boto3
 from botocore.exceptions import ClientError
 from uuid import uuid4
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from aws_lambda_powertools import Logger, Tracer, Metrics
 from aws_lambda_powertools.event_handler import APIGatewayRestResolver
@@ -147,13 +147,19 @@ def list_reports():
 
     # Free tier: limit to last 7 days via sort key range on gsi1sk (ISO timestamp)
     if plan == "free":
-        from datetime import timedelta
         cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
         query_params["KeyConditionExpression"] = "gsi1pk = :pk AND gsi1sk >= :cutoff"
         query_params["ExpressionAttributeValues"][":cutoff"] = cutoff
 
-    result = table.query(**query_params)
-    reports = result.get("Items", [])
+    # Paginate until all results are fetched
+    reports = []
+    while True:
+        result = table.query(**query_params)
+        reports.extend(result.get("Items", []))
+        last_key = result.get("LastEvaluatedKey")
+        if not last_key:
+            break
+        query_params["ExclusiveStartKey"] = last_key
 
     # Add metadata so frontend knows if history is truncated
     return {
