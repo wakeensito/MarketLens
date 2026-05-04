@@ -19,12 +19,103 @@ import requests
 from datetime import datetime
 from decimal import Decimal
 
-from aws_lambda_powertools import Logger, Tracer
+from aws_lambda_powertools import Logger, Tracer, Metrics
+from aws_lambda_powertools.metrics import MetricUnit
 from aws_durable_execution_sdk_python import durable_execution, DurableContext
 from botocore.exceptions import BotoCoreError, ClientError
 
 logger = Logger()
 tracer = Tracer()
+metrics = Metrics()
+
+# ── Token usage tracking ──
+# Per-model cost rates (USD per 1M tokens) — keep in sync with pricing
+_MODEL_COST_PER_1M = {
+    "input": {
+        "amazon.nova-micro": 0.035,
+        "deepseek": 0.62,
+        "anthropic.claude-3-haiku": 0.25,
+    },
+    "output": {
+        "amazon.nova-micro": 0.14,
+        "deepseek": 1.85,
+        "anthropic.claude-3-haiku": 1.25,
+    },
+}
+
+
+def _model_cost_key(model_id: str) -> str:
+    """Map a full Bedrock model ID to a cost-table key."""
+    mid = model_id.lower()
+    if "nova-micro" in mid or "nova" in mid:
+        return "amazon.nova-micro"
+    if "deepseek" in mid:
+        return "deepseek"
+    if "claude" in mid and "haiku" in mid:
+        return "anthropic.claude-3-haiku"
+    # Fallback: use Haiku pricing as conservative default
+    return "anthropic.claude-3-haiku"
+
+
+def _estimate_cost_usd(model_id: str, input_tokens: int, output_tokens: int) -> float:
+    """Estimate LLM cost in USD for a single call."""
+    key = _model_cost_key(model_id)
+    input_cost = (input_tokens / 1_000_000) * _MODEL_COST_PER_1M["input"].get(key, 0.25)
+    output_cost = (output_tokens / 1_000_000) * _MODEL_COST_PER_1M["output"].get(key, 1.25)
+    return input_cost + output_cost
+
+
+class TokenTracker:
+    """Accumulates token usage across pipeline stages."""
+
+    def __init__(self):
+        self.stages: dict[str, dict] = {}
+        self.total_input = 0
+        self.total_output = 0
+        self.total_cost_usd = 0.0
+
+    def record(self, stage: str, model_id: str, input_tokens: int, output_tokens: int):
+        cost = _estimate_cost_usd(model_id, input_tokens, output_tokens)
+        if stage not in self.stages:
+            self.stages[stage] = {
+                "model_id": model_id,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "cost_usd": 0.0,
+                "calls": 0,
+            }
+        s = self.stages[stage]
+        s["input_tokens"] += input_tokens
+        s["output_tokens"] += output_tokens
+        s["cost_usd"] += cost
+        s["calls"] += 1
+        self.total_input += input_tokens
+        self.total_output += output_tokens
+        self.total_cost_usd += cost
+
+        logger.info(
+            "LLM token usage",
+            extra={
+                "stage": stage,
+                "model_id": model_id,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "cost_usd": round(cost, 6),
+            },
+        )
+
+    def summary(self) -> dict:
+        return {
+            "total_input_tokens": self.total_input,
+            "total_output_tokens": self.total_output,
+            "total_tokens": self.total_input + self.total_output,
+            "total_cost_usd": round(self.total_cost_usd, 6),
+            "stages": self.stages,
+        }
+
+
+# Module-level tracker — reset per invocation in handler
+_token_tracker: TokenTracker | None = None
 
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(os.environ["REPORTS_TABLE"])

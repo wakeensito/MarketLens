@@ -2764,6 +2764,96 @@ textarea:focus-visible {
   font-family: var(--font-mono);
 }
 
+.report-export-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.report-export-chev {
+  margin-left: 2px;
+  transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.report-export-chev.is-open { transform: rotate(180deg); }
+
+.report-export-menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  min-width: 200px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 6px 24px oklch(13% 0.008 245 / 0.10);
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+}
+
+:root[data-theme="stealth"] .report-export-menu {
+  box-shadow: 0 6px 24px #00000060;
+}
+
+.report-export-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 30px;
+  padding: 0 10px;
+  border-radius: var(--radius-md);
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.report-export-menu-item:hover:not(:disabled),
+.report-export-menu-item:focus-visible {
+  background: var(--surface-hover);
+  outline: none;
+}
+
+.report-export-menu-item:disabled {
+  cursor: not-allowed;
+}
+
+.report-export-menu-item-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.report-export-menu-item-spin {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.report-export-menu-item.is-locked {
+  color: var(--text-secondary);
+}
+
+.report-export-menu-item.is-locked:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.report-export-pro {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--signal);
+  flex-shrink: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-export-chev { transition: none; }
+}
+
 /* ── Pipeline query label ─────────────────────────────── */
 .pipeline-query-gap { margin-left: 4px; }
 

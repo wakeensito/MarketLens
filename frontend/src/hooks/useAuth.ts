@@ -47,7 +47,7 @@ const MOCK_USER: AuthUser = {
   email: 'demo@plinths.ai',
   name: 'Demo User',
   org_id: 'mock-org',
-  plan: 'analyst',
+  plan: 'pro',
 };
 
 // Check the non-HttpOnly cookie to avoid unnecessary /auth/me calls
