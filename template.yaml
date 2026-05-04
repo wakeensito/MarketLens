@@ -107,11 +107,8 @@ Resources:
         CreateAuthChallenge: !GetAtt AuthCreateFunction.Arn
         VerifyAuthChallengeResponse: !GetAtt AuthVerifyFunction.Arn
 
-  CognitoUserPoolDomain:
-    Type: AWS::Cognito::UserPoolDomain
-    Properties:
-      Domain: !Sub marketlens-${Stage}-${AWS::AccountId}
-      UserPoolId: !Ref CognitoUserPool
+  # Cognito domain managed outside CloudFormation — see deploy instructions
+  # Domain: auth.plinths.net (custom domain with ACM cert)
 
   GoogleIdentityProvider:
     Type: AWS::Cognito::UserPoolIdentityProvider
@@ -578,7 +575,7 @@ Resources:
               Resource: !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/marketlens/${Stage}/cognito-client-secret
       Environment:
         Variables:
-          COGNITO_DOMAIN: !Sub marketlens-${Stage}-${AWS::AccountId}.auth.${AWS::Region}.amazoncognito.com
+          COGNITO_DOMAIN: auth.plinths.net
           COGNITO_CLIENT_ID: !Ref CognitoUserPoolClient
           # Secret is in SSM SecureString — not stored as a plaintext env var.
           # After first deploy, populate with:
@@ -801,4 +798,4 @@ Outputs:
 
   CognitoDomain:
     Description: Cognito Hosted UI domain
-    Value: !Sub marketlens-${Stage}-${AWS::AccountId}.auth.${AWS::Region}.amazoncognito.com
+    Value: auth.plinths.net
