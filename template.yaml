@@ -274,6 +274,7 @@ Resources:
             - ml_access
             - ml_refresh
             - ml_logged_in
+            - ml_oauth_state
         HeadersConfig:
           HeaderBehavior: whitelist
           Headers:
