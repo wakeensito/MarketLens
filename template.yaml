@@ -307,6 +307,12 @@ Resources:
         Enabled: true
         HttpVersion: http2
         IPV6Enabled: true
+        Aliases:
+          - plinths.net
+        ViewerCertificate:
+          AcmCertificateArn: arn:aws:acm:us-east-1:562559071105:certificate/c1e3758e-5666-4b68-af80-ec658ce11bd4
+          SslSupportMethod: sni-only
+          MinimumProtocolVersion: TLSv1.2_2021
         DefaultCacheBehavior:
           AllowedMethods: [GET, HEAD, OPTIONS]
           CachedMethods: [GET, HEAD]
