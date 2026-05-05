@@ -9,10 +9,12 @@ import RecentThreads from './components/RecentThreads';
 import SignInModal from './components/SignInModal';
 import PricingSection from './components/PricingSection';
 import UpgradeModal from './components/UpgradeModal';
+import ActivatingPlan from './components/ActivatingPlan';
 import { BrandWordmarkInner } from './components/BrandWordmark';
 import { ThemePicker } from './components/ThemePicker';
 import { useAnalysis } from './hooks/useAnalysis';
 import { useAuthContext } from './hooks/useAuth';
+import { useBilling } from './hooks/useBilling';
 import { EXAMPLE_QUERIES } from './mockData';
 import { landingEntryAnimate, landingEntryInitial } from './motion';
 
@@ -48,6 +50,54 @@ export default function App() {
     return err;
   });
 
+  const billing = useBilling();
+  const [billingCancelToast, setBillingCancelToast] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.get('billing') === 'cancelled';
+  });
+  const pendingCheckoutPlanRef = useRef<import('./api').BillingPlan | null>(null);
+
+  // Read ?billing=success|cancelled once on boot, strip the query, dispatch.
+  const billingFlagHandledRef = useRef(false);
+  useEffect(() => {
+    if (billingFlagHandledRef.current) return;
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const flag = params.get('billing');
+    if (flag !== 'success' && flag !== 'cancelled') return;
+    billingFlagHandledRef.current = true;
+    params.delete('billing');
+    params.delete('session_id');
+    const remaining = params.toString();
+    const url = window.location.pathname + (remaining ? `?${remaining}` : '');
+    window.history.replaceState({}, '', url);
+    if (flag === 'success') {
+      billing.beginActivationPoll(auth.user?.plan ?? 'free');
+    }
+  }, [billing, auth.user?.plan]);
+
+  // Auto-dismiss cancel toast after 4 seconds.
+  useEffect(() => {
+    if (!billingCancelToast) return;
+    const id = window.setTimeout(() => setBillingCancelToast(false), 4_000);
+    return () => window.clearTimeout(id);
+  }, [billingCancelToast]);
+
+  // When activation completes, pull a fresh auth snapshot so plan-gated UI updates.
+  useEffect(() => {
+    if (billing.activation.kind !== 'done') return;
+    void auth.refresh();
+  }, [billing.activation.kind, auth.refresh]);
+
+  const onActivationComplete = useCallback(() => {
+    billing.cancelActivationPoll();
+  }, [billing.cancelActivationPoll]);
+
+  const onActivationRefresh = useCallback(() => {
+    window.location.reload();
+  }, []);
+
   // Landing = unauthenticated on 'landing' screen only
   const isLanding = screen === 'landing' && !auth.isAuthenticated;
   // Workspace shows whenever we're not on the landing page
@@ -78,8 +128,16 @@ export default function App() {
   useEffect(() => {
     if (!auth.isAuthenticated) return;
     const id = requestAnimationFrame(() => {
-      setShowPricing(false);
       setShowSavePrompt(false);
+      // Auto-redirect to checkout if user picked a paid plan before signing in
+      if (pendingCheckoutPlanRef.current) {
+        const plan = pendingCheckoutPlanRef.current;
+        pendingCheckoutPlanRef.current = null;
+        setShowPricing(false);
+        void billing.startCheckout(plan);
+        return;
+      }
+      setShowPricing(false);
       // Auto-submit pending query after sign-in
       if (pendingQueryRef.current) {
         const q = pendingQueryRef.current;
@@ -89,7 +147,7 @@ export default function App() {
       }
     });
     return () => cancelAnimationFrame(id);
-  }, [auth.isAuthenticated, startAnalysis]);
+  }, [auth.isAuthenticated, startAnalysis, billing]);
 
   // On logout, reset the analysis screen so the landing page is shown.
   // Track previous value to only fire on true→false transitions, not on initial load.
@@ -157,7 +215,14 @@ export default function App() {
             setShowSignIn(false);
             setShowPricing(false);
           }}
-          onSignIn={() => setShowSignIn(true)}
+          onCheckout={plan => { void billing.startCheckout(plan); }}
+          onManage={() => { void billing.openPortal(); }}
+          onRequestSignIn={plan => {
+            pendingCheckoutPlanRef.current = plan;
+            setShowSignIn(true);
+          }}
+          currentPlan={(auth.user?.plan ?? 'free').trim().toLowerCase()}
+          isAuthenticated={auth.isAuthenticated}
         />
         <SignInModal
           isOpen={signInModalOpen}
@@ -185,6 +250,85 @@ export default function App() {
           >
             <span className="auth-error-text">{authError}</span>
             <button className="auth-error-dismiss" onClick={() => setAuthError(null)} aria-label="Dismiss">×</button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Billing return states ──────────────────────────── */}
+      <ActivatingPlan
+        activation={billing.activation}
+        onComplete={onActivationComplete}
+        onRefresh={onActivationRefresh}
+      />
+      <AnimatePresence>
+        {billingCancelToast && (
+          <motion.div
+            className="billing-cancel-toast"
+            role="status"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 6 }}
+            transition={{ duration: 0.22, ease: 'easeOut' as const }}
+          >
+            Checkout cancelled. You can come back anytime.
+          </motion.div>
+        )}
+        {billing.checkout.kind === 'error' && (
+          <motion.div
+            className="billing-cancel-toast billing-cancel-toast--error"
+            role="alert"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 6 }}
+            transition={{ duration: 0.22, ease: 'easeOut' as const }}
+          >
+            <span className="billing-toast-text">Couldn't reach Stripe.</span>
+            <div className="billing-toast-actions">
+              <button
+                type="button"
+                className="billing-toast-action"
+                onClick={() => {
+                  if (billing.checkout.kind === 'error') {
+                    void billing.startCheckout(billing.checkout.lastPlan);
+                  }
+                }}
+              >
+                Try again
+              </button>
+              <button
+                type="button"
+                className="billing-toast-dismiss"
+                onClick={() => billing.dismissCheckoutError()}
+                aria-label="Dismiss error"
+              >×</button>
+            </div>
+          </motion.div>
+        )}
+        {billing.portal.kind === 'error' && (
+          <motion.div
+            className="billing-cancel-toast billing-cancel-toast--error"
+            role="alert"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 6 }}
+            transition={{ duration: 0.22, ease: 'easeOut' as const }}
+          >
+            <span className="billing-toast-text">Couldn't open the billing portal.</span>
+            <div className="billing-toast-actions">
+              <button
+                type="button"
+                className="billing-toast-action"
+                onClick={() => { void billing.openPortal(); }}
+              >
+                Try again
+              </button>
+              <button
+                type="button"
+                className="billing-toast-dismiss"
+                onClick={() => billing.dismissPortalError()}
+                aria-label="Dismiss error"
+              >×</button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -321,6 +465,13 @@ export default function App() {
               setShowSavePrompt(false);
             }}
             onUpgradeClick={() => setProactiveUpgrade(true)}
+            onManageSubscription={() => { void billing.openPortal(); }}
+            onActiveDeleted={() => {
+              setShowSavePrompt(false);
+              setInputValue('');
+              if (auth.isAuthenticated) startNewChat();
+              else handleReset();
+            }}
           />
 
           <div className={`workspace-body${sidebarOpen ? '' : ' workspace-body--sidebar-closed'}`}>
@@ -423,6 +574,14 @@ export default function App() {
                         report={report}
                         reportId={reportId}
                         onRequestUpgrade={() => setProactiveUpgrade(true)}
+                        onUpgradeToPro={() => {
+                          if (!auth.isAuthenticated) {
+                            pendingCheckoutPlanRef.current = 'pro';
+                            setShowSignIn(true);
+                            return;
+                          }
+                          void billing.startCheckout('pro');
+                        }}
                       />
                     )}
                   </motion.div>

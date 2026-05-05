@@ -39,7 +39,7 @@ Implemented passwordless email OTP + Google SSO via BFF (Backend-for-Frontend) p
 - Lambda Authorizer: denies all anonymous requests, validates JWT with issuer + token_use checks
 - HttpOnly/Secure/SameSite cookies — tokens never touch JavaScript
 - Transactional user+org creation (DynamoDB TransactWriteItems)
-- Plan-aware rate limiting: free=3/day, pro=15/day, team=50/day, admin=9999/day
+- Plan-aware rate limiting: free=3/day, pro=15/day, max=9999/day, admin=9999/day
 - Secrets in SSM Parameter Store (API key, Cognito client secret, sender email, Google OAuth creds)
 - Custom domain: `plinths.net` (CloudFront + ACM) + `auth.plinths.net` (Cognito + ACM)
 - Security: CVE patches (PyJWT, cryptography), OAuth CSRF state, verified ID token decode, atomic rate limiting
@@ -47,7 +47,7 @@ Implemented passwordless email OTP + Google SSO via BFF (Backend-for-Frontend) p
 **Deferred:**
 - GitHub SSO (requires Lambda-backed OIDC proxy — GitHub doesn't support standard OIDC for user login)
 - Permission Engine / RBAC (single role for now)
-- Team management, invite flow, self-service profile editing
+- Self-service profile editing (no multi-seat workflow planned — plinths is solo-only; teams route to a "Contact us" affordance instead)
 
 ---
 
@@ -187,6 +187,15 @@ Add Crunchbase Basic API ($500/month) as a premium data source for an Investor-g
 - [ ] AI Lambda: sum input/output tokens per LLM call across all stages
 - [ ] Write `total_tokens_input`, `total_tokens_output`, `cost_usd_cents` to report record in DynamoDB
 - [ ] Log token breakdown per stage in CloudWatch
+
+### SSE Chat (Phase 4 — post-billing)
+- [ ] Chat Lambda with Lambda Function URL (streaming enabled)
+- [ ] SSE transport: server pushes LLM tokens to client over open HTTP connection
+- [ ] Report `result_json` injected as system prompt context for follow-up questions
+- [ ] Conversation history stored in DynamoDB per report (TTL: 30 days for free, unlimited for paid)
+- [ ] Frontend chat panel alongside report view with streaming token display
+- [ ] Plan-based limits: Pro = 30 messages/report, Max = unlimited
+- [ ] No WebSocket needed — SSE covers one-user-to-AI use case completely
 
 ### RBAC Expansion (original Phase 5)
 - [ ] Add remaining roles: `team_manager`, `api_developer`, `auditor`, `billing_admin`

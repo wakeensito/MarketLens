@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  X, PanelLeftClose, Zap, Palette, User, Settings2, HelpCircle, LogOut,
+  X, PanelLeftClose, Zap, CreditCard, Palette, User, Settings2, HelpCircle, LogOut,
   SquarePen, Sun, Moon, MoreHorizontal, Trash2, Pencil, Archive, Search,
 } from 'lucide-react';
 import type { ApiReport } from '../api';
@@ -71,15 +71,21 @@ function groupReports(reports: ApiReport[]): { key: GroupKey; items: ApiReport[]
 }
 
 interface Props {
-  isOpen:         boolean;
-  onClose:        () => void;
-  onOpen:         () => void;
-  onNewChat:      () => void;
-  activeId:       string | null;
-  screen:         AppState;
-  onSelect:       (reportId: string) => void;
-  /** Fires when the user clicks "Upgrade Plan" in the profile menu. */
-  onUpgradeClick: () => void;
+  isOpen:               boolean;
+  onClose:              () => void;
+  onOpen:               () => void;
+  onNewChat:            () => void;
+  activeId:             string | null;
+  screen:               AppState;
+  onSelect:             (reportId: string) => void;
+  /** Fires when a free-plan user clicks "Upgrade Plan" in the profile menu. */
+  onUpgradeClick:       () => void;
+  /** Fires when a paid-plan user clicks "Manage subscription" in the profile menu. */
+  onManageSubscription: () => void;
+  /** Fires when the currently-open report is deleted from the sidebar.
+   *  Privacy fix: parent must clear the workspace so the report's content
+   *  isn't left on-screen after the user asked for it to go away. */
+  onActiveDeleted:      (deletedId: string) => void;
 }
 
 const PROFILE_MENU_ITEMS = [
@@ -217,7 +223,7 @@ function ThreadItem({
   );
 }
 
-export default function RecentThreads({ isOpen, onClose, onOpen, onNewChat, activeId, screen, onSelect, onUpgradeClick }: Props) {
+export default function RecentThreads({ isOpen, onClose, onOpen, onNewChat, activeId, screen, onSelect, onUpgradeClick, onManageSubscription, onActiveDeleted }: Props) {
   const auth = useAuthContext();
   const [reports, setReports] = useState<ApiReport[]>([]);
   const [loading, setLoading] = useState(false);
@@ -318,6 +324,11 @@ export default function RecentThreads({ isOpen, onClose, onOpen, onNewChat, acti
     const removed = reports.find(r => r.report_id === reportId) ?? null;
     setReports(prev => prev.filter(r => r.report_id !== reportId));
     setConfirmingId(null);
+    // Privacy: if the deleted report is currently open in the workspace, clear
+    // it now so its content doesn't linger on-screen after the user asked for
+    // it to go away. Done optimistically; on API failure the row is restored
+    // and the user can re-open from the sidebar.
+    if (reportId === activeId) onActiveDeleted(reportId);
     try {
       if (!USE_MOCK) await deleteReport(reportId);
     } catch {
@@ -334,7 +345,7 @@ export default function RecentThreads({ isOpen, onClose, onOpen, onNewChat, acti
     } finally {
       setDeletingId(null);
     }
-  }, [reports]);
+  }, [reports, activeId, onActiveDeleted]);
 
   const avatarLabel = auth.isAuthenticated && auth.user
     ? (auth.user.name || auth.user.email || '?').slice(0, 2).toUpperCase()
@@ -533,21 +544,31 @@ export default function RecentThreads({ isOpen, onClose, onOpen, onNewChat, acti
                   transition={{ duration: 0.36, ease: 'easeOut' as const }}
                 >
                   {PROFILE_MENU_ITEMS.map((item) => {
-                    const Icon = item.Icon;
+                    const isUpgradeRow = item.id === 'upgrade';
+                    const planRaw = (auth.user?.plan ?? '').trim().toLowerCase();
+                    const isPaidUser =
+                      auth.isAuthenticated && planRaw !== '' && planRaw !== 'free';
+                    const label = isUpgradeRow && isPaidUser ? 'Manage subscription' : item.label;
+                    // Lightning bolt signals "upgrade"; once the user is paid, the row
+                    // becomes "manage" — swap to a neutral subscription glyph.
+                    const Icon = isUpgradeRow && isPaidUser ? CreditCard : item.Icon;
                     return (
                       <Fragment key={item.id}>
                         {item.danger && <div className="profile-menu-sep" />}
                         <button
                           type="button"
-                          className={`profile-menu-item${item.danger ? ' profile-menu-item--danger' : ''}${item.soon ? ' is-soon' : ''}${item.id === 'upgrade' ? ' profile-menu-item--upgrade' : ''}`}
+                          className={`profile-menu-item${item.danger ? ' profile-menu-item--danger' : ''}${item.soon ? ' is-soon' : ''}${isUpgradeRow && !isPaidUser ? ' profile-menu-item--upgrade' : ''}`}
                           onClick={() => {
                             setProfileOpen(false);
                             if (item.id === 'logout') auth.logout();
-                            else if (item.id === 'upgrade') onUpgradeClick();
+                            else if (isUpgradeRow) {
+                              if (isPaidUser) onManageSubscription();
+                              else onUpgradeClick();
+                            }
                           }}
                         >
                           <Icon size={13} strokeWidth={2} />
-                          {item.label}
+                          {label}
                           {item.soon && <SoonPill inline />}
                         </button>
                       </Fragment>

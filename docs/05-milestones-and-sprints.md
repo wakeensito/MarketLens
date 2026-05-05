@@ -36,7 +36,7 @@ This plan starts with the simplest possible AWS deployment — Lambda Durable Fu
 | 2 | Auth & Users | ✅ DONE | Real accounts, login, org isolation |
 | 2.5 | Scoring & Data Enrichment | ✅ DONE | Intelligent scores, Wikipedia/Wikidata |
 | 3 | Beta Launch | 🔄 IN PROGRESS | Custom domain, pricing gates, beta users |
-| 4 | Billing | ⏳ NEXT | Stripe, credits, free vs paid |
+| 4 | Billing | 🔄 IN PROGRESS (Stripe core shipped on `feature-stripe`) | Stripe, free vs paid |
 | 5 | Hardening Snap-ins | ⏳ FUTURE | RBAC rules, audit depth, DR, compliance |
 
 ---
@@ -103,7 +103,7 @@ All items completed. See [Phase 0 checklist in v1.0](docs/05-milestones-and-spri
 
 ### Rate Limiting ✅
 - [x] Atomic check-and-increment via conditional DynamoDB UpdateItem (no race condition)
-- [x] Plan-aware: free=3/day, pro=15/day, team=50/day, admin=9999/day
+- [x] Plan-aware: free=3/day, pro=15/day, max=9999/day, admin=9999/day
 - [x] Anonymous access eliminated — sign-in required for all API calls
 
 ### Frontend Auth ✅
@@ -152,18 +152,21 @@ All items completed. See [Phase 0 checklist in v1.0](docs/05-milestones-and-spri
 - [x] SES: `noreply@plinths.net` (DKIM + SPF + DMARC)
 
 ### Pricing & Gates (partially enforced)
-Tier structure decided:
+Tier structure decided (solo-only — no multi-seat plan):
 
-| | Free | Pro ($20/mo) | Team ($100/mo) |
+| | Free | Pro ($20/mo) | Max ($100/mo) |
 |---|---|---|---|
-| Reports | 3/day | 15/day | 50/day per seat |
-| Chat per report | ❌ | ~30 msgs then cooldown | ~100 msgs then cooldown |
-| Exports | MD only | CSV, PDF, MD | CSV, PDF, MD |
+| Reports | 3/day | 15/day | Unlimited |
 | History | 7 days | Unlimited | Unlimited |
-| Model selection | Default | ✅ | ✅ |
-| Perplexity search | ❌ | ❌ | ✅ |
-| Sharing | ❌ | ✅ | ✅ |
-| Seats | 1 | 1 | 5 included |
+| Exports | MD only | CSV, PDF, MD | CSV, PDF, MD |
+| Chat per report | ❌ | Included | Unlimited (with cross-report memory) |
+| Model selection (chat) | ❌ | Default | Claude, GPT, Gemini, Perplexity |
+| Live web search | ✅ | ✅ | ✅ |
+
+Notes on what is intentionally **not** plan-gated:
+- Live web search (Brave + Wikipedia + Wikidata) runs on every report regardless of plan
+- Report-pipeline model selection is the same on every plan (Bedrock Nova + DeepSeek + Haiku)
+- The model selection differentiator is **for Muse only**, not the report pipeline
 
 ### Gate enforcement status:
 - [x] Export gate: CSV/PDF blocked for free tier, MD allowed (enforced in Export Lambda)
@@ -178,23 +181,28 @@ Tier structure decided:
 
 ---
 
-## Phase 4 — Billing ⏳ NEXT
+## Phase 4 — Billing 🔄 IN PROGRESS
 
-### Stripe Integration (planned)
-- [ ] Stripe account + products: Pro ($20/mo), Team ($100/mo)
-- [ ] `POST /api/billing/checkout` — creates Stripe Checkout Session
-- [ ] `POST /api/billing/portal` — Stripe Customer Portal for subscription management
-- [ ] `POST /api/billing/webhook` — receives Stripe events (Authorizer: NONE, signature verified)
-- [ ] Store `stripe_customer_id` on user record
-- [ ] Webhook handlers: `checkout.session.completed` → update plan, `customer.subscription.deleted` → reset to free
-- [ ] Frontend: "Upgrade" button → Stripe Checkout redirect
+### Stripe Integration (core shipped on `feature-stripe`)
+- [x] Stripe account + products: Pro ($20/mo · $192/yr), Max ($100/mo · $960/yr) — price IDs wired via `STRIPE_PRICE_ID_{PRO,PRO_ANNUAL,MAX,MAX_ANNUAL}`
+- [x] `POST /api/billing/checkout` — creates Stripe Checkout Session (auth-required, idempotency-keyed per user+plan+minute)
+- [x] `POST /api/billing/portal` — Stripe Customer Portal for self-serve management
+- [x] `POST /api/billing/webhook` — receives Stripe events (`Authorizer: NONE`, signature verified; specific handlers for malformed payload / Stripe error / unexpected error with distinct CloudWatch metrics)
+- [x] Store `stripe_customer_id` on user record (race-guarded with `attribute_not_exists`; loser deletes its orphan customer and re-reads with `ConsistentRead=True`)
+- [x] Webhook handlers: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`
+- [x] Frontend: "Upgrade" / pricing CTAs → `useBilling.startCheckout(plan)` → Stripe Checkout redirect; activation overlay (`ActivatingPlan`) polls `/api/me` on return and resolves on plan change
+- [x] Pricing UI: Free / Pro / Max table with monthly ↔ annual cadence toggle (ARIA radio-group, arrow-key navigation)
+- [ ] Open: replace the user-by-`stripe_customer_id` table scan with a GSI before user count grows (current loop paginates correctly but is O(n))
+- [ ] Open: production Stripe keys + webhook secret populated in SSM SecureString (`/marketlens/${Stage}/stripe-secret-key`, `/marketlens/${Stage}/stripe-webhook-secret`)
+- [ ] Open: end-to-end test on a live Stripe test account (checkout → webhook → activation overlay resolves → `/api/me` reflects new plan)
 
-### LLM Chat (planned, paid tier feature)
-- [ ] Chat Lambda: conversation history in DynamoDB per report
+### Muse — Chat Agent (design locked, build deferred until post-Max launch)
+See `CLAUDE.md` § Muse for the persisted design decision.
+- [ ] Chat Lambda: per-report conversation history in DynamoDB
 - [ ] Report `result_json` as system prompt context
-- [ ] WebSocket or SSE for streaming responses
-- [ ] Frontend chat panel alongside report view
-- [ ] Session-based usage limits (~30 msgs/report for Pro, ~100 for Team)
+- [ ] Transport: SSE / WebSocket / response streaming — TBD
+- [ ] Frontend: inline conversation in workspace; report collapses into the toolbar attachment-button toggle when chat starts
+- [ ] Tier scope: Free → locked paywall · Pro → ~30 msgs per report · Max → unlimited + cross-report memory
 
 ### Custom Model Selection (planned, paid tier feature)
 - [ ] Model config per stage stored on user/org record
@@ -219,7 +227,7 @@ Phase 0 (PoC) ✅
         └── Phase 2 (Auth) ✅ passwordless OTP + Google SSO + org isolation
               └── Phase 2.5 (Scoring) ✅ gradient signals + Wiki enrichment
                     └── Phase 3 (Beta) 🔄 domain done, gates + testers next
-                          └── Phase 4 (Billing) ⏳ Stripe + chat + model selection
+                          └── Phase 4 (Billing) 🔄 Stripe core shipped; Muse + model selection still pending
                                 └── Phase 5 (Hardening) ⏳ RBAC, audit, DR
 
 INDEPENDENT:

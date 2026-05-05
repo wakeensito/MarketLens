@@ -773,6 +773,60 @@ Resources:
             Status: Enabled
             ExpirationInDays: 7
 
+  # ─── Lambda: Billing (Stripe) ───
+  BillingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.lambda_handler
+      CodeUri: infrastructure/lambda/billing/
+      Description: Stripe billing — checkout, portal, webhooks
+      MemorySize: 256
+      Timeout: 30
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ReportsTable
+        - SSMParameterReadPolicy:
+            ParameterName: !Sub marketlens/${Stage}/stripe-secret-key
+        - SSMParameterReadPolicy:
+            ParameterName: !Sub marketlens/${Stage}/stripe-webhook-secret
+      Environment:
+        Variables:
+          APP_DOMAIN: !Sub https://${CognitoCallbackDomain}
+          STRIPE_SECRET_KEY_PARAM: !Sub /marketlens/${Stage}/stripe-secret-key
+          STRIPE_WEBHOOK_SECRET_PARAM: !Sub /marketlens/${Stage}/stripe-webhook-secret
+          STRIPE_PRICE_ID_PRO: price_1TTWHWD0uRRrx9E75JuQHBZd
+          STRIPE_PRICE_ID_MAX: price_1TTWHWD0uRRrx9E79aJXLXor
+          STRIPE_PRICE_ID_PRO_ANNUAL: price_1TTX4LD0uRRrx9E7WSD0kaEV
+          STRIPE_PRICE_ID_MAX_ANNUAL: price_1TTWHWD0uRRrx9E7EepKDTCp
+      Events:
+        BillingCheckout:
+          Type: Api
+          Properties:
+            Path: /api/billing/checkout
+            Method: POST
+            RestApiId: !Ref ApiGatewayApi
+        BillingPortal:
+          Type: Api
+          Properties:
+            Path: /api/billing/portal
+            Method: POST
+            RestApiId: !Ref ApiGatewayApi
+        BillingWebhook:
+          Type: Api
+          Properties:
+            Path: /api/billing/webhook
+            Method: POST
+            RestApiId: !Ref ApiGatewayApi
+            Auth:
+              ApiKeyRequired: false
+              Authorizer: NONE
+
+  BillingFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${BillingFunction}
+      RetentionInDays: 90
+
 Outputs:
   WebUIBucketName:
     Description: S3 bucket for frontend assets

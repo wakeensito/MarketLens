@@ -7,6 +7,7 @@ import csv
 import io
 import re
 import boto3
+from botocore.exceptions import ClientError
 from datetime import datetime
 
 from aws_lambda_powertools import Logger, Tracer, Metrics
@@ -88,7 +89,31 @@ def _get_auth_context() -> dict:
 
 
 # Plans that can access paid export formats (csv, pdf)
-_PAID_PLANS = {"pro", "team", "admin"}
+_PAID_PLANS = {"pro", "max", "admin"}
+
+
+def _resolve_current_plan(auth: dict) -> str:
+    """Read the user's plan fresh from DynamoDB.
+
+    The authorizer-injected plan is cached by API Gateway for ~5 min, so a user
+    who just upgraded would otherwise be blocked from CSV export until the
+    cache expires. Fall back to the authorizer snapshot only on read failure.
+    """
+    snapshot = auth.get("plan", "free")
+    if not auth.get("is_authenticated"):
+        return snapshot
+    try:
+        user_pk = f"USER#{auth['user_id']}"
+        item = table.get_item(
+            Key={"pk": user_pk, "sk": user_pk},
+            ConsistentRead=True,
+            ProjectionExpression="#p",
+            ExpressionAttributeNames={"#p": "plan"},
+        ).get("Item") or {}
+        return item.get("plan") or snapshot
+    except ClientError as e:
+        logger.warning("Plan refresh failed; using authorizer snapshot", extra={"error": str(e)})
+        return snapshot
 
 
 def generate_markdown(report: dict) -> str:
@@ -205,10 +230,13 @@ def export_report(report_id: str):
         content_type = "text/markdown"
         extension = "md"
     elif export_format == "csv":
-        # CSV requires paid plan
-        if auth.get("plan", "free") not in _PAID_PLANS:
+        # CSV requires paid plan. Read plan fresh from DDB rather than the
+        # authorizer-cached snapshot so a user who just upgraded isn't blocked
+        # by ~5 min of stale auth context.
+        plan = _resolve_current_plan(auth)
+        if plan not in _PAID_PLANS:
             return {
-                "error": "CSV export requires a Pro or Team plan.",
+                "error": "CSV export requires a paid plan (Pro or Max).",
                 "code": "UPGRADE_REQUIRED",
             }, 403
         content = generate_csv(item)

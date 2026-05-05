@@ -140,3 +140,28 @@ export function exportReport(report_id: string): Promise<{ report_id: string; fo
     body: JSON.stringify({ format: 'csv' }),
   });
 }
+
+export type BillingPlan = 'pro' | 'pro_annual' | 'max' | 'max_annual';
+
+export interface MeResponse {
+  is_authenticated: boolean;
+  user_id?: string;
+  email?: string;
+  plan: string;
+  stale?: boolean;
+}
+
+export function getMe(): Promise<MeResponse> {
+  return request<MeResponse>('/api/me');
+}
+
+export function startBillingCheckout(plan: BillingPlan): Promise<{ checkout_url: string }> {
+  return request('/api/billing/checkout', {
+    method: 'POST',
+    body: JSON.stringify({ plan }),
+  });
+}
+
+export function openBillingPortal(): Promise<{ portal_url: string }> {
+  return request('/api/billing/portal', { method: 'POST' });
+}
