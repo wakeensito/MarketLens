@@ -64,8 +64,24 @@ def _atomic_check_and_increment(auth: dict) -> str | None:
     if not auth["is_authenticated"]:
         return "Sign in to run analyses."
 
-    # Plan-based daily limits
+    user_pk = f"USER#{auth['user_id']}"
+
+    # Resolve the user's plan from DynamoDB rather than the authorizer-cached
+    # snapshot. API Gateway caches authorizer results for ~5 min, so a user who
+    # just upgraded would otherwise be rate-limited at the old tier until the
+    # cache expires. Fall back to the authorizer snapshot only on read failure.
     plan = auth.get("plan", "free")
+    try:
+        user_row = table.get_item(
+            Key={"pk": user_pk, "sk": user_pk},
+            ConsistentRead=True,
+            ProjectionExpression="#p",
+            ExpressionAttributeNames={"#p": "plan"},
+        ).get("Item") or {}
+        plan = user_row.get("plan") or plan
+    except ClientError as e:
+        logger.warning("Plan refresh failed; using authorizer snapshot", extra={"error": str(e)})
+
     plan_limits = {
         "free": FREE_TIER_DAILY_LIMIT,
         "pro": 15,
@@ -75,7 +91,6 @@ def _atomic_check_and_increment(auth: dict) -> str | None:
     daily_limit = plan_limits.get(plan, FREE_TIER_DAILY_LIMIT)
 
     # Atomic check-and-increment on user record
-    user_pk = f"USER#{auth['user_id']}"
     try:
         # Attempt to increment, but only if under the daily limit.
         # If report_count_date != today, reset to 1 (new day).

@@ -158,7 +158,9 @@ def create_checkout_session():
     if not auth["is_authenticated"]:
         return {"error": "Authentication required"}, 401
 
-    body = app.current_event.json_body or {}
+    body = app.current_event.json_body
+    if not isinstance(body, dict):
+        return {"error": "Request body must be a JSON object."}, 400
     plan = body.get("plan", "pro")
 
     price_map = {
@@ -174,18 +176,29 @@ def create_checkout_session():
     customer_id = _get_or_create_stripe_customer(auth)
 
     _get_stripe_secret_key()
-    session = stripe.checkout.Session.create(
-        customer=customer_id,
-        line_items=[{"price": price_id, "quantity": 1}],
-        mode="subscription",
-        success_url=f"{APP_DOMAIN}?billing=success&session_id={{CHECKOUT_SESSION_ID}}",
-        cancel_url=f"{APP_DOMAIN}?billing=cancelled",
-        metadata={
+    idempotency_key = _idempotency_key("checkout", auth["user_id"], plan)
+    try:
+        session = stripe.checkout.Session.create(
+            customer=customer_id,
+            line_items=[{"price": price_id, "quantity": 1}],
+            mode="subscription",
+            success_url=f"{APP_DOMAIN}?billing=success&session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{APP_DOMAIN}?billing=cancelled",
+            metadata={
+                "user_id": auth["user_id"],
+                "org_id": auth["org_id"],
+            },
+            idempotency_key=idempotency_key,
+        )
+    except stripe.error.StripeError as e:
+        logger.error("Stripe checkout creation failed", extra={
             "user_id": auth["user_id"],
             "org_id": auth["org_id"],
-        },
-        idempotency_key=_idempotency_key("checkout", auth["user_id"], plan),
-    )
+            "plan": plan,
+            "idempotency_key": idempotency_key,
+            "error": str(e),
+        })
+        return {"error": "Could not start checkout. Please try again."}, 502
 
     logger.info("Checkout session created", extra={
         "user_id": auth["user_id"],
@@ -207,11 +220,21 @@ def create_portal_session():
     customer_id = _get_or_create_stripe_customer(auth)
 
     _get_stripe_secret_key()
-    portal_session = stripe.billing_portal.Session.create(
-        customer=customer_id,
-        return_url=APP_DOMAIN,
-        idempotency_key=_idempotency_key("portal", auth["user_id"], "portal"),
-    )
+    idempotency_key = _idempotency_key("portal", auth["user_id"], "portal")
+    try:
+        portal_session = stripe.billing_portal.Session.create(
+            customer=customer_id,
+            return_url=APP_DOMAIN,
+            idempotency_key=idempotency_key,
+        )
+    except stripe.error.StripeError as e:
+        logger.error("Stripe portal creation failed", extra={
+            "user_id": auth["user_id"],
+            "org_id": auth["org_id"],
+            "idempotency_key": idempotency_key,
+            "error": str(e),
+        })
+        return {"error": "Could not open the billing portal. Please try again."}, 502
 
     return {"portal_url": portal_session.url}
 

@@ -26,13 +26,15 @@ const BARS: readonly BarSpec[] = [
   { x: 14, y: 1,  w: 8,  h: 6, opacity: 0.45 }, // top, narrowest
 ];
 
-const BAR_STAGGER_S   = 0.18;   // 180ms between bars stacking
-const BAR_FADE_IN_S   = 0.32;
-const HOLD_S          = 0.6;
+// Timings honour DESIGN.md's motion budget: 60–90ms stagger, 280ms default,
+// 400ms ceiling, no animation longer than 400ms unless data-driven.
+const BAR_STAGGER_S   = 0.075;  // 75ms between bars stacking
+const BAR_FADE_IN_S   = 0.36;   // entry duration per bar
+const HOLD_S          = 0.35;   // settle at the budget ceiling
 const FADE_OUT_S      = 0.28;
 const EASE = 'easeOut' as const;
 
-/** Total cycle: build (4 × 180ms + 320ms last) + hold + fade-out ≈ 1.92s */
+/** Total cycle: build (3 × 75ms stagger + 360ms last fade-in) + 350ms hold + 280ms fade-out ≈ 1.22s */
 const CYCLE_S = (BARS.length - 1) * BAR_STAGGER_S + BAR_FADE_IN_S + HOLD_S + FADE_OUT_S;
 
 interface Props {
