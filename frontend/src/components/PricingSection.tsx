@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Check } from 'lucide-react';
 import NumberFlow from '@number-flow/react';
 import { BrandWordmarkInner } from './BrandWordmark';
 import { LANDING_ENTRY_Y, landingFadeUpTransition } from '../motion';
@@ -17,6 +17,8 @@ interface PlanRow {
   annual: number;
   /** Annual savings (monthly equivalent), shown as a quiet inline note. */
   annualMonthlyEquivalent: number;
+  /** What this plan delivers, written from the user's perspective. */
+  features: string[];
 }
 
 const PLAN_DATA: PlanRow[] = [
@@ -27,6 +29,12 @@ const PLAN_DATA: PlanRow[] = [
     monthly: 0,
     annual: 0,
     annualMonthlyEquivalent: 0,
+    features: [
+      '3 reports per day',
+      '7-day history',
+      'Markdown export',
+      'Live web search',
+    ],
   },
   {
     id: 'pro',
@@ -35,6 +43,13 @@ const PLAN_DATA: PlanRow[] = [
     monthly: 20,
     annual: 192,
     annualMonthlyEquivalent: 16,
+    features: [
+      '15 reports per day',
+      'Unlimited history',
+      'CSV, PDF, Markdown exports',
+      'Chat included',
+      'Live web search',
+    ],
   },
   {
     id: 'max',
@@ -43,16 +58,15 @@ const PLAN_DATA: PlanRow[] = [
     monthly: 100,
     annual: 960,
     annualMonthlyEquivalent: 80,
+    features: [
+      'Unlimited reports',
+      'Unlimited history',
+      'CSV, PDF, Markdown exports',
+      'Unlimited chat, with cross-report memory',
+      'Choose your chat model: Claude, GPT, Gemini, Perplexity',
+      'Live web search',
+    ],
   },
-];
-
-const COMPARISON_ROWS: { label: string; free: string; pro: string; max: string }[] = [
-  { label: 'Reports per day', free: '3',           pro: '15',                 max: 'Unlimited' },
-  { label: 'History',         free: '7 days',      pro: 'Unlimited',          max: 'Unlimited' },
-  { label: 'Exports',         free: 'Markdown',    pro: 'CSV, PDF, Markdown', max: 'CSV, PDF, Markdown' },
-  { label: 'Chat',            free: 'Not included',pro: 'Included',           max: 'Unlimited, with cross-report memory' },
-  { label: 'Model selection', free: 'Not included',pro: 'Default',            max: 'Claude, GPT, Gemini, Perplexity' },
-  { label: 'Live web search', free: 'Included',    pro: 'Included',           max: 'Included' },
 ];
 
 interface Props {
@@ -86,11 +100,15 @@ export default function PricingSection({
     return null;
   };
 
-  // Treats a plan as "current" regardless of cadence. Add new cadences here.
   const isUserOnPlan = (id: PlanId, plan: string): boolean => {
     if (id === 'pro') return plan === 'pro' || plan === 'pro_annual';
     if (id === 'max') return plan === 'max' || plan === 'max_annual';
     return false;
+  };
+
+  const isCurrentPlan = (id: PlanId): boolean => {
+    if (id === 'free' && (currentPlan === 'free' || !isAuthenticated)) return true;
+    return isUserOnPlan(id, currentPlan);
   };
 
   const handleCta = (id: PlanId) => {
@@ -100,19 +118,14 @@ export default function PricingSection({
       onBack();
       return;
     }
-
-    // Already subscribed → portal.
     if (isAuthenticated && isUserOnPlan(id, currentPlan)) {
       onManage();
       return;
     }
-
-    // Anonymous user picking a paid plan → sign-in first.
     if (!isAuthenticated && billingPlan) {
       onRequestSignIn(billingPlan);
       return;
     }
-
     if (billingPlan) onCheckout(billingPlan);
   };
 
@@ -124,17 +137,17 @@ export default function PricingSection({
     return '';
   };
 
-  const isCurrentPlan = (id: PlanId): boolean => {
-    if (id === 'free' && (currentPlan === 'free' || !isAuthenticated)) return true;
-    return isUserOnPlan(id, currentPlan);
+  const priceFor = (plan: PlanRow): number => {
+    if (plan.monthly === 0) return 0;
+    return cadence === 'annual' ? plan.annualMonthlyEquivalent : plan.monthly;
   };
 
-  const proPriceShown = cadence === 'annual'
-    ? PLAN_DATA[1].annualMonthlyEquivalent
-    : PLAN_DATA[1].monthly;
-  const maxPriceShown = cadence === 'annual'
-    ? PLAN_DATA[2].annualMonthlyEquivalent
-    : PLAN_DATA[2].monthly;
+  const billingNoteFor = (plan: PlanRow): string => {
+    if (plan.monthly === 0) return 'No card required, ever';
+    return cadence === 'annual'
+      ? `$${plan.annual} a year`
+      : 'Billed monthly';
+  };
 
   return (
     <AnimatePresence>
@@ -156,7 +169,7 @@ export default function PricingSection({
           </span>
         </nav>
 
-        {/* Lede + recommendation paragraph */}
+        {/* Lede */}
         <header className="pricing-editorial-header">
           <motion.div
             className="pricing-eyebrow"
@@ -173,25 +186,11 @@ export default function PricingSection({
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.08, duration: 0.42, ease: 'easeOut' as const }}
           >
-            When the free cap stops being enough.
+            Plans that expand with ambition.
           </motion.h1>
-
-          <motion.p
-            className="pricing-recommendation"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.16, duration: 0.42, ease: 'easeOut' as const }}
-          >
-            For one founder triaging ideas, <strong className="pricing-rec-strong">Pro at $20 a month</strong> is the
-            answer. It lifts the daily cap to fifteen reports, opens chat, unlocks every export
-            format, and keeps history forever. Annual billing brings it to{' '}
-            <span className="pricing-rec-annual">$16 a month</span>, billed yearly. Max is for
-            heavy researchers running dozens of ideas: unlimited reports, cross-report memory in
-            chat, saved prompt templates, and priority generation.
-          </motion.p>
         </header>
 
-        {/* Global cadence toggle — one source of truth for all paid columns */}
+        {/* Global cadence toggle — single source of truth for paid columns */}
         <motion.div
           className="pricing-global-toggle"
           role="radiogroup"
@@ -200,7 +199,7 @@ export default function PricingSection({
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.18, duration: 0.4, ease: 'easeOut' as const }}
         >
-          {(['monthly','annual'] as Cadence[]).map(c => {
+          {(['monthly', 'annual'] as Cadence[]).map(c => {
             const active = cadence === c;
             return (
               <button
@@ -211,12 +210,9 @@ export default function PricingSection({
                 className={`pricing-cadence-opt${active ? ' is-active' : ''}`}
                 onClick={() => setCadence(c)}
                 onKeyDown={e => {
-                  if (e.key === 'ArrowRight') {
+                  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
                     e.preventDefault();
-                    setCadence('annual');
-                  } else if (e.key === 'ArrowLeft') {
-                    e.preventDefault();
-                    setCadence('monthly');
+                    setCadence(prev => (prev === 'monthly' ? 'annual' : 'monthly'));
                   }
                 }}
               >
@@ -236,91 +232,77 @@ export default function PricingSection({
           })}
         </motion.div>
 
-        {/* Comparison table */}
+        {/* Floating cards */}
         <motion.div
-          className="pricing-table"
+          className="pricing-cards"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.24, duration: 0.4 }}
-          role="table"
-          aria-label="Plan comparison"
         >
-          {/* Column headers */}
-          <div className="pricing-table-head" role="row">
-            <div className="pricing-col-meta" aria-hidden />
-
-            {(['free','pro','max'] as PlanId[]).map(id => {
-              const plan = PLAN_DATA.find(p => p.id === id)!;
-              const priceShown = id === 'free' ? 0 :
-                                  id === 'pro'  ? proPriceShown :
-                                  maxPriceShown;
-              const isPaid = plan.monthly > 0;
-              const current = isCurrentPlan(id);
-              return (
-                <div
-                  key={id}
-                  className={`pricing-col-head${current ? ' is-current' : ''}${id === 'pro' && !current ? ' is-emphasis' : ''}`}
-                  role="columnheader"
-                >
-                  <div className="pricing-col-name-row">
-                    <span className="pricing-col-name">{plan.name}</span>
+          {PLAN_DATA.map((plan, i) => {
+            const current = isCurrentPlan(plan.id);
+            const isPaid = plan.id !== 'free';
+            const isMax = plan.id === 'max' && !current;
+            return (
+              <motion.article
+                key={plan.id}
+                className={`pricing-card${isMax ? ' is-max' : ''}${current ? ' is-current' : ''}`}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.28 + i * 0.06, duration: 0.4, ease: 'easeOut' as const }}
+              >
+                <header className="pricing-card-header">
+                  <div className="pricing-card-name-row">
+                    <h2 className="pricing-card-name">{plan.name}</h2>
                     {current && (
-                      <span className="pricing-col-current">Current plan</span>
-                    )}
-                    {id === 'pro' && !current && (
-                      <span className="pricing-col-recommended">Recommended</span>
+                      <span className="pricing-card-pill pricing-card-pill--current">Current plan</span>
                     )}
                   </div>
+                  <p className="pricing-card-tagline">{plan.tagline}</p>
 
-                  <div className="pricing-col-tagline">{plan.tagline}</div>
-
-                  <div className="pricing-col-price-row">
-                    <span className="pricing-col-price-currency">$</span>
-                    <span className="pricing-col-price-num">
-                      {isPaid ? <NumberFlow value={priceShown} /> : 0}
-                    </span>
-                    <span className="pricing-col-price-period">/mo</span>
+                  <div className="pricing-card-price-row">
+                    {plan.monthly === 0 ? (
+                      <span className="pricing-card-price-num">$0</span>
+                    ) : (
+                      <>
+                        <span className="pricing-card-price-currency">$</span>
+                        <span className="pricing-card-price-num">
+                          <NumberFlow value={priceFor(plan)} />
+                        </span>
+                        <span className="pricing-card-price-period">/mo</span>
+                      </>
+                    )}
                   </div>
+                  <p className="pricing-card-billing-note">{billingNoteFor(plan)}</p>
+                </header>
 
-                  <div className="pricing-col-billing-note">
-                    {!isPaid
-                      ? 'No card required, ever'
-                      : cadence === 'annual'
-                      ? `$${plan.annual} a year`
-                      : `Billed monthly`}
-                  </div>
+                <button
+                  type="button"
+                  className={`pricing-card-cta${isPaid && !current ? ' pricing-card-cta--primary' : ' pricing-card-cta--ghost'}${current ? ' is-current' : ''}`}
+                  onClick={() => handleCta(plan.id)}
+                >
+                  {ctaLabel(plan.id)}
+                </button>
 
-                  <button
-                    type="button"
-                    className={`pricing-col-cta${id === 'pro' && !current ? ' pricing-col-cta--primary' : ' pricing-col-cta--ghost'}${current ? ' is-current' : ''}`}
-                    onClick={() => handleCta(id)}
-                  >
-                    {ctaLabel(id)}
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Body rows */}
-          <div className="pricing-table-body" role="rowgroup">
-            {COMPARISON_ROWS.map(row => (
-              <div key={row.label} className="pricing-table-row" role="row">
-                <div className="pricing-col-meta" role="rowheader">
-                  {row.label}
-                </div>
-                <div className="pricing-cell" role="cell">{row.free}</div>
-                <div className="pricing-cell pricing-cell--emphasis" role="cell">{row.pro}</div>
-                <div className="pricing-cell" role="cell">{row.max}</div>
-              </div>
-            ))}
-          </div>
+                <ul className="pricing-card-features" aria-label={`${plan.name} includes`}>
+                  {plan.features.map(feature => (
+                    <li key={feature} className="pricing-card-feature">
+                      <span className="pricing-card-feature-check" aria-hidden>
+                        <Check size={11} strokeWidth={2.5} />
+                      </span>
+                      <span className="pricing-card-feature-text">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+              </motion.article>
+            );
+          })}
         </motion.div>
 
         {/* Footer */}
         <footer className="pricing-footer">
           <p className="pricing-footer-text">
-            All plans run the same pipeline · AWS Bedrock · Brave Search · Anthropic
+            All plans run the same intelligence pipeline · AWS Bedrock · Brave Search · Anthropic
           </p>
           <p className="pricing-footer-sub">
             Questions?{' '}

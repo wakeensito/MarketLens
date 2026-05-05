@@ -124,12 +124,18 @@ export default function App() {
   /** Sign-in modal visibility: intent flag + must be signed out (no duplicate close effect). */
   const signInModalOpen = showSignIn && !auth.isAuthenticated;
 
-  // After login, leave pricing / save-report overlays (sign-in hides via `signInModalOpen`)
+  // Post-login: dismiss pre-login overlays and resume any pending intent
+  // (queued query or pending paid-plan checkout). Must only fire on the
+  // false→true auth transition — re-running on every render would squash
+  // user-driven setShowPricing(true) clicks (e.g. "View plans" in the
+  // upgrade modal).
+  const prevAuthForLoginEffectRef = useRef(auth.isAuthenticated);
   useEffect(() => {
-    if (!auth.isAuthenticated) return;
+    const wasAuth = prevAuthForLoginEffectRef.current;
+    prevAuthForLoginEffectRef.current = auth.isAuthenticated;
+    if (wasAuth || !auth.isAuthenticated) return;
     const id = requestAnimationFrame(() => {
       setShowSavePrompt(false);
-      // Auto-redirect to checkout if user picked a paid plan before signing in
       if (pendingCheckoutPlanRef.current) {
         const plan = pendingCheckoutPlanRef.current;
         pendingCheckoutPlanRef.current = null;
@@ -138,7 +144,6 @@ export default function App() {
         return;
       }
       setShowPricing(false);
-      // Auto-submit pending query after sign-in
       if (pendingQueryRef.current) {
         const q = pendingQueryRef.current;
         pendingQueryRef.current = null;
