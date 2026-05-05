@@ -8,7 +8,10 @@ import { useAuthContext } from '../hooks/useAuth';
 interface Props {
   report:           MarketReport;
   reportId:         string;
+  /** "Compare plans" path — opens the proactive UpgradeModal then PricingSection. */
   onRequestUpgrade?: () => void;
+  /** Direct Pro Monthly checkout — skips comparison for users who already decided. */
+  onUpgradeToPro?:  () => void;
 }
 
 type ExportFormat = 'md' | 'csv' | 'pdf';
@@ -332,7 +335,7 @@ function RoadmapRow({ phase, index }: { phase: RoadmapPhase; index: number }) {
   );
 }
 
-export default function ReportView({ report, reportId, onRequestUpgrade }: Props) {
+export default function ReportView({ report, reportId, onRequestUpgrade, onUpgradeToPro }: Props) {
   const auth = useAuthContext();
   const planRaw = (auth.user?.plan ?? '').trim().toLowerCase();
   const isPaid  = auth.isAuthenticated && planRaw !== '' && planRaw !== 'free';
@@ -412,14 +415,20 @@ export default function ReportView({ report, reportId, onRequestUpgrade }: Props
     window.print();
   }
 
-  function handleLockedClick() {
+  function handleLockedShortcut() {
+    setMenuOpen(false);
+    if (onUpgradeToPro) onUpgradeToPro();
+    else onRequestUpgrade?.();
+  }
+
+  function handleComparePlans() {
     setMenuOpen(false);
     onRequestUpgrade?.();
   }
 
   function onFormatSelect(format: ExportFormat) {
     if (format === 'md') return exportMarkdown();
-    if (!isPaid) return handleLockedClick();
+    if (!isPaid) return handleLockedShortcut();
     if (format === 'csv') return exportCsv();
     if (format === 'pdf') return exportPdf();
   }
@@ -639,6 +648,16 @@ export default function ReportView({ report, reportId, onRequestUpgrade }: Props
                       <span className="report-export-menu-item-name">PDF</span>
                       {!isPaid && <span className="report-export-pro">Pro</span>}
                     </button>
+
+                    {!isPaid && (
+                      <button
+                        type="button"
+                        className="report-export-compare"
+                        onClick={handleComparePlans}
+                      >
+                        Compare plans
+                      </button>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>

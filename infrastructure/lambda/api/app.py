@@ -121,6 +121,47 @@ def _atomic_check_and_increment(auth: dict) -> str | None:
         return None
 
 
+@app.get("/me")
+@tracer.capture_method
+def get_me():
+    """Return the caller's identity with a fresh plan read from DynamoDB.
+
+    The authorizer-injected `plan` is cached for ~5 min by API Gateway, which
+    makes it unsuitable for post-checkout polling: a user who just upgraded
+    would still see "free" until the cache expires. This endpoint reads the
+    user record directly so the frontend can detect plan changes within
+    seconds of Stripe's webhook landing.
+    """
+    auth = _get_auth_context()
+    if not auth["is_authenticated"]:
+        return {"is_authenticated": False, "plan": "free"}
+
+    user_pk = f"USER#{auth['user_id']}"
+    try:
+        result = table.get_item(
+            Key={"pk": user_pk, "sk": user_pk},
+            ConsistentRead=True,
+        )
+    except ClientError as e:
+        logger.warning("get_me DDB read failed", extra={"error": str(e)})
+        # Fall back to the authorizer-injected snapshot rather than 500ing the poll.
+        return {
+            "is_authenticated": True,
+            "user_id": auth["user_id"],
+            "email": auth["email"],
+            "plan": auth["plan"],
+            "stale": True,
+        }
+
+    item = result.get("Item") or {}
+    return {
+        "is_authenticated": True,
+        "user_id": auth["user_id"],
+        "email": item.get("email") or auth["email"],
+        "plan": item.get("plan") or "free",
+    }
+
+
 @app.get("/reports")
 @tracer.capture_method
 def list_reports():

@@ -3494,13 +3494,417 @@ textarea:focus-visible {
   align-items: center;
 }
 
-.pricing-header {
-  text-align: center;
-  max-width: 560px;
+/* ── Editorial pricing surface ────────────────────────── */
+
+.pricing-editorial-header {
   width: 100%;
-  margin-bottom: 48px;
+  max-width: 720px;
+  margin: 0 auto 56px;
+  text-align: left;
 }
 
+.pricing-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 18px;
+}
+
+.pricing-lede {
+  font-family: var(--font-display);
+  font-size: clamp(28px, 4.2vw, 44px);
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.02em;
+  line-height: 1.12;
+  margin: 0 0 22px;
+}
+
+.pricing-recommendation {
+  font-family: var(--font-body);
+  font-size: 16px;
+  line-height: 1.65;
+  color: var(--text-secondary);
+  max-width: 64ch;
+  margin: 0;
+}
+
+.pricing-rec-strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.pricing-rec-annual {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  color: var(--signal);
+  letter-spacing: 0.01em;
+}
+
+/* — Comparison table — */
+
+.pricing-table {
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto 56px;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--border);
+}
+
+.pricing-table-head {
+  display: grid;
+  grid-template-columns: 200px repeat(3, minmax(0, 1fr));
+  gap: 0;
+  align-items: stretch;
+  border-bottom: 1px solid var(--border);
+}
+
+.pricing-col-meta {
+  padding: 28px 16px 28px 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+}
+
+.pricing-col-head {
+  padding: 28px 18px;
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+  /* Pin the CTA to the bottom so all three columns align regardless of
+     intermediate content height. */
+  justify-content: flex-start;
+}
+
+.pricing-col-head .pricing-col-cta {
+  margin-top: auto;
+}
+
+.pricing-col-head.is-emphasis {
+  background: color-mix(in oklch, var(--signal) 4%, transparent);
+}
+
+.pricing-col-head.is-current {
+  background: var(--accent-light);
+}
+
+/* When the user is on Pro, deepen the signal tint slightly so the column
+   still reads as the recommended path rather than the generic current-plan
+   treatment. The "Recommended" pill is suppressed in JSX in this case, so
+   the tint carries the identity. */
+.pricing-col-head.is-emphasis.is-current {
+  background: color-mix(in oklch, var(--signal) 7%, var(--surface));
+}
+
+.pricing-col-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pricing-col-name {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.012em;
+}
+
+.pricing-col-current,
+.pricing-col-recommended {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 3px 7px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  background: var(--surface);
+}
+
+.pricing-col-recommended {
+  color: var(--signal);
+  border-color: color-mix(in oklch, var(--signal) 25%, transparent);
+  background: color-mix(in oklch, var(--signal) 8%, transparent);
+}
+
+.pricing-col-current {
+  color: var(--accent);
+  border-color: var(--accent-border);
+  background: var(--accent-light);
+}
+
+.pricing-col-tagline {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.pricing-col-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.pricing-col-price-free {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.pricing-col-price-currency {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  align-self: flex-start;
+  margin-top: 4px;
+}
+
+.pricing-col-price-num {
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.pricing-col-price-period {
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.pricing-col-billing-note {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.01em;
+  min-height: 16px;
+}
+
+/* Global cadence toggle — sits above the comparison table, single source of
+   truth for both paid columns. */
+.pricing-global-toggle {
+  display: inline-flex;
+  align-self: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  padding: 3px;
+  position: relative;
+  margin: 0 auto 32px;
+}
+
+.pricing-cadence-opt {
+  position: relative;
+  height: 36px;
+  padding: 0 18px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--radius-full);
+  transition: color 160ms cubic-bezier(0.22, 1, 0.36, 1);
+  display: inline-flex;
+  align-items: center;
+}
+.pricing-cadence-opt.is-active { color: var(--text); }
+.pricing-cadence-opt:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--border-focus);
+}
+
+.pricing-cadence-pill {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-full);
+  background: var(--surface-alt);
+  border: 1px solid var(--border-mid);
+  z-index: 0;
+}
+
+.pricing-cadence-label {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pricing-cadence-save {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--signal);
+  padding: 2px 6px;
+  border-radius: var(--radius-full);
+  background: color-mix(in oklch, var(--signal) 9%, transparent);
+  border: 1px solid color-mix(in oklch, var(--signal) 22%, transparent);
+}
+
+/* Column CTA */
+.pricing-col-cta {
+  height: 38px;
+  padding: 0 16px;
+  border-radius: var(--radius-lg);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 180ms cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
+              color 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.pricing-col-cta--primary {
+  background: var(--accent);
+  color: var(--text-inverse);
+  border: 1px solid var(--accent);
+}
+.pricing-col-cta--primary:hover { background: var(--accent-hover); }
+
+.pricing-col-cta--ghost {
+  background: transparent;
+  border: 1px solid var(--border-mid);
+  color: var(--text);
+}
+.pricing-col-cta--ghost:hover {
+  background: var(--surface-alt);
+  border-color: var(--border-strong);
+}
+
+.pricing-col-cta.is-current {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.pricing-col-cta.is-current:hover {
+  background: var(--surface-alt);
+  color: var(--text);
+}
+
+.pricing-col-cta:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--border-focus);
+}
+
+/* Body rows */
+.pricing-table-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.pricing-table-row {
+  display: grid;
+  grid-template-columns: 200px repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  border-bottom: 1px solid var(--border);
+}
+
+.pricing-table-row:hover .pricing-cell {
+  background: color-mix(in oklch, var(--accent) 2%, transparent);
+}
+
+.pricing-table-row .pricing-col-meta {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: none;
+  letter-spacing: 0;
+  padding: 16px 16px 16px 0;
+}
+
+.pricing-cell {
+  padding: 16px 18px;
+  border-left: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text);
+  letter-spacing: 0.01em;
+  display: flex;
+  align-items: center;
+  transition: background 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.pricing-cell--emphasis {
+  background: color-mix(in oklch, var(--signal) 3%, transparent);
+}
+
+.pricing-table-row:hover .pricing-cell--emphasis {
+  background: color-mix(in oklch, var(--signal) 6%, transparent);
+}
+
+/* Mobile touch targets — ensure ≥44px on phones */
+@media (max-width: 680px) {
+  .pricing-col-cta {
+    height: 48px;
+    font-size: 14px;
+  }
+  .pricing-cadence-opt {
+    height: 44px;
+    padding: 0 18px;
+  }
+  .pricing-global-toggle {
+    margin-bottom: 24px;
+  }
+}
+
+/* Tablet collapse */
+@media (max-width: 860px) {
+  .pricing-table-head,
+  .pricing-table-row {
+    grid-template-columns: 1fr;
+  }
+  .pricing-table-head {
+    grid-template-rows: auto;
+  }
+  .pricing-col-meta { display: none; }
+  .pricing-table-row .pricing-col-meta {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    padding: 12px 0 12px 16px;
+    background: var(--surface-alt);
+  }
+  .pricing-col-head,
+  .pricing-cell {
+    border-left: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .pricing-col-head:last-child,
+  .pricing-cell:last-child {
+    border-bottom: none;
+  }
+}
+
+/* Legacy classes kept temporarily for Stripe webhook unrelated surfaces */
 .pricing-headline {
   font-family: var(--font-display);
   font-size: clamp(30px, 5vw, 52px);
@@ -4438,4 +4842,218 @@ textarea:focus-visible {
 
 .signin-modal-back-link:hover {
   color: var(--text-secondary);
+}
+
+/* ── Activating-plan interstitial ─────────────────────── */
+
+.activating-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: color-mix(in oklch, var(--bg) 88%, transparent);
+  backdrop-filter: blur(6px) saturate(1.2);
+  -webkit-backdrop-filter: blur(6px) saturate(1.2);
+}
+
+.activating-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 36px 32px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 18px;
+}
+
+.activating-mark {
+  width: 48px;
+  height: 48px;
+  display: inline-block;
+  line-height: 0;
+}
+
+/* AnimatedMark — used wherever the four-bar mark animates as a loading state.
+   Stealth uses the warm amber signal directly; light uses the warm sepia ink. */
+.animated-mark-bar {
+  fill: var(--signal);
+}
+
+.activating-title {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  color: var(--text);
+  line-height: 1.25;
+  margin: 0;
+}
+
+.activating-desc {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  max-width: 32ch;
+  margin: 0;
+}
+
+.activating-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+  min-height: 28px;
+}
+
+.activating-elapsed {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.activating-refresh {
+  height: 30px;
+  padding: 0 14px;
+  border: 1px solid var(--border-mid);
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 500;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: background 160ms cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.activating-refresh:hover {
+  background: var(--surface-alt);
+  border-color: var(--border-strong);
+}
+.activating-refresh:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--border-focus);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animated-mark-bar {
+    transition: none !important;
+  }
+}
+
+/* ── Billing cancel toast ─────────────────────────────── */
+
+.billing-cancel-toast {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  z-index: 1090;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 10px 14px;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--text-secondary);
+  max-width: 320px;
+  box-shadow: 0 6px 22px color-mix(in oklch, var(--accent) 10%, transparent);
+}
+
+.billing-cancel-toast--error {
+  border-color: color-mix(in oklch, var(--danger) 24%, transparent);
+  color: var(--danger);
+  background: color-mix(in oklch, var(--danger) 4%, var(--surface));
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 10px 14px;
+}
+
+.billing-toast-text {
+  flex: 1;
+  font-size: 13px;
+}
+
+.billing-toast-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.billing-toast-action {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in oklch, var(--danger) 28%, transparent);
+  background: transparent;
+  color: var(--danger);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.billing-toast-action:hover {
+  background: color-mix(in oklch, var(--danger) 8%, transparent);
+}
+.billing-toast-action:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--danger) 35%, transparent);
+}
+
+.billing-toast-dismiss {
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--danger);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.7;
+  transition: opacity 140ms cubic-bezier(0.22, 1, 0.36, 1),
+              background 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.billing-toast-dismiss:hover {
+  opacity: 1;
+  background: color-mix(in oklch, var(--danger) 6%, transparent);
+}
+.billing-toast-dismiss:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px color-mix(in oklch, var(--danger) 35%, transparent);
+}
+
+/* ── Report export — Compare plans link ───────────────── */
+
+.report-export-compare {
+  margin: 6px 6px 4px;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--border);
+  font-family: var(--font-body);
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: left;
+  width: calc(100% - 12px);
+  transition: color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+.report-export-compare:hover { color: var(--text); }
+.report-export-compare:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--border-focus);
+  border-radius: var(--radius-sm);
 }
