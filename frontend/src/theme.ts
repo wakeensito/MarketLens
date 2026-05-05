@@ -24,13 +24,27 @@ export function getResolved(pref: ThemePreference = getThemePref()): ResolvedThe
   return pref;
 }
 
+const THEME_COLORS: Record<ResolvedTheme, string> = {
+  light: '#f0ede7',
+  stealth: '#1a1814',
+};
+
+function syncThemeColorMeta(resolved: ResolvedTheme): void {
+  const meta = document.getElementById('theme-color') as HTMLMetaElement | null;
+  if (meta) meta.content = THEME_COLORS[resolved];
+}
+
 export function setThemePref(pref: ThemePreference): void {
   if (pref === 'system') localStorage.removeItem(KEY);
   else localStorage.setItem(KEY, pref);
-  document.documentElement.setAttribute('data-theme', getResolved(pref));
+  const resolved = getResolved(pref);
+  document.documentElement.setAttribute('data-theme', resolved);
+  syncThemeColorMeta(resolved);
 }
 
 export function initTheme(): void {
   if (typeof document === 'undefined') return;
-  document.documentElement.setAttribute('data-theme', getResolved());
+  const resolved = getResolved();
+  document.documentElement.setAttribute('data-theme', resolved);
+  syncThemeColorMeta(resolved);
 }
