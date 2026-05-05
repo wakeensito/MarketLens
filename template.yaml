@@ -794,8 +794,10 @@ Resources:
           APP_DOMAIN: !Sub https://${CognitoCallbackDomain}
           STRIPE_SECRET_KEY_PARAM: !Sub /marketlens/${Stage}/stripe-secret-key
           STRIPE_WEBHOOK_SECRET_PARAM: !Sub /marketlens/${Stage}/stripe-webhook-secret
-          STRIPE_PRICE_ID_PRO: price_1TTVmBDH6aI4U5PNMLgUtc2n
-          STRIPE_PRICE_ID_TEAM: price_1TTVnZDH6aI4U5PNjXble64x
+          STRIPE_PRICE_ID_PRO: price_1TTWHWD0uRRrx9E75JuQHBZd
+          STRIPE_PRICE_ID_TEAM: price_1TTWHWD0uRRrx9E79aJXLXor
+          STRIPE_PRICE_ID_PRO_ANNUAL: price_1TTX4LD0uRRrx9E7WSD0kaEV
+          STRIPE_PRICE_ID_TEAM_ANNUAL: price_1TTWHWD0uRRrx9E7EepKDTCp
       Events:
         BillingCheckout:
           Type: Api

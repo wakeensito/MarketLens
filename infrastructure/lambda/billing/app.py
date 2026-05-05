@@ -33,6 +33,8 @@ _stripe_webhook_secret: str | None = None
 # Price IDs
 PRICE_ID_PRO = os.environ["STRIPE_PRICE_ID_PRO"]
 PRICE_ID_TEAM = os.environ["STRIPE_PRICE_ID_TEAM"]
+PRICE_ID_PRO_ANNUAL = os.environ.get("STRIPE_PRICE_ID_PRO_ANNUAL", "")
+PRICE_ID_TEAM_ANNUAL = os.environ.get("STRIPE_PRICE_ID_TEAM_ANNUAL", "")
 
 # DynamoDB
 dynamodb = boto3.resource("dynamodb")
@@ -129,10 +131,12 @@ def create_checkout_session():
     price_map = {
         "pro": PRICE_ID_PRO,
         "team": PRICE_ID_TEAM,
+        "pro_annual": PRICE_ID_PRO_ANNUAL,
+        "team_annual": PRICE_ID_TEAM_ANNUAL,
     }
     price_id = price_map.get(plan)
     if not price_id:
-        return {"error": f"Invalid plan: {plan}. Must be 'pro' or 'team'."}, 400
+        return {"error": f"Invalid plan: {plan}. Must be 'pro', 'team', 'pro_annual', or 'team_annual'."}, 400
 
     customer_id = _get_or_create_stripe_customer(auth)
 
@@ -346,9 +350,9 @@ def _plan_from_subscription_object(subscription) -> str:
     if not items:
         return "free"
     price_id = items[0].get("price", {}).get("id", "")
-    if price_id == PRICE_ID_TEAM:
+    if price_id in (PRICE_ID_TEAM, PRICE_ID_TEAM_ANNUAL):
         return "team"
-    if price_id == PRICE_ID_PRO:
+    if price_id in (PRICE_ID_PRO, PRICE_ID_PRO_ANNUAL):
         return "pro"
     return "free"
 
