@@ -51,7 +51,11 @@ export default function App() {
   });
 
   const billing = useBilling();
-  const [billingCancelToast, setBillingCancelToast] = useState(false);
+  const [billingCancelToast, setBillingCancelToast] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.get('billing') === 'cancelled';
+  });
   const pendingCheckoutPlanRef = useRef<import('./api').BillingPlan | null>(null);
 
   // Read ?billing=success|cancelled once on boot, strip the query, dispatch.
@@ -70,10 +74,8 @@ export default function App() {
     window.history.replaceState({}, '', url);
     if (flag === 'success') {
       billing.beginActivationPoll(auth.user?.plan ?? 'free');
-    } else {
-      setBillingCancelToast(true);
     }
-  }, [billing.beginActivationPoll, auth.user?.plan]);
+  }, [billing, auth.user?.plan]);
 
   // Auto-dismiss cancel toast after 4 seconds.
   useEffect(() => {
