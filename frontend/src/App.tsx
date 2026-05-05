@@ -69,11 +69,11 @@ export default function App() {
     const url = window.location.pathname + (remaining ? `?${remaining}` : '');
     window.history.replaceState({}, '', url);
     if (flag === 'success') {
-      billing.beginActivationPoll();
+      billing.beginActivationPoll(auth.user?.plan ?? 'free');
     } else {
       setBillingCancelToast(true);
     }
-  }, [billing]);
+  }, [billing.beginActivationPoll, auth.user?.plan]);
 
   // Auto-dismiss cancel toast after 4 seconds.
   useEffect(() => {
@@ -86,11 +86,11 @@ export default function App() {
   useEffect(() => {
     if (billing.activation.kind !== 'done') return;
     void auth.refresh();
-  }, [billing.activation.kind, auth]);
+  }, [billing.activation.kind, auth.refresh]);
 
   const onActivationComplete = useCallback(() => {
     billing.cancelActivationPoll();
-  }, [billing]);
+  }, [billing.cancelActivationPoll]);
 
   const onActivationRefresh = useCallback(() => {
     window.location.reload();
@@ -266,7 +266,7 @@ export default function App() {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 6 }}
-            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.22, ease: 'easeOut' as const }}
           >
             Checkout cancelled. You can come back anytime.
           </motion.div>
@@ -278,7 +278,7 @@ export default function App() {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 6 }}
-            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.22, ease: 'easeOut' as const }}
           >
             <span className="billing-toast-text">Couldn't reach Stripe.</span>
             <div className="billing-toast-actions">
@@ -309,7 +309,7 @@ export default function App() {
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 6 }}
-            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.22, ease: 'easeOut' as const }}
           >
             <span className="billing-toast-text">Couldn't open the billing portal.</span>
             <div className="billing-toast-actions">

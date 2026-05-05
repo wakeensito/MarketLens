@@ -141,7 +141,7 @@ export function exportReport(report_id: string): Promise<{ report_id: string; fo
   });
 }
 
-export type BillingPlan = 'pro' | 'pro_annual' | 'team' | 'team_annual';
+export type BillingPlan = 'pro' | 'pro_annual' | 'max' | 'max_annual';
 
 export interface MeResponse {
   is_authenticated: boolean;

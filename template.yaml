@@ -795,9 +795,9 @@ Resources:
           STRIPE_SECRET_KEY_PARAM: !Sub /marketlens/${Stage}/stripe-secret-key
           STRIPE_WEBHOOK_SECRET_PARAM: !Sub /marketlens/${Stage}/stripe-webhook-secret
           STRIPE_PRICE_ID_PRO: price_1TTWHWD0uRRrx9E75JuQHBZd
-          STRIPE_PRICE_ID_TEAM: price_1TTWHWD0uRRrx9E79aJXLXor
+          STRIPE_PRICE_ID_MAX: price_1TTWHWD0uRRrx9E79aJXLXor
           STRIPE_PRICE_ID_PRO_ANNUAL: price_1TTX4LD0uRRrx9E7WSD0kaEV
-          STRIPE_PRICE_ID_TEAM_ANNUAL: price_1TTWHWD0uRRrx9E7EepKDTCp
+          STRIPE_PRICE_ID_MAX_ANNUAL: price_1TTWHWD0uRRrx9E7EepKDTCp
       Events:
         BillingCheckout:
           Type: Api

@@ -74,23 +74,23 @@ export function useBilling() {
    * longer than usual" affordance without giving up.
    *
    * Polling-on-change (not polling-for-not-free) is the correct primitive
-   * because tier upgrades via the Customer Portal go pro → team without ever
+   * because tier upgrades via the Customer Portal go pro → max without ever
    * touching free; a checkout from anonymous goes free → pro. Both look like
    * "the plan changed."
    *
-   * The baseline is read from /api/me on the first poll, so any race between
-   * Stripe's webhook and this poll is naturally absorbed: if the webhook
-   * already landed, the first read already shows the new plan and we resolve
-   * immediately.
+   * Callers should pass the plan known *before* checkout as `baselinePlan` so
+   * the poll can resolve immediately if the Stripe webhook landed first.
+   * Without it, the first /api/me read sets the baseline and a webhook that
+   * arrived earlier would never look like a change.
    */
-  const beginActivationPoll = useCallback(() => {
+  const beginActivationPoll = useCallback((baselinePlan?: string) => {
     if (pollHandleRef.current) pollHandleRef.current.cancelled = true;
     const handle = { cancelled: false };
     pollHandleRef.current = handle;
     const startedAt = Date.now();
     setActivation({ kind: 'polling', startedAt });
 
-    let baseline: string | null = null;
+    let baseline: string | null = baselinePlan ?? null;
 
     const tick = async () => {
       if (handle.cancelled) return;
@@ -100,6 +100,12 @@ export function useBilling() {
         if (handle.cancelled) return;
         if (me.is_authenticated && me.plan) {
           if (baseline === null) {
+            // No baseline supplied — accept any non-free plan as success
+            // (covers a webhook that landed before the user returned).
+            if (me.plan !== 'free') {
+              setActivation({ kind: 'done', plan: me.plan });
+              return;
+            }
             baseline = me.plan;
           } else if (me.plan !== baseline) {
             setActivation({ kind: 'done', plan: me.plan });

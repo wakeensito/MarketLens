@@ -652,6 +652,7 @@ export default function ReportView({ report, reportId, onRequestUpgrade, onUpgra
                     {!isPaid && (
                       <button
                         type="button"
+                        role="menuitem"
                         className="report-export-compare"
                         onClick={handleComparePlans}
                       >

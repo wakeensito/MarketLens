@@ -30,7 +30,7 @@ const BAR_STAGGER_S   = 0.18;   // 180ms between bars stacking
 const BAR_FADE_IN_S   = 0.32;
 const HOLD_S          = 0.6;
 const FADE_OUT_S      = 0.28;
-const EASE = [0.22, 1, 0.36, 1] as const;
+const EASE = 'easeOut' as const;
 
 /** Total cycle: build (4 × 180ms + 320ms last) + hold + fade-out ≈ 1.92s */
 const CYCLE_S = (BARS.length - 1) * BAR_STAGGER_S + BAR_FADE_IN_S + HOLD_S + FADE_OUT_S;

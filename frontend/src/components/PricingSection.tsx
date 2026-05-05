@@ -6,7 +6,7 @@ import { BrandWordmarkInner } from './BrandWordmark';
 import { LANDING_ENTRY_Y, landingFadeUpTransition } from '../motion';
 import type { BillingPlan } from '../api';
 
-type PlanId = 'free' | 'pro' | 'team';
+type PlanId = 'free' | 'pro' | 'max';
 type Cadence = 'monthly' | 'annual';
 
 interface PlanRow {
@@ -17,8 +17,6 @@ interface PlanRow {
   annual: number;
   /** Annual savings (monthly equivalent), shown as a quiet inline note. */
   annualMonthlyEquivalent: number;
-  /** What this plan offers, written as descriptions, not feature lists. */
-  attributes: { label: string; free: string; pro: string; team: string }[];
 }
 
 const PLAN_DATA: PlanRow[] = [
@@ -29,37 +27,32 @@ const PLAN_DATA: PlanRow[] = [
     monthly: 0,
     annual: 0,
     annualMonthlyEquivalent: 0,
-    attributes: [],
   },
   {
     id: 'pro',
     name: 'Pro',
-    tagline: 'For solo founders running idea triage.',
+    tagline: 'For founders running idea triage.',
     monthly: 20,
     annual: 192,
     annualMonthlyEquivalent: 16,
-    attributes: [],
   },
   {
-    id: 'team',
-    name: 'Team',
-    tagline: 'For small teams sharing intelligence.',
+    id: 'max',
+    name: 'Max',
+    tagline: 'For heavy researchers and indie operators.',
     monthly: 100,
     annual: 960,
     annualMonthlyEquivalent: 80,
-    attributes: [],
   },
 ];
 
-const COMPARISON_ROWS: { label: string; free: string; pro: string; team: string }[] = [
-  { label: 'Reports per day', free: '3', pro: '15', team: '50 per seat' },
-  { label: 'History',         free: '7 days', pro: 'Unlimited', team: 'Unlimited' },
-  { label: 'Exports',         free: 'Markdown', pro: 'CSV, PDF, Markdown', team: 'CSV, PDF, Markdown' },
-  { label: 'Chat',            free: 'Not included', pro: 'Included', team: 'Unlimited' },
-  { label: 'Model selection', free: 'Default', pro: 'All models', team: 'All models' },
-  { label: 'Live web search', free: 'Not included', pro: 'Not included', team: 'Included' },
-  { label: 'Sharing',         free: 'Not included', pro: 'Included', team: 'Included' },
-  { label: 'Seats',           free: '1', pro: '1', team: '5 included' },
+const COMPARISON_ROWS: { label: string; free: string; pro: string; max: string }[] = [
+  { label: 'Reports per day', free: '3',           pro: '15',                 max: 'Unlimited' },
+  { label: 'History',         free: '7 days',      pro: 'Unlimited',          max: 'Unlimited' },
+  { label: 'Exports',         free: 'Markdown',    pro: 'CSV, PDF, Markdown', max: 'CSV, PDF, Markdown' },
+  { label: 'Chat',            free: 'Not included',pro: 'Included',           max: 'Unlimited, with cross-report memory' },
+  { label: 'Model selection', free: 'Not included',pro: 'Default',            max: 'Claude, GPT, Gemini, Perplexity' },
+  { label: 'Live web search', free: 'Included',    pro: 'Included',           max: 'Included' },
 ];
 
 interface Props {
@@ -88,9 +81,16 @@ export default function PricingSection({
 
   const planFor = (id: PlanId, c: Cadence): BillingPlan | null => {
     if (id === 'free') return null;
-    if (id === 'pro')  return c === 'annual' ? 'pro_annual'  : 'pro';
-    if (id === 'team') return c === 'annual' ? 'team_annual' : 'team';
+    if (id === 'pro')  return c === 'annual' ? 'pro_annual' : 'pro';
+    if (id === 'max')  return c === 'annual' ? 'max_annual' : 'max';
     return null;
+  };
+
+  // Treats a plan as "current" regardless of cadence. Add new cadences here.
+  const isUserOnPlan = (id: PlanId, plan: string): boolean => {
+    if (id === 'pro') return plan === 'pro' || plan === 'pro_annual';
+    if (id === 'max') return plan === 'max' || plan === 'max_annual';
+    return false;
   };
 
   const handleCta = (id: PlanId) => {
@@ -102,10 +102,7 @@ export default function PricingSection({
     }
 
     // Already subscribed → portal.
-    const userIsOnThisPlan =
-      (id === 'pro'  && (currentPlan === 'pro'  || currentPlan === 'pro_annual')) ||
-      (id === 'team' && (currentPlan === 'team' || currentPlan === 'team_annual'));
-    if (isAuthenticated && userIsOnThisPlan) {
+    if (isAuthenticated && isUserOnPlan(id, currentPlan)) {
       onManage();
       return;
     }
@@ -121,26 +118,21 @@ export default function PricingSection({
 
   const ctaLabel = (id: PlanId): string => {
     if (id === 'free') return isAuthenticated ? 'Back to workspace' : 'Continue free';
-    const userIsOnThisPlan =
-      (id === 'pro'  && (currentPlan === 'pro'  || currentPlan === 'pro_annual')) ||
-      (id === 'team' && (currentPlan === 'team' || currentPlan === 'team_annual'));
-    if (userIsOnThisPlan) return 'Manage subscription';
-    if (id === 'pro')  return 'Start Pro';
-    if (id === 'team') return 'Start Team';
+    if (isUserOnPlan(id, currentPlan)) return 'Manage subscription';
+    if (id === 'pro') return 'Start Pro';
+    if (id === 'max') return 'Start Max';
     return '';
   };
 
   const isCurrentPlan = (id: PlanId): boolean => {
     if (id === 'free' && (currentPlan === 'free' || !isAuthenticated)) return true;
-    if (id === 'pro'  && (currentPlan === 'pro'  || currentPlan === 'pro_annual')) return true;
-    if (id === 'team' && (currentPlan === 'team' || currentPlan === 'team_annual')) return true;
-    return false;
+    return isUserOnPlan(id, currentPlan);
   };
 
   const proPriceShown = cadence === 'annual'
     ? PLAN_DATA[1].annualMonthlyEquivalent
     : PLAN_DATA[1].monthly;
-  const teamPriceShown = cadence === 'annual'
+  const maxPriceShown = cadence === 'annual'
     ? PLAN_DATA[2].annualMonthlyEquivalent
     : PLAN_DATA[2].monthly;
 
@@ -193,8 +185,9 @@ export default function PricingSection({
             For one founder triaging ideas, <strong className="pricing-rec-strong">Pro at $20 a month</strong> is the
             answer. It lifts the daily cap to fifteen reports, opens chat, unlocks every export
             format, and keeps history forever. Annual billing brings it to{' '}
-            <span className="pricing-rec-annual">$16 a month</span>, billed yearly. Team is for
-            shops bringing more than one operator into the workspace.
+            <span className="pricing-rec-annual">$16 a month</span>, billed yearly. Max is for
+            heavy researchers running dozens of ideas: unlimited reports, cross-report memory in
+            chat, saved prompt templates, and priority generation.
           </motion.p>
         </header>
 
@@ -218,9 +211,12 @@ export default function PricingSection({
                 className={`pricing-cadence-opt${active ? ' is-active' : ''}`}
                 onClick={() => setCadence(c)}
                 onKeyDown={e => {
-                  if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+                  if (e.key === 'ArrowRight') {
                     e.preventDefault();
-                    setCadence(prev => (prev === 'monthly' ? 'annual' : 'monthly'));
+                    setCadence('annual');
+                  } else if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    setCadence('monthly');
                   }
                 }}
               >
@@ -253,11 +249,11 @@ export default function PricingSection({
           <div className="pricing-table-head" role="row">
             <div className="pricing-col-meta" aria-hidden />
 
-            {(['free','pro','team'] as PlanId[]).map(id => {
+            {(['free','pro','max'] as PlanId[]).map(id => {
               const plan = PLAN_DATA.find(p => p.id === id)!;
               const priceShown = id === 'free' ? 0 :
                                   id === 'pro'  ? proPriceShown :
-                                  teamPriceShown;
+                                  maxPriceShown;
               const isPaid = plan.monthly > 0;
               const current = isCurrentPlan(id);
               return (
@@ -315,7 +311,7 @@ export default function PricingSection({
                 </div>
                 <div className="pricing-cell" role="cell">{row.free}</div>
                 <div className="pricing-cell pricing-cell--emphasis" role="cell">{row.pro}</div>
-                <div className="pricing-cell" role="cell">{row.team}</div>
+                <div className="pricing-cell" role="cell">{row.max}</div>
               </div>
             ))}
           </div>

@@ -88,7 +88,7 @@ def _get_auth_context() -> dict:
 
 
 # Plans that can access paid export formats (csv, pdf)
-_PAID_PLANS = {"pro", "team", "admin"}
+_PAID_PLANS = {"pro", "max", "admin"}
 
 
 def generate_markdown(report: dict) -> str:

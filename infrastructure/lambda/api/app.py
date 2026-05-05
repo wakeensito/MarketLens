@@ -69,7 +69,7 @@ def _atomic_check_and_increment(auth: dict) -> str | None:
     plan_limits = {
         "free": FREE_TIER_DAILY_LIMIT,
         "pro": 15,
-        "team": 50,
+        "max": 9999,  # effectively unlimited per the Max plan
         "admin": 9999,
     }
     daily_limit = plan_limits.get(plan, FREE_TIER_DAILY_LIMIT)

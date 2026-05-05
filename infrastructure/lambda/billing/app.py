@@ -8,8 +8,10 @@ Endpoints:
 """
 import os
 import json
+import time
 import boto3
 import stripe
+from botocore.exceptions import ClientError
 
 from aws_lambda_powertools import Logger, Tracer, Metrics
 from aws_lambda_powertools.event_handler import APIGatewayRestResolver
@@ -32,9 +34,9 @@ _stripe_webhook_secret: str | None = None
 
 # Price IDs
 PRICE_ID_PRO = os.environ["STRIPE_PRICE_ID_PRO"]
-PRICE_ID_TEAM = os.environ["STRIPE_PRICE_ID_TEAM"]
+PRICE_ID_MAX = os.environ["STRIPE_PRICE_ID_MAX"]
 PRICE_ID_PRO_ANNUAL = os.environ.get("STRIPE_PRICE_ID_PRO_ANNUAL", "")
-PRICE_ID_TEAM_ANNUAL = os.environ.get("STRIPE_PRICE_ID_TEAM_ANNUAL", "")
+PRICE_ID_MAX_ANNUAL = os.environ.get("STRIPE_PRICE_ID_MAX_ANNUAL", "")
 
 # DynamoDB
 dynamodb = boto3.resource("dynamodb")
@@ -79,7 +81,13 @@ def _get_auth_context() -> dict:
 
 
 def _get_or_create_stripe_customer(auth: dict) -> str:
-    """Get existing Stripe customer ID from DynamoDB, or create one in Stripe."""
+    """Get existing Stripe customer ID from DynamoDB, or create one in Stripe.
+
+    Concurrent calls (e.g., a double-clicked CTA) could each create a Stripe
+    customer. We guard the DDB write with attribute_not_exists so only the
+    first writer persists; the loser deletes its orphan customer in Stripe
+    and returns the persisted ID.
+    """
     _get_stripe_secret_key()
 
     user_pk = f"USER#{auth['user_id']}"
@@ -100,19 +108,44 @@ def _get_or_create_stripe_customer(auth: dict) -> str:
         },
     )
 
-    # Store on user record
-    table.update_item(
-        Key={"pk": user_pk, "sk": user_pk},
-        UpdateExpression="SET stripe_customer_id = :cid",
-        ExpressionAttributeValues={":cid": customer.id},
-    )
-
-    logger.info("Stripe customer created", extra={
-        "user_id": auth["user_id"],
-        "stripe_customer_id": customer.id,
-    })
-
-    return customer.id
+    # Store on user record. Condition guards the race so only the first
+    # writer wins; the loser cleans up its orphan customer and re-reads.
+    try:
+        table.update_item(
+            Key={"pk": user_pk, "sk": user_pk},
+            UpdateExpression="SET stripe_customer_id = :cid",
+            ConditionExpression="attribute_not_exists(stripe_customer_id)",
+            ExpressionAttributeValues={":cid": customer.id},
+        )
+        logger.info("Stripe customer created", extra={
+            "user_id": auth["user_id"],
+            "stripe_customer_id": customer.id,
+        })
+        return customer.id
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+            raise
+        # Lost the race — another caller already wrote a customer ID.
+        logger.info("Stripe customer race lost; cleaning up orphan", extra={
+            "user_id": auth["user_id"],
+            "orphan_customer_id": customer.id,
+        })
+        try:
+            stripe.Customer.delete(customer.id)
+        except stripe.error.StripeError as del_err:
+            logger.warning("Could not delete orphan Stripe customer", extra={
+                "orphan_customer_id": customer.id,
+                "error": str(del_err),
+            })
+        winner = table.get_item(
+            Key={"pk": user_pk, "sk": user_pk},
+            ConsistentRead=True,
+        ).get("Item", {})
+        winner_id = winner.get("stripe_customer_id")
+        if not winner_id:
+            # Should be unreachable: the conditional failed, so a value exists.
+            raise RuntimeError("stripe_customer_id missing after race") from e
+        return winner_id
 
 
 # ─── Endpoints ───
@@ -130,13 +163,13 @@ def create_checkout_session():
 
     price_map = {
         "pro": PRICE_ID_PRO,
-        "team": PRICE_ID_TEAM,
+        "max": PRICE_ID_MAX,
         "pro_annual": PRICE_ID_PRO_ANNUAL,
-        "team_annual": PRICE_ID_TEAM_ANNUAL,
+        "max_annual": PRICE_ID_MAX_ANNUAL,
     }
     price_id = price_map.get(plan)
     if not price_id:
-        return {"error": f"Invalid plan: {plan}. Must be 'pro', 'team', 'pro_annual', or 'team_annual'."}, 400
+        return {"error": f"Invalid plan: {plan}. Must be 'pro', 'max', 'pro_annual', or 'max_annual'."}, 400
 
     customer_id = _get_or_create_stripe_customer(auth)
 
@@ -151,6 +184,7 @@ def create_checkout_session():
             "user_id": auth["user_id"],
             "org_id": auth["org_id"],
         },
+        idempotency_key=_idempotency_key("checkout", auth["user_id"], plan),
     )
 
     logger.info("Checkout session created", extra={
@@ -176,6 +210,7 @@ def create_portal_session():
     portal_session = stripe.billing_portal.Session.create(
         customer=customer_id,
         return_url=APP_DOMAIN,
+        idempotency_key=_idempotency_key("portal", auth["user_id"], "portal"),
     )
 
     return {"portal_url": portal_session.url}
@@ -197,8 +232,17 @@ def stripe_webhook():
         logger.warning("Webhook signature verification failed")
         metrics.add_metric(name="WebhookSignatureFailure", unit=MetricUnit.Count, value=1)
         return {"error": "Invalid signature"}, 400
-    except Exception as e:
-        logger.error("Webhook parse error", extra={"error": str(e)})
+    except (ValueError, KeyError) as e:
+        logger.warning("Webhook payload malformed", extra={"error": str(e)})
+        metrics.add_metric(name="WebhookMalformedPayload", unit=MetricUnit.Count, value=1)
+        return {"error": "Bad request"}, 400
+    except stripe.error.StripeError as e:
+        logger.warning("Webhook Stripe error", extra={"error": str(e)})
+        metrics.add_metric(name="WebhookStripeError", unit=MetricUnit.Count, value=1)
+        return {"error": "Bad request"}, 400
+    except Exception:
+        logger.exception("Webhook unexpected error")
+        metrics.add_metric(name="WebhookUnexpectedError", unit=MetricUnit.Count, value=1)
         return {"error": "Bad request"}, 400
 
     event_type = event["type"]
@@ -350,8 +394,8 @@ def _plan_from_subscription_object(subscription) -> str:
     if not items:
         return "free"
     price_id = items[0].get("price", {}).get("id", "")
-    if price_id in (PRICE_ID_TEAM, PRICE_ID_TEAM_ANNUAL):
-        return "team"
+    if price_id in (PRICE_ID_MAX, PRICE_ID_MAX_ANNUAL):
+        return "max"
     if price_id in (PRICE_ID_PRO, PRICE_ID_PRO_ANNUAL):
         return "pro"
     return "free"
@@ -362,26 +406,43 @@ def _find_user_by_customer_id(customer_id: str) -> str | None:
 
     NOTE: For production scale, add a GSI on stripe_customer_id.
     For beta with <100 users, a scan with filter is fine.
+
+    Loops over pages until a match is found or the table is exhausted.
+    Note: passing Limit=1 alongside a FilterExpression scans only one
+    item before filtering and silently misses matches further in.
     """
-    result = table.scan(
-        FilterExpression="stripe_customer_id = :cid AND begins_with(pk, :prefix)",
-        ExpressionAttributeValues={
+    scan_kwargs: dict = {
+        "FilterExpression": "stripe_customer_id = :cid AND begins_with(pk, :prefix)",
+        "ExpressionAttributeValues": {
             ":cid": customer_id,
             ":prefix": "USER#",
         },
-        ProjectionExpression="pk",
-        Limit=1,
-    )
-    items = result.get("Items", [])
-    if items:
-        # pk is "USER#{user_id}"
-        return items[0]["pk"].replace("USER#", "", 1)
-    return None
+        "ProjectionExpression": "pk",
+    }
+    while True:
+        result = table.scan(**scan_kwargs)
+        for item in result.get("Items", []):
+            # pk is "USER#{user_id}"
+            return item["pk"].replace("USER#", "", 1)
+        last = result.get("LastEvaluatedKey")
+        if not last:
+            return None
+        scan_kwargs["ExclusiveStartKey"] = last
 
 
 def _now_iso() -> str:
     from datetime import datetime, timezone
     return datetime.now(timezone.utc).isoformat()
+
+
+def _idempotency_key(scope: str, user_id: str, variant: str) -> str:
+    """Build a deterministic idempotency key for Stripe API calls.
+
+    Bucketed to the minute so a quick double-click collapses to one resource,
+    but a deliberate retry a minute later creates a fresh session.
+    """
+    minute_bucket = int(time.time()) // 60
+    return f"{scope}:{user_id}:{variant}:{minute_bucket}"
 
 
 # ─── Lambda Handler ───

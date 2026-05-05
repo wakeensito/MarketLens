@@ -4864,7 +4864,7 @@ textarea:focus-visible {
   max-width: 380px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-lg);
   padding: 36px 32px 28px;
   display: flex;
   flex-direction: column;

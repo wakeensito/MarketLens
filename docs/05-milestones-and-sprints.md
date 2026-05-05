@@ -103,7 +103,7 @@ All items completed. See [Phase 0 checklist in v1.0](docs/05-milestones-and-spri
 
 ### Rate Limiting ✅
 - [x] Atomic check-and-increment via conditional DynamoDB UpdateItem (no race condition)
-- [x] Plan-aware: free=3/day, pro=15/day, team=50/day, admin=9999/day
+- [x] Plan-aware: free=3/day, pro=15/day, max=9999/day, admin=9999/day
 - [x] Anonymous access eliminated — sign-in required for all API calls
 
 ### Frontend Auth ✅
@@ -152,18 +152,21 @@ All items completed. See [Phase 0 checklist in v1.0](docs/05-milestones-and-spri
 - [x] SES: `noreply@plinths.net` (DKIM + SPF + DMARC)
 
 ### Pricing & Gates (partially enforced)
-Tier structure decided:
+Tier structure decided (solo-only — no multi-seat plan):
 
-| | Free | Pro ($20/mo) | Team ($100/mo) |
+| | Free | Pro ($20/mo) | Max ($100/mo) |
 |---|---|---|---|
-| Reports | 3/day | 15/day | 50/day per seat |
-| Chat per report | ❌ | ~30 msgs then cooldown | ~100 msgs then cooldown |
-| Exports | MD only | CSV, PDF, MD | CSV, PDF, MD |
+| Reports | 3/day | 15/day | Unlimited |
 | History | 7 days | Unlimited | Unlimited |
-| Model selection | Default | ✅ | ✅ |
-| Perplexity search | ❌ | ❌ | ✅ |
-| Sharing | ❌ | ✅ | ✅ |
-| Seats | 1 | 1 | 5 included |
+| Exports | MD only | CSV, PDF, MD | CSV, PDF, MD |
+| Chat per report | ❌ | Included | Unlimited (with cross-report memory) |
+| Model selection (chat) | ❌ | Default | Claude, GPT, Gemini, Perplexity |
+| Live web search | ✅ | ✅ | ✅ |
+
+Notes on what is intentionally **not** plan-gated:
+- Live web search (Brave + Wikipedia + Wikidata) runs on every report regardless of plan
+- Report-pipeline model selection is the same on every plan (Bedrock Nova + DeepSeek + Haiku)
+- The model selection differentiator is **for Muse only**, not the report pipeline
 
 ### Gate enforcement status:
 - [x] Export gate: CSV/PDF blocked for free tier, MD allowed (enforced in Export Lambda)
@@ -181,7 +184,7 @@ Tier structure decided:
 ## Phase 4 — Billing ⏳ NEXT
 
 ### Stripe Integration (planned)
-- [ ] Stripe account + products: Pro ($20/mo), Team ($100/mo)
+- [ ] Stripe account + products: Pro ($20/mo · $192/yr), Max ($100/mo · $960/yr)
 - [ ] `POST /api/billing/checkout` — creates Stripe Checkout Session
 - [ ] `POST /api/billing/portal` — Stripe Customer Portal for subscription management
 - [ ] `POST /api/billing/webhook` — receives Stripe events (Authorizer: NONE, signature verified)
@@ -189,12 +192,13 @@ Tier structure decided:
 - [ ] Webhook handlers: `checkout.session.completed` → update plan, `customer.subscription.deleted` → reset to free
 - [ ] Frontend: "Upgrade" button → Stripe Checkout redirect
 
-### LLM Chat (planned, paid tier feature)
-- [ ] Chat Lambda: conversation history in DynamoDB per report
+### Muse — Chat Agent (design locked, build deferred until post-Max launch)
+See `CLAUDE.md` § Muse for the persisted design decision.
+- [ ] Chat Lambda: per-report conversation history in DynamoDB
 - [ ] Report `result_json` as system prompt context
-- [ ] WebSocket or SSE for streaming responses
-- [ ] Frontend chat panel alongside report view
-- [ ] Session-based usage limits (~30 msgs/report for Pro, ~100 for Team)
+- [ ] Transport: SSE / WebSocket / response streaming — TBD
+- [ ] Frontend: inline conversation in workspace; report collapses into the toolbar attachment-button toggle when chat starts
+- [ ] Tier scope: Free → locked paywall · Pro → ~30 msgs per report · Max → unlimited + cross-report memory
 
 ### Custom Model Selection (planned, paid tier feature)
 - [ ] Model config per stage stored on user/org record
