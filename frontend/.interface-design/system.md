@@ -127,6 +127,7 @@ spring stiffness 280 damping 36     — shared element (layoutId) transitions
 --radius-sm    3px      category tags, gap tags
 --radius-md    4px      buttons, stat cards, mini pipeline cards, icon buttons
 --radius-lg    6px      score card, error strip, bottom tinted cards
+--radius-xl    12px     large standalone surfaces (pricing cards)
 --radius-full  9999px   nav badge, landing pills, free-badge pill
 ```
 
