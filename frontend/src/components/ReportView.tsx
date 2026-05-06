@@ -347,7 +347,7 @@ function RoadmapRow({ phase, index }: { phase: RoadmapPhase; index: number }) {
   );
 }
 
-export default function ReportView({ report, reportId, onRequestUpgrade, onUpgradeToPro, onFeedback }: Props) {
+function ReportViewInner({ report, reportId, onRequestUpgrade, onUpgradeToPro, onFeedback }: Props) {
   const auth = useAuthContext();
   const planRaw = (auth.user?.plan ?? '').trim().toLowerCase();
   const isPaid  = auth.isAuthenticated && planRaw !== '' && planRaw !== 'free';
@@ -358,11 +358,6 @@ export default function ReportView({ report, reportId, onRequestUpgrade, onUpgra
   const [exportError, setExportError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [showAllCompetitors, setShowAllCompetitors] = useState(false);
-
-  // Reset disclosure state when switching reports.
-  useEffect(() => {
-    setShowAllCompetitors(false);
-  }, [reportId]);
 
   // Sort by threat level (dominant → niche). Stable within each tier.
   const sortedCompetitors = useMemo(() => {
@@ -727,4 +722,9 @@ export default function ReportView({ report, reportId, onRequestUpgrade, onUpgra
       </Reveal>
     </div>
   );
+}
+
+export default function ReportView(props: Props) {
+  // Keying ensures local UI state resets on report switch.
+  return <ReportViewInner key={props.reportId} {...props} />;
 }
