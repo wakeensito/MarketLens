@@ -359,6 +359,11 @@ export default function ReportView({ report, reportId, onRequestUpgrade, onUpgra
   const [menuOpen, setMenuOpen] = useState(false);
   const [showAllCompetitors, setShowAllCompetitors] = useState(false);
 
+  // Reset disclosure state when switching reports.
+  useEffect(() => {
+    setShowAllCompetitors(false);
+  }, [reportId]);
+
   // Sort by threat level (dominant → niche). Stable within each tier.
   const sortedCompetitors = useMemo(() => {
     return report.competitors
