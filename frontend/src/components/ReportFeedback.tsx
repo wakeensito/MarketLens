@@ -21,8 +21,7 @@ interface StoredFeedback {
 const STORAGE_PREFIX = 'plinths-feedback-';
 const COMMENT_MAX = 500;
 
-/** ease-out-expo — stamp lands hard, settles soft. */
-const STAMP_EASE = [0.16, 1, 0.3, 1] as const;
+const STAMP_EASE = 'easeOut' as const;
 
 function storageKey(id: string) {
   return `${STORAGE_PREFIX}${id}`;
@@ -58,39 +57,22 @@ function prefersReducedMotion(): boolean {
 
 export default function ReportFeedback({ reportId, onFeedback }: Props) {
   // Lazy initializers read localStorage synchronously — no flash of 'prompt' for already-rated reports.
+  // Parent passes key={reportId} so the component remounts on report change; no sync effect needed.
   const [phase, setPhase] = useState<Phase>(() => (readStored(reportId) ? 'sent' : 'prompt'));
   const [rating, setRating] = useState<FeedbackRating | null>(() => readStored(reportId)?.rating ?? null);
   const [comment, setComment] = useState<string>(() => readStored(reportId)?.comment ?? '');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+  const [reduceMotion] = useState<boolean>(() => prefersReducedMotion());
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const reduceMotionRef = useRef<boolean>(prefersReducedMotion());
 
-  // Sync when reportId changes (user navigates between reports)
-  useEffect(() => {
-    const existing = readStored(reportId);
-    if (existing) {
-      setPhase('sent');
-      setRating(existing.rating);
-      setComment(existing.comment ?? '');
-    } else {
-      setPhase('prompt');
-      setRating(null);
-      setComment('');
-    }
-    setSending(false);
-    setSendError(null);
-  }, [reportId]);
-
-  // Auto-grow textarea (cap higher on mobile so it stays usable)
+  // Auto-grow textarea — CSS max-height media queries handle the per-viewport cap.
   useEffect(() => {
     const el = textareaRef.current;
     if (!el) return;
-    const isMobile = typeof window !== 'undefined' && window.matchMedia?.('(max-width: 480px)').matches;
-    const cap = isMobile ? 200 : 132;
     el.style.height = 'auto';
-    el.style.height = `${Math.min(el.scrollHeight, cap)}px`;
+    el.style.height = `${el.scrollHeight}px`;
   }, [comment, phase]);
 
   // Focus textarea when entering rated state (gives keyboard users an immediate compose path)
@@ -207,7 +189,7 @@ export default function ReportFeedback({ reportId, onFeedback }: Props) {
                   aria-label={rating === 'up' ? 'Useful (selected)' : 'Switch to useful'}
                   aria-pressed={rating === 'up'}
                   initial={
-                    rating === 'up' && !reduceMotionRef.current
+                    rating === 'up' && !reduceMotion
                       ? { scale: 1.18, rotate: -3 }
                       : false
                   }
@@ -224,7 +206,7 @@ export default function ReportFeedback({ reportId, onFeedback }: Props) {
                   aria-label={rating === 'down' ? 'Not useful (selected)' : 'Switch to not useful'}
                   aria-pressed={rating === 'down'}
                   initial={
-                    rating === 'down' && !reduceMotionRef.current
+                    rating === 'down' && !reduceMotion
                       ? { scale: 1.18, rotate: 3 }
                       : false
                   }

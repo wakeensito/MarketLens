@@ -357,12 +357,18 @@ def submit_feedback(report_id: str):
     if not auth["is_authenticated"]:
         return {"error": "Authentication required"}, 401
 
-    body = app.current_event.json_body or {}
+    body = app.current_event.json_body
+    if not isinstance(body, dict):
+        return {"error": "Request body must be a JSON object"}, 400
+
     rating = body.get("rating")
-    if rating not in ("up", "down"):
+    if not isinstance(rating, str) or rating not in ("up", "down"):
         return {"error": "rating must be 'up' or 'down'"}, 400
 
-    comment = (body.get("comment") or "")[:500]
+    raw_comment = body.get("comment")
+    if raw_comment is not None and not isinstance(raw_comment, str):
+        return {"error": "comment must be a string"}, 400
+    comment = (raw_comment or "")[:500]
     org_id = auth["org_id"]
     now = datetime.now(timezone.utc).isoformat()
 

@@ -576,7 +576,7 @@ export default function ReportView({ report, reportId, onRequestUpgrade, onUpgra
       </Reveal>
 
       <Reveal>
-        <ReportFeedback reportId={reportId} onFeedback={onFeedback} />
+        <ReportFeedback key={reportId} reportId={reportId} onFeedback={onFeedback} />
         <div className="report-footer">
           <span className="report-footer-text">
             {briefId} · {dateStr}
