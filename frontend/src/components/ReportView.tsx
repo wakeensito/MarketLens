@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence, useInView, type Variants } from 'framer-motion';
 import { TrendingUp, Download, Loader2, ArrowUpRight, ChevronDown } from 'lucide-react';
 import type { MarketReport, Competitor, MarketGap, RoadmapPhase } from '../types';
@@ -96,6 +96,14 @@ const stagger: Variants = {
 };
 
 const VIEWPORT = { once: true, margin: '-60px' } as const;
+
+const TOP_CONTENDERS = 3;
+const STRENGTH_RANK: Record<Competitor['strength'], number> = {
+  dominant: 0,
+  strong:   1,
+  moderate: 2,
+  niche:    3,
+};
 
 const AVATAR_COLORS = [
   'oklch(68% 0.24 268)',
@@ -339,7 +347,7 @@ function RoadmapRow({ phase, index }: { phase: RoadmapPhase; index: number }) {
   );
 }
 
-export default function ReportView({ report, reportId, onRequestUpgrade, onUpgradeToPro, onFeedback }: Props) {
+function ReportViewInner({ report, reportId, onRequestUpgrade, onUpgradeToPro, onFeedback }: Props) {
   const auth = useAuthContext();
   const planRaw = (auth.user?.plan ?? '').trim().toLowerCase();
   const isPaid  = auth.isAuthenticated && planRaw !== '' && planRaw !== 'free';
@@ -349,6 +357,27 @@ export default function ReportView({ report, reportId, onRequestUpgrade, onUpgra
   const [exportingFormat, setExportingFormat] = useState<ExportFormat | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [showAllCompetitors, setShowAllCompetitors] = useState(false);
+
+  // Sort by threat level (dominant → niche). Stable within each tier.
+  const sortedCompetitors = useMemo(() => {
+    return report.competitors
+      .map((c, i) => ({ c, i }))
+      .sort((a, b) => {
+        const r = (STRENGTH_RANK[a.c.strength] ?? 99) - (STRENGTH_RANK[b.c.strength] ?? 99);
+        return r !== 0 ? r : a.i - b.i;
+      })
+      .map(({ c }) => c);
+  }, [report.competitors]);
+
+  const totalCompetitors = sortedCompetitors.length;
+  const visibleCount = showAllCompetitors ? totalCompetitors : Math.min(TOP_CONTENDERS, totalCompetitors);
+  const visibleCompetitors = sortedCompetitors.slice(0, visibleCount);
+  const hiddenCount = totalCompetitors - Math.min(TOP_CONTENDERS, totalCompetitors);
+  const hasOverflow = hiddenCount > 0;
+  const competitorsCountLabel = hasOverflow
+    ? (showAllCompetitors ? `${totalCompetitors} contenders` : `Top ${TOP_CONTENDERS} of ${totalCompetitors}`)
+    : `${totalCompetitors} ${totalCompetitors === 1 ? 'contender' : 'contenders'}`;
 
   const exportWrapRef = useRef<HTMLDivElement>(null);
   const triggerRef    = useRef<HTMLButtonElement>(null);
@@ -526,14 +555,34 @@ export default function ReportView({ report, reportId, onRequestUpgrade, onUpgra
           <BriefSectionHeader
             num="01"
             name="Competitive Landscape"
-            count={`${report.competitors.length} companies identified`}
+            count={competitorsCountLabel}
           />
           <div className="comp-table-desktop table-scroll-wrap">
-            <CompetitorTable competitors={report.competitors} />
+            <CompetitorTable competitors={visibleCompetitors} />
           </div>
           <div className="comp-cards">
-            {report.competitors.map((c, i) => <CompetitorCard key={c.name} c={c} index={i} />)}
+            {visibleCompetitors.map((c, i) => <CompetitorCard key={c.name} c={c} index={i} />)}
           </div>
+          {hasOverflow && (
+            <div className="comp-disclosure">
+              <button
+                type="button"
+                className="comp-show-more"
+                onClick={() => setShowAllCompetitors(s => !s)}
+                aria-expanded={showAllCompetitors}
+              >
+                <span className="comp-show-more-label">
+                  {showAllCompetitors ? 'Show fewer' : `Show ${hiddenCount} more`}
+                </span>
+                <ChevronDown
+                  size={12}
+                  strokeWidth={2}
+                  className={`comp-show-more-chev${showAllCompetitors ? ' is-open' : ''}`}
+                  aria-hidden
+                />
+              </button>
+            </div>
+          )}
         </div>
       </Reveal>
 
@@ -673,4 +722,9 @@ export default function ReportView({ report, reportId, onRequestUpgrade, onUpgra
       </Reveal>
     </div>
   );
+}
+
+export default function ReportView(props: Props) {
+  // Keying ensures local UI state resets on report switch.
+  return <ReportViewInner key={props.reportId} {...props} />;
 }
