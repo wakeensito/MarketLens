@@ -179,6 +179,11 @@ Notes on what is intentionally **not** plan-gated:
 - [ ] Feedback mechanism: thumbs up/down on reports
 - [ ] Invite 10-20 beta testers
 
+### Scoring Accuracy Improvements (next session):
+- [ ] Force TAM/growth estimates: update Analyse prompt to never return null — always provide best estimate with confidence qualifier
+- [ ] Fallback market size search: when first Brave pass returns no TAM snippets, run one extra targeted query (`"{industry}" market size 2025 2026 billion`)
+- [ ] Boost pain point weight: increase `user_pain_points` contribution to opportunity score (currently underweighted vs competitor weaknesses from LLM)
+
 ---
 
 ## Phase 4 — Billing 🔄 IN PROGRESS

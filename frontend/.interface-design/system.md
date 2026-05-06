@@ -144,6 +144,12 @@ spring stiffness 280 damping 36     — shared element (layoutId) transitions
 ## Button Patterns
 
 ```
+Primary CTA (ink-filled body button — "Send", "View plans", "Save report")
+  height 40px  |  padding 0 16–20px  |  radius --radius-md
+  border 1px --accent  |  bg --accent  |  color --text-inverse  |  font 13px/600 sentence-case
+  hover: --accent-hover bg + --accent-hover border
+  Use for committed, primary actions inside a form / row. Not for nav.
+
 Ghost (nav actions — "Sign in", "New analysis", header actions)
   height 32px  |  padding 0 12–16px  |  radius --radius-md
   border 1px --border-mid  |  bg --surface  |  color --text  |  font 13px/500
@@ -201,9 +207,21 @@ Scale: 4, 8, 12, 16, 20, 24, 28, 32, 40, 48, 52, 60
 ### Interactive element heights
 ```
 52px  — workspace header, sidebar brand header, top nav bar
+40px  — Primary CTA, inline form input (textarea / send pair)
 32px  — ghost button, icon label button, nav actions
 30px  — landing pill (chip / example suggestion)
 28px  — icon-only button (sidebar collapse, icon btn)
+```
+
+### Mobile touch-target override (overrides the 4px grid)
+
+Below the 480px viewport breakpoint, all interactive elements bump to **44px** (WCAG AAA touch target) regardless of their documented desktop height. This override is intentional and supersedes the grid. Tablet (≤680px) uses **40px** as a grid-compliant intermediate where touch parity matters but the AAA bar isn't strictly required.
+
+Progression:
+```
+> 680px        documented desktop height (28 / 30 / 32 / 40)
+≤ 680px        bump to 40px
+≤ 480px        bump to 44px (AAA)
 ```
 
 ---

@@ -2340,6 +2340,72 @@ textarea:focus-visible {
 .strength--niche    .strength-dot   { background: var(--success); }
 .strength--niche    .strength-label { color: var(--success); }
 
+/* ── Competitor disclosure (Top contenders + Show more) ─
+   Top 3 by threat rank rendered up front; the rest tucked
+   behind this toggle. Centered ghost button matches the
+   existing "report-export-btn" treatment.
+   ───────────────────────────────────────────────────────── */
+.comp-disclosure {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}
+
+.comp-show-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 32px;
+  padding: 0 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.comp-show-more:hover {
+  background: var(--accent-light);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+.comp-show-more:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--border-focus);
+}
+
+.comp-show-more-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.comp-show-more-chev {
+  transition: transform 0.20s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.comp-show-more-chev.is-open {
+  transform: rotate(180deg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .comp-show-more-chev { transition: none; }
+}
+
+@media (max-width: 680px) {
+  .comp-show-more { height: 40px; }
+}
+
+@media (max-width: 480px) {
+  .comp-disclosure { margin-top: 12px; }
+  .comp-show-more { height: 44px; width: 100%; }
+}
+
 /* ── Competitor cards (mobile) ───────────────────────── */
 .comp-cards { display: none; flex-direction: column; gap: 8px; }
 
@@ -2865,7 +2931,7 @@ textarea:focus-visible {
    expands inline. No toast, no modal: the stamp is the confirmation.
    ───────────────────────────────────────────────────────── */
 .report-feedback {
-  padding: 18px 0 12px;
+  padding: 20px 0 12px;
   border-top: 1px solid var(--border);
   margin-top: 8px;
 }
@@ -2880,8 +2946,8 @@ textarea:focus-visible {
 
 .report-feedback-label {
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-weight: 500;
+  font-size: 10px;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-muted);
@@ -2891,7 +2957,7 @@ textarea:focus-visible {
 .report-feedback-buttons {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .report-feedback-btn {
@@ -2981,14 +3047,14 @@ textarea:focus-visible {
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  margin-top: 10px;
+  margin-top: 12px;
 }
 
 .report-feedback-textarea {
   flex: 1;
-  min-height: 36px;
+  min-height: 40px;
   max-height: 132px;
-  padding: 8px 10px;
+  padding: 8px 12px;
   background: var(--surface-alt);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -3011,9 +3077,9 @@ textarea:focus-visible {
   background: var(--surface);
 }
 
-/* Send — sentence-case body button, matches the rest of Plinths' button system. */
+/* Send — Primary CTA pattern: ink-filled body button, height 40, sentence case. */
 .report-feedback-send {
-  height: 36px;
+  height: 40px;
   padding: 0 16px;
   border-radius: var(--radius-md);
   border: 1px solid var(--accent);
@@ -3022,14 +3088,12 @@ textarea:focus-visible {
   font-family: var(--font-body);
   font-size: 13px;
   font-weight: 600;
-  letter-spacing: 0.01em;
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s, opacity 0.15s;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  min-width: 72px;
+  gap: 8px;
   flex-shrink: 0;
 }
 
@@ -3052,16 +3116,16 @@ textarea:focus-visible {
 .report-feedback-error {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   margin-top: 8px;
-  padding: 6px 10px;
+  padding: 8px 12px;
   border-radius: var(--radius-md);
   background: var(--danger-light);
   border: 1px solid color-mix(in oklch, var(--danger) 18%, transparent);
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-weight: 500;
-  letter-spacing: 0.04em;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   color: var(--danger);
 }
 
@@ -3070,7 +3134,7 @@ textarea:focus-visible {
   background: transparent;
   border: none;
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -3104,35 +3168,29 @@ textarea:focus-visible {
 
 .report-feedback-thanks {
   font-family: var(--font-mono);
-  font-size: 10.5px;
-  font-weight: 500;
+  font-size: 10px;
+  font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-muted);
 }
 
-/* Tablet — keep the row compact but bump touch targets above 32 */
+/* Tablet — bump touch targets to 40 (on grid, between desktop 32 and phone 44) */
 @media (max-width: 680px) {
-  .report-feedback-btn { width: 36px; height: 36px; }
-  .report-feedback-skip { width: 36px; height: 36px; }
-  .report-feedback-send { height: 40px; }
+  .report-feedback-btn { width: 40px; height: 40px; }
+  .report-feedback-skip { width: 40px; height: 40px; }
   .report-feedback-textarea { min-height: 40px; }
 }
 
-/* Phone — full WCAG AAA touch (44×44), stack compose, full-width send */
+/* Phone — WCAG AAA touch (44×44 — documented override of the 4px grid) */
 @media (max-width: 480px) {
-  .report-feedback { padding: 16px 0 10px; }
-  .report-feedback-row { gap: 10px; }
-  .report-feedback-label { font-size: 10px; }
+  .report-feedback { padding: 16px 0 12px; }
   .report-feedback-btn { width: 44px; height: 44px; }
   .report-feedback-skip { width: 44px; height: 44px; }
-  .report-feedback-buttons { gap: 8px; }
-  .report-feedback-compose { flex-direction: column; align-items: stretch; gap: 10px; }
+  .report-feedback-compose { flex-direction: column; align-items: stretch; gap: 12px; }
   /* 16px on the textarea prevents iOS Safari zoom-on-focus */
   .report-feedback-textarea { min-height: 44px; max-height: 200px; font-size: 16px; }
-  .report-feedback-send { height: 44px; width: 100%; font-size: 14px; }
-  .report-feedback-error { font-size: 11px; }
-  .report-feedback-retry { font-size: 11px; }
+  .report-feedback-send { height: 44px; width: 100%; }
 }
 
 @media (prefers-reduced-motion: reduce) {
