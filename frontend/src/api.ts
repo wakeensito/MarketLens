@@ -141,6 +141,45 @@ export function exportReport(report_id: string): Promise<{ report_id: string; fo
   });
 }
 
+/**
+ * Submit thumbs-up / thumbs-down feedback on a report, optionally with a
+ * free-text comment. Backend accepts `{ rating }` or `{ rating, comment }`
+ * and upserts on the report. Uses fetch directly (not `request`) because
+ * the endpoint may return 204 No Content, which `request`'s json() parse
+ * would reject.
+ */
+export async function submitFeedback(
+  report_id: string,
+  rating: 'up' | 'down',
+  comment?: string | null,
+): Promise<void> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const payload: { rating: 'up' | 'down'; comment?: string } =
+      comment && comment.trim().length > 0
+        ? { rating, comment: comment.trim() }
+        : { rating };
+    const res = await fetch(`${BASE}/api/reports/${encodeURIComponent(report_id)}/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    if (!res.ok) {
+      let body: unknown = null;
+      try { body = await res.json(); } catch { /* response body wasn't JSON */ }
+      const message = (body && typeof body === 'object' && 'error' in body && typeof (body as { error: unknown }).error === 'string')
+        ? (body as { error: string }).error
+        : `API ${res.status}`;
+      throw new ApiError(res.status, message, body);
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export type BillingPlan = 'pro' | 'pro_annual' | 'max' | 'max_annual';
 
 export interface MeResponse {
