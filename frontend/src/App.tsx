@@ -17,6 +17,7 @@ import { useAuthContext } from './hooks/useAuth';
 import { useBilling } from './hooks/useBilling';
 import { EXAMPLE_QUERIES } from './mockData';
 import { landingEntryAnimate, landingEntryInitial } from './motion';
+import { submitFeedback } from './api';
 
 const SPRING = { type: 'spring' as const, stiffness: 280, damping: 36 };
 
@@ -586,6 +587,9 @@ export default function App() {
                             return;
                           }
                           void billing.startCheckout('pro');
+                        }}
+                        onFeedback={async (rating, comment) => {
+                          await submitFeedback(reportId, rating, comment);
                         }}
                       />
                     )}

@@ -193,7 +193,7 @@ Notes on what is intentionally **not** plan-gated:
 - [x] Frontend: "Upgrade" / pricing CTAs → `useBilling.startCheckout(plan)` → Stripe Checkout redirect; activation overlay (`ActivatingPlan`) polls `/api/me` on return and resolves on plan change
 - [x] Pricing UI: Free / Pro / Max table with monthly ↔ annual cadence toggle (ARIA radio-group, arrow-key navigation)
 - [ ] Open: replace the user-by-`stripe_customer_id` table scan with a GSI before user count grows (current loop paginates correctly but is O(n))
-- [ ] Open: production Stripe keys + webhook secret populated in SSM SecureString (`/marketlens/${Stage}/stripe-secret-key`, `/marketlens/${Stage}/stripe-webhook-secret`)
+- [x] Open: production Stripe keys + webhook secret populated in SSM SecureString (`/marketlens/${Stage}/stripe-secret-key`, `/marketlens/${Stage}/stripe-webhook-secret`)
 - [ ] Open: end-to-end test on a live Stripe test account (checkout → webhook → activation overlay resolves → `/api/me` reflects new plan)
 
 ### Muse — Chat Agent (design locked, build deferred until post-Max launch)

@@ -184,9 +184,9 @@ Add Crunchbase Basic API ($500/month) as a premium data source for an Investor-g
 - [ ] On-call: PagerDuty or simple CloudWatch alarm → SMS
 
 ### Token Tracking (original Phase 0 Day 4)
-- [ ] AI Lambda: sum input/output tokens per LLM call across all stages
-- [ ] Write `total_tokens_input`, `total_tokens_output`, `cost_usd_cents` to report record in DynamoDB
-- [ ] Log token breakdown per stage in CloudWatch
+- [x] AI Lambda: sum input/output tokens per LLM call across all stages
+- [x] Write `total_tokens_input`, `total_tokens_output`, `cost_usd_cents` to report record in DynamoDB
+- [x] Log token breakdown per stage in CloudWatch
 
 ### SSE Chat (Phase 4 — post-billing)
 - [ ] Chat Lambda with Lambda Function URL (streaming enabled)

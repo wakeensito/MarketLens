@@ -346,6 +346,47 @@ def delete_report(report_id: str):
     return {"message": "Report deleted"}, 200
 
 
+@app.post("/reports/<report_id>/feedback")
+@tracer.capture_method
+def submit_feedback(report_id: str):
+    """Submit thumbs up/down feedback on a report."""
+    if not _REPORT_ID_RE.match(report_id):
+        return {"error": "Invalid report_id"}, 400
+
+    auth = _get_auth_context()
+    if not auth["is_authenticated"]:
+        return {"error": "Authentication required"}, 401
+
+    body = app.current_event.json_body or {}
+    rating = body.get("rating")
+    if rating not in ("up", "down"):
+        return {"error": "rating must be 'up' or 'down'"}, 400
+
+    comment = (body.get("comment") or "")[:500]
+    org_id = auth["org_id"]
+    now = datetime.now(timezone.utc).isoformat()
+
+    try:
+        table.update_item(
+            Key={"pk": f"ORG#{org_id}#REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
+            UpdateExpression="SET feedback_rating = :r, feedback_comment = :c, feedback_at = :t, feedback_by = :u",
+            ConditionExpression="attribute_exists(pk)",
+            ExpressionAttributeValues={
+                ":r": rating,
+                ":c": comment,
+                ":t": now,
+                ":u": auth["user_id"],
+            },
+        )
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            return {"error": "Report not found"}, 404
+        raise
+
+    logger.info("Feedback submitted", extra={"report_id": report_id, "rating": rating})
+    return {"status": "received"}
+
+
 @app.get("/health")
 def health():
     """Health check endpoint."""

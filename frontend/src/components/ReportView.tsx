@@ -4,6 +4,7 @@ import { TrendingUp, Download, Loader2, ArrowUpRight, ChevronDown } from 'lucide
 import type { MarketReport, Competitor, MarketGap, RoadmapPhase } from '../types';
 import { exportReport } from '../api';
 import { useAuthContext } from '../hooks/useAuth';
+import ReportFeedback, { type FeedbackRating } from './ReportFeedback';
 
 interface Props {
   report:           MarketReport;
@@ -12,6 +13,9 @@ interface Props {
   onRequestUpgrade?: () => void;
   /** Direct Pro Monthly checkout — skips comparison for users who already decided. */
   onUpgradeToPro?:  () => void;
+  /** Fires on thumb click (comment=null) and again on optional comment send (comment=string).
+   *  Wire your backend here. */
+  onFeedback?:      (rating: FeedbackRating, comment: string | null) => void | Promise<void>;
 }
 
 type ExportFormat = 'md' | 'csv' | 'pdf';
@@ -335,7 +339,7 @@ function RoadmapRow({ phase, index }: { phase: RoadmapPhase; index: number }) {
   );
 }
 
-export default function ReportView({ report, reportId, onRequestUpgrade, onUpgradeToPro }: Props) {
+export default function ReportView({ report, reportId, onRequestUpgrade, onUpgradeToPro, onFeedback }: Props) {
   const auth = useAuthContext();
   const planRaw = (auth.user?.plan ?? '').trim().toLowerCase();
   const isPaid  = auth.isAuthenticated && planRaw !== '' && planRaw !== 'free';
@@ -572,6 +576,7 @@ export default function ReportView({ report, reportId, onRequestUpgrade, onUpgra
       </Reveal>
 
       <Reveal>
+        <ReportFeedback reportId={reportId} onFeedback={onFeedback} />
         <div className="report-footer">
           <span className="report-footer-text">
             {briefId} · {dateStr}
