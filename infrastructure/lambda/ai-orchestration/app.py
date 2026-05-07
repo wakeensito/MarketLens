@@ -124,6 +124,7 @@ _token_tracker: TokenTracker | None = None
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(os.environ["REPORTS_TABLE"])
 bedrock = boto3.client("bedrock-runtime")
+s3 = boto3.client("s3")
 
 # Per-stage model IDs
 MODEL_ID_PARSE = os.environ["BEDROCK_MODEL_ID_PARSE"]
@@ -1359,6 +1360,37 @@ def handler(event: dict, context: DurableContext) -> dict:
                 ":usage": _floats_to_decimal(token_summary["stages"]),
             },
         )
+
+        # ── Write report to S3 for analytics pipeline (DataBrew → Parquet → Athena) ──
+        s3_bucket = os.environ.get("REPORTS_RAW_BUCKET")
+        if s3_bucket:
+            try:
+                # Build complete report object (matches DynamoDB structure)
+                report_obj = {
+                    "report_id": report_id,
+                    "org_id": org_id,
+                    "idea_text": idea_text,
+                    "status": "complete",
+                    "created_at": event.get("created_at", now),
+                    "completed_at": now,
+                    "total_tokens_input": token_summary["total_input_tokens"],
+                    "total_tokens_output": token_summary["total_output_tokens"],
+                    "total_cost_usd": token_summary["total_cost_usd"],
+                    "token_usage": token_summary["stages"],
+                    "result": result,
+                }
+                
+                # Write to S3: reports/raw/{report_id}.json
+                s3.put_object(
+                    Bucket=s3_bucket,
+                    Key=f"reports/raw/{report_id}.json",
+                    Body=json.dumps(report_obj, default=str),
+                    ContentType="application/json",
+                )
+                logger.info("Report written to S3", extra={"report_id": report_id, "bucket": s3_bucket})
+            except Exception as e:
+                # S3 write is best-effort — don't fail the pipeline if it fails
+                logger.warning("S3 write failed (non-fatal)", extra={"report_id": report_id, "error": str(e)})
 
         # Emit CloudWatch metrics
         metrics.add_metric(name="TokensInput", unit=MetricUnit.Count, value=token_summary["total_input_tokens"])
