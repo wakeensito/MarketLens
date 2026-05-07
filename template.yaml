@@ -694,6 +694,11 @@ Resources:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicDurableExecutionRolePolicy
         - DynamoDBCrudPolicy:
             TableName: !Ref ReportsTable
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+              Resource: !Sub arn:aws:s3:::marketlens-reports-raw-${Stage}/reports/raw/*
         - AWSSecretsManagerGetSecretValuePolicy:
             SecretArn: !Sub arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:marketlens/${Stage}/*
         - Statement:
@@ -715,6 +720,7 @@ Resources:
           BEDROCK_MODEL_ID_ANALYSE: !Ref BedrockModelIdAnalyse
           BEDROCK_MODEL_ID_SUMMARISE: !Ref BedrockModelIdSummarise
           BRAVE_SEARCH_API_KEY_PARAM: !Sub /marketlens/${Stage}/brave-search-api-key
+          REPORTS_RAW_BUCKET: !Sub marketlens-reports-raw-${Stage}
 
   AiOrchestrationLogGroup:
     Type: AWS::Logs::LogGroup
@@ -772,6 +778,11 @@ Resources:
           - Id: ExpireExports
             Status: Enabled
             ExpirationInDays: 7
+
+  # ─── S3: Reports Raw Bucket (for DataBrew analytics pipeline) ───
+  # Bucket created manually: marketlens-reports-raw-${Stage}
+  # Not managed by CloudFormation to avoid conflicts with existing bucket.
+  # Example: marketlens-reports-raw-dev, marketlens-reports-raw-prod
 
   # ─── Lambda: Billing (Stripe) ───
   BillingFunction:
@@ -859,3 +870,7 @@ Outputs:
   CognitoDomain:
     Description: Cognito Hosted UI domain
     Value: auth.plinths.net
+
+  ReportsRawBucketName:
+    Description: S3 bucket for raw JSON reports (DataBrew input)
+    Value: !Sub marketlens-reports-raw-${Stage}
