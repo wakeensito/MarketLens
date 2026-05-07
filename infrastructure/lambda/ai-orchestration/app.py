@@ -1380,10 +1380,10 @@ def handler(event: dict, context: DurableContext) -> dict:
                     "result": result,
                 }
                 
-                # Write to S3: reports/raw/{report_id}.json
+                # Write to S3: reports/raw/{org_id}/{report_id}.json
                 s3.put_object(
                     Bucket=s3_bucket,
-                    Key=f"reports/raw/{report_id}.json",
+                    Key=f"reports/raw/{org_id}/{report_id}.json",
                     Body=json.dumps(report_obj, default=str),
                     ContentType="application/json",
                 )
