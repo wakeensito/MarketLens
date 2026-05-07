@@ -780,8 +780,9 @@ Resources:
             ExpirationInDays: 7
 
   # ─── S3: Reports Raw Bucket (for DataBrew analytics pipeline) ───
-  # Bucket created manually: marketlens-reports-raw-dev
-  # Not managed by CloudFormation to avoid conflicts
+  # Bucket created manually: marketlens-reports-raw-${Stage}
+  # Not managed by CloudFormation to avoid conflicts with existing bucket.
+  # Example: marketlens-reports-raw-dev, marketlens-reports-raw-prod
 
   # ─── Lambda: Billing (Stripe) ───
   BillingFunction:
