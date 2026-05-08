@@ -142,6 +142,8 @@ export default function App() {
       if (pendingCheckoutPlanRef.current) {
         const plan = pendingCheckoutPlanRef.current;
         pendingCheckoutPlanRef.current = null;
+        pendingQueryRef.current = null;
+        try { sessionStorage.removeItem(PENDING_QUERY_KEY); } catch { /* private mode */ }
         setShowPricing(false);
         void billing.startCheckout(plan);
         return;
