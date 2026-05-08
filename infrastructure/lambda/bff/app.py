@@ -127,9 +127,9 @@ def _clear_cookie(name: str, samesite: str = "Strict") -> Cookie:
     )
 
 
-def _parse_cookies(cookie_header: str) -> dict:
+def _parse_cookies(cookie_header: str) -> dict[str, str]:
     """Parse Cookie header into dict."""
-    cookies = {}
+    cookies: dict[str, str] = {}
     if not cookie_header:
         return cookies
     for pair in cookie_header.split(";"):

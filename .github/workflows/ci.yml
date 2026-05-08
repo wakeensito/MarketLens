@@ -62,8 +62,15 @@ jobs:
       - name: Ruff format check
         run: ruff format --check infrastructure/lambda/ scripts/
 
+      # Each Lambda is its own folder with app.py — checking infrastructure/lambda/ as one tree
+      # makes mypy treat every app.py as duplicate module "app".
       - name: Type check with mypy
-        run: mypy infrastructure/lambda/ scripts/ --ignore-missing-imports --no-strict-optional
+        run: |
+          set -euo pipefail
+          for d in infrastructure/lambda/*/; do
+            mypy "$d" --ignore-missing-imports --no-strict-optional
+          done
+          mypy scripts/ --ignore-missing-imports --no-strict-optional
 
   # ─── SAM Template ───
   sam-validate:
@@ -74,13 +81,14 @@ jobs:
 
       - uses: aws-actions/setup-sam@v2
 
-      # SAM CLI expects credentials + region even for validate --lint (no real AWS calls needed).
-      - name: Configure AWS credentials (lint-only placeholders)
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: AKIAIOSFODNN7EXAMPLE
-          aws-secret-access-key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
-          aws-region: us-east-1
+      # SAM validate --lint needs AWS_* env vars; dummy keys are enough. Do not use
+      # aws-actions/configure-aws-credentials here — it calls STS and rejects placeholders.
+      - name: Set AWS env for SAM validate (lint-only placeholders)
+        run: |
+          echo "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE" >> "$GITHUB_ENV"
+          echo "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" >> "$GITHUB_ENV"
+          echo "AWS_DEFAULT_REGION=us-east-1" >> "$GITHUB_ENV"
+          echo "AWS_REGION=us-east-1" >> "$GITHUB_ENV"
 
       - name: Validate SAM template
         run: sam validate --lint
