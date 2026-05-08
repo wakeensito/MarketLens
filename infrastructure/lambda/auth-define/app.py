@@ -6,6 +6,7 @@ Flow:
   2. User answers correctly → authentication complete
   3. User fails 3 times → authentication failed
 """
+
 from aws_lambda_powertools import Logger
 
 logger = Logger()

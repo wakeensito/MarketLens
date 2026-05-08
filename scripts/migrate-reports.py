@@ -12,6 +12,7 @@ Usage:
   # Assign to the first user found in the table
   python scripts/migrate-reports.py --table marketlens-reports-prod --first-user --execute
 """
+
 import argparse
 import sys
 
@@ -70,7 +71,9 @@ def migrate_report(table, item: dict, org_id: str, execute: bool) -> None:
     new_pk = f"ORG#{org_id}#REPORT#{report_id}"
     new_sk = f"REPORT#{report_id}"
     new_gsi1pk = f"ORG#{org_id}#REPORTS"
-    new_gsi1sk = item.get("gsi1sk", item.get("created_at", datetime.now(timezone.utc).isoformat()))
+    new_gsi1sk = item.get(
+        "gsi1sk", item.get("created_at", datetime.now(timezone.utc).isoformat())
+    )
 
     print(f"  {old_pk} → {new_pk}")
 
@@ -97,7 +100,9 @@ def migrate_report(table, item: dict, org_id: str, execute: bool) -> None:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Migrate old reports to org-scoped keys")
+    parser = argparse.ArgumentParser(
+        description="Migrate old reports to org-scoped keys"
+    )
     parser.add_argument("--table", required=True, help="DynamoDB table name")
     org_group = parser.add_mutually_exclusive_group()
     org_group.add_argument("--org-id", help="Target org_id to assign reports to")
@@ -106,7 +111,11 @@ def main():
         action="store_true",
         help="Assign to the first user's org found in the table",
     )
-    parser.add_argument("--execute", action="store_true", help="Actually perform the migration (default is dry run)")
+    parser.add_argument(
+        "--execute",
+        action="store_true",
+        help="Actually perform the migration (default is dry run)",
+    )
     parser.add_argument("--region", default="us-east-1", help="AWS region")
     args = parser.parse_args()
 
@@ -118,7 +127,9 @@ def main():
     if args.first_user:
         user = find_first_user(table)
         if not user:
-            print("ERROR: No USER# records found in table. Sign in first to create your account.")
+            print(
+                "ERROR: No USER# records found in table. Sign in first to create your account."
+            )
             sys.exit(1)
         org_id = user.get("org_id", "")
         uid = user.get("user_id") or user.get("pk", "unknown")

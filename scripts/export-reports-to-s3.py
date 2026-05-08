@@ -17,6 +17,7 @@ Usage:
 Output S3 key pattern:
   reports/raw/{org_id}/{report_id}.json
 """
+
 import argparse
 import json
 import sys
@@ -28,8 +29,10 @@ from boto3.dynamodb.conditions import Attr
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
+
 class DecimalEncoder(json.JSONEncoder):
     """DynamoDB returns Decimal for numbers — convert back to float/int for JSON."""
+
     def default(self, obj):
         if isinstance(obj, Decimal):
             return int(obj) if obj % 1 == 0 else float(obj)
@@ -96,13 +99,28 @@ def upload_report(s3_client, bucket: str, item: dict, dry_run: bool) -> str:
 
 # ── Main ─────────────────────────────────────────────────────────────────────
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Export completed reports from DynamoDB to S3")
-    parser.add_argument("--table", required=True, help="DynamoDB table name (e.g. marketlens-reports-dev)")
-    parser.add_argument("--bucket", required=True, help="S3 bucket name for raw JSON output")
-    parser.add_argument("--org-id", default=None, help="Filter to a specific org_id (optional)")
-    parser.add_argument("--region", default="us-east-1", help="AWS region (default: us-east-1)")
-    parser.add_argument("--execute", action="store_true", help="Actually upload (default is dry run)")
+    parser = argparse.ArgumentParser(
+        description="Export completed reports from DynamoDB to S3"
+    )
+    parser.add_argument(
+        "--table",
+        required=True,
+        help="DynamoDB table name (e.g. marketlens-reports-dev)",
+    )
+    parser.add_argument(
+        "--bucket", required=True, help="S3 bucket name for raw JSON output"
+    )
+    parser.add_argument(
+        "--org-id", default=None, help="Filter to a specific org_id (optional)"
+    )
+    parser.add_argument(
+        "--region", default="us-east-1", help="AWS region (default: us-east-1)"
+    )
+    parser.add_argument(
+        "--execute", action="store_true", help="Actually upload (default is dry run)"
+    )
     args = parser.parse_args()
 
     dry_run = not args.execute

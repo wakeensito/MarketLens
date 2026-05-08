@@ -6,6 +6,7 @@ Endpoints:
   POST /api/billing/portal         → Create Stripe Customer Portal session (requires auth)
   POST /api/billing/webhook        → Stripe webhook receiver (no auth, signature-verified)
 """
+
 import os
 import time
 import boto3
@@ -66,10 +67,7 @@ def _get_webhook_secret() -> str:
 def _get_auth_context() -> dict:
     """Extract auth context injected by the Lambda Authorizer."""
     raw_event = app.current_event.raw_event
-    authorizer = (
-        raw_event.get("requestContext", {})
-        .get("authorizer", {})
-    )
+    authorizer = raw_event.get("requestContext", {}).get("authorizer", {})
     return {
         "user_id": authorizer.get("user_id", "anonymous"),
         "org_id": authorizer.get("org_id", "anonymous"),
@@ -116,26 +114,35 @@ def _get_or_create_stripe_customer(auth: dict) -> str:
             ConditionExpression="attribute_not_exists(stripe_customer_id)",
             ExpressionAttributeValues={":cid": customer.id},
         )
-        logger.info("Stripe customer created", extra={
-            "user_id": auth["user_id"],
-            "stripe_customer_id": customer.id,
-        })
+        logger.info(
+            "Stripe customer created",
+            extra={
+                "user_id": auth["user_id"],
+                "stripe_customer_id": customer.id,
+            },
+        )
         return customer.id
     except ClientError as e:
         if e.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
             raise
         # Lost the race — another caller already wrote a customer ID.
-        logger.info("Stripe customer race lost; cleaning up orphan", extra={
-            "user_id": auth["user_id"],
-            "orphan_customer_id": customer.id,
-        })
+        logger.info(
+            "Stripe customer race lost; cleaning up orphan",
+            extra={
+                "user_id": auth["user_id"],
+                "orphan_customer_id": customer.id,
+            },
+        )
         try:
             stripe.Customer.delete(customer.id)
         except stripe.error.StripeError as del_err:
-            logger.warning("Could not delete orphan Stripe customer", extra={
-                "orphan_customer_id": customer.id,
-                "error": str(del_err),
-            })
+            logger.warning(
+                "Could not delete orphan Stripe customer",
+                extra={
+                    "orphan_customer_id": customer.id,
+                    "error": str(del_err),
+                },
+            )
         winner = table.get_item(
             Key={"pk": user_pk, "sk": user_pk},
             ConsistentRead=True,
@@ -148,6 +155,7 @@ def _get_or_create_stripe_customer(auth: dict) -> str:
 
 
 # ─── Endpoints ───
+
 
 @app.post("/billing/checkout")
 @tracer.capture_method
@@ -170,7 +178,9 @@ def create_checkout_session():
     }
     price_id = price_map.get(plan)
     if not price_id:
-        return {"error": f"Invalid plan: {plan}. Must be 'pro', 'max', 'pro_annual', or 'max_annual'."}, 400
+        return {
+            "error": f"Invalid plan: {plan}. Must be 'pro', 'max', 'pro_annual', or 'max_annual'."
+        }, 400
 
     customer_id = _get_or_create_stripe_customer(auth)
 
@@ -190,20 +200,26 @@ def create_checkout_session():
             idempotency_key=idempotency_key,
         )
     except stripe.error.StripeError as e:
-        logger.error("Stripe checkout creation failed", extra={
-            "user_id": auth["user_id"],
-            "org_id": auth["org_id"],
-            "plan": plan,
-            "idempotency_key": idempotency_key,
-            "error": str(e),
-        })
+        logger.error(
+            "Stripe checkout creation failed",
+            extra={
+                "user_id": auth["user_id"],
+                "org_id": auth["org_id"],
+                "plan": plan,
+                "idempotency_key": idempotency_key,
+                "error": str(e),
+            },
+        )
         return {"error": "Could not start checkout. Please try again."}, 502
 
-    logger.info("Checkout session created", extra={
-        "user_id": auth["user_id"],
-        "plan": plan,
-        "session_id": session.id,
-    })
+    logger.info(
+        "Checkout session created",
+        extra={
+            "user_id": auth["user_id"],
+            "plan": plan,
+            "session_id": session.id,
+        },
+    )
 
     return {"checkout_url": session.url}
 
@@ -227,12 +243,15 @@ def create_portal_session():
             idempotency_key=idempotency_key,
         )
     except stripe.error.StripeError as e:
-        logger.error("Stripe portal creation failed", extra={
-            "user_id": auth["user_id"],
-            "org_id": auth["org_id"],
-            "idempotency_key": idempotency_key,
-            "error": str(e),
-        })
+        logger.error(
+            "Stripe portal creation failed",
+            extra={
+                "user_id": auth["user_id"],
+                "org_id": auth["org_id"],
+                "idempotency_key": idempotency_key,
+                "error": str(e),
+            },
+        )
         return {"error": "Could not open the billing portal. Please try again."}, 502
 
     return {"portal_url": portal_session.url}
@@ -247,16 +266,18 @@ def stripe_webhook():
     webhook_secret = _get_webhook_secret()
 
     try:
-        event = stripe.Webhook.construct_event(
-            payload, sig_header, webhook_secret
-        )
+        event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
     except stripe.error.SignatureVerificationError:
         logger.warning("Webhook signature verification failed")
-        metrics.add_metric(name="WebhookSignatureFailure", unit=MetricUnit.Count, value=1)
+        metrics.add_metric(
+            name="WebhookSignatureFailure", unit=MetricUnit.Count, value=1
+        )
         return {"error": "Invalid signature"}, 400
     except (ValueError, KeyError) as e:
         logger.warning("Webhook payload malformed", extra={"error": str(e)})
-        metrics.add_metric(name="WebhookMalformedPayload", unit=MetricUnit.Count, value=1)
+        metrics.add_metric(
+            name="WebhookMalformedPayload", unit=MetricUnit.Count, value=1
+        )
         return {"error": "Bad request"}, 400
     except stripe.error.StripeError as e:
         logger.warning("Webhook Stripe error", extra={"error": str(e)})
@@ -264,13 +285,17 @@ def stripe_webhook():
         return {"error": "Bad request"}, 400
     except Exception:
         logger.exception("Webhook unexpected error")
-        metrics.add_metric(name="WebhookUnexpectedError", unit=MetricUnit.Count, value=1)
+        metrics.add_metric(
+            name="WebhookUnexpectedError", unit=MetricUnit.Count, value=1
+        )
         return {"error": "Bad request"}, 400
 
     event_type = event["type"]
     data_object = event["data"]["object"]
 
-    logger.info("Webhook received", extra={"event_type": event_type, "event_id": event["id"]})
+    logger.info(
+        "Webhook received", extra={"event_type": event_type, "event_id": event["id"]}
+    )
 
     if event_type == "checkout.session.completed":
         _handle_checkout_completed(data_object)
@@ -286,6 +311,7 @@ def stripe_webhook():
 
 # ─── Webhook Handlers ───
 
+
 def _handle_checkout_completed(session: dict):
     """User completed checkout — activate their plan."""
     customer_id = session.get("customer")
@@ -296,7 +322,9 @@ def _handle_checkout_completed(session: dict):
 
     if not user_id:
         # Try to find user by stripe_customer_id
-        logger.warning("No user_id in checkout metadata", extra={"customer_id": customer_id})
+        logger.warning(
+            "No user_id in checkout metadata", extra={"customer_id": customer_id}
+        )
         return
 
     # Determine plan from subscription
@@ -329,10 +357,15 @@ def _handle_checkout_completed(session: dict):
             ExpressionAttributeValues={":plan": plan, ":now": _now_iso()},
         )
 
-    logger.info("Plan activated", extra={
-        "user_id": user_id, "org_id": org_id, "plan": plan,
-        "subscription_id": subscription_id,
-    })
+    logger.info(
+        "Plan activated",
+        extra={
+            "user_id": user_id,
+            "org_id": org_id,
+            "plan": plan,
+            "subscription_id": subscription_id,
+        },
+    )
     metrics.add_metric(name="PlanActivated", unit=MetricUnit.Count, value=1)
 
 
@@ -360,9 +393,14 @@ def _handle_subscription_updated(subscription: dict):
         },
     )
 
-    logger.info("Subscription updated", extra={
-        "user_id": user_id, "plan": plan, "subscription_id": subscription_id,
-    })
+    logger.info(
+        "Subscription updated",
+        extra={
+            "user_id": user_id,
+            "plan": plan,
+            "subscription_id": subscription_id,
+        },
+    )
 
 
 def _handle_subscription_deleted(subscription: dict):
@@ -371,7 +409,10 @@ def _handle_subscription_deleted(subscription: dict):
 
     user_id = _find_user_by_customer_id(customer_id)
     if not user_id:
-        logger.warning("No user found for cancelled subscription", extra={"customer_id": customer_id})
+        logger.warning(
+            "No user found for cancelled subscription",
+            extra={"customer_id": customer_id},
+        )
         return
 
     user_pk = f"USER#{user_id}"
@@ -393,15 +434,19 @@ def _handle_subscription_deleted(subscription: dict):
 def _handle_payment_failed(invoice: dict):
     """Payment failed — log it. Could add email notification later."""
     customer_id = invoice.get("customer")
-    logger.warning("Payment failed", extra={
-        "customer_id": customer_id,
-        "invoice_id": invoice.get("id"),
-        "amount_due": invoice.get("amount_due"),
-    })
+    logger.warning(
+        "Payment failed",
+        extra={
+            "customer_id": customer_id,
+            "invoice_id": invoice.get("id"),
+            "amount_due": invoice.get("amount_due"),
+        },
+    )
     metrics.add_metric(name="PaymentFailed", unit=MetricUnit.Count, value=1)
 
 
 # ─── Helpers ───
+
 
 def _plan_from_subscription(subscription_id: str) -> str:
     """Fetch subscription from Stripe and determine plan."""
@@ -454,6 +499,7 @@ def _find_user_by_customer_id(customer_id: str) -> str | None:
 
 def _now_iso() -> str:
     from datetime import datetime, timezone
+
     return datetime.now(timezone.utc).isoformat()
 
 
@@ -468,6 +514,7 @@ def _idempotency_key(scope: str, user_id: str, variant: str) -> str:
 
 
 # ─── Lambda Handler ───
+
 
 @logger.inject_lambda_context(correlation_id_path=correlation_paths.API_GATEWAY_REST)
 @tracer.capture_lambda_handler

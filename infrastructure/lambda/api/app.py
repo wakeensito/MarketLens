@@ -8,6 +8,7 @@ Mixed mode:
   - Anonymous users: can create 1 report (stored under ORG#anonymous)
   - Authenticated users: 3 reports/day (free tier)
 """
+
 import os
 import json
 import re
@@ -39,10 +40,7 @@ AI_FUNCTION_NAME = os.environ.get("AI_FUNCTION_NAME", "")
 def _get_auth_context(event=None) -> dict:
     """Extract auth context injected by the Lambda Authorizer."""
     raw_event = app.current_event.raw_event if event is None else event
-    authorizer = (
-        raw_event.get("requestContext", {})
-        .get("authorizer", {})
-    )
+    authorizer = raw_event.get("requestContext", {}).get("authorizer", {})
     return {
         "user_id": authorizer.get("user_id", "anonymous"),
         "org_id": authorizer.get("org_id", "anonymous"),
@@ -72,15 +70,20 @@ def _atomic_check_and_increment(auth: dict) -> str | None:
     # cache expires. Fall back to the authorizer snapshot only on read failure.
     plan = auth.get("plan", "free")
     try:
-        user_row = table.get_item(
-            Key={"pk": user_pk, "sk": user_pk},
-            ConsistentRead=True,
-            ProjectionExpression="#p",
-            ExpressionAttributeNames={"#p": "plan"},
-        ).get("Item") or {}
+        user_row = (
+            table.get_item(
+                Key={"pk": user_pk, "sk": user_pk},
+                ConsistentRead=True,
+                ProjectionExpression="#p",
+                ExpressionAttributeNames={"#p": "plan"},
+            ).get("Item")
+            or {}
+        )
         plan = user_row.get("plan") or plan
     except ClientError as e:
-        logger.warning("Plan refresh failed; using authorizer snapshot", extra={"error": str(e)})
+        logger.warning(
+            "Plan refresh failed; using authorizer snapshot", extra={"error": str(e)}
+        )
 
     plan_limits = {
         "free": FREE_TIER_DAILY_LIMIT,
@@ -128,7 +131,9 @@ def _atomic_check_and_increment(auth: dict) -> str | None:
             except ClientError as e2:
                 if e2.response["Error"]["Code"] == "ConditionalCheckFailedException":
                     # Same day AND limit reached
-                    return f"Daily limit reached ({daily_limit} reports/day on your plan)."
+                    return (
+                        f"Daily limit reached ({daily_limit} reports/day on your plan)."
+                    )
                 raise
     except Exception as e:
         logger.warning("Rate limit check failed", extra={"error": str(e)})
@@ -263,7 +268,10 @@ def create_report():
     }
     table.put_item(Item=item)
 
-    logger.info("Report created", extra={"report_id": report_id, "org_id": org_id, "user_id": auth["user_id"]})
+    logger.info(
+        "Report created",
+        extra={"report_id": report_id, "org_id": org_id, "user_id": auth["user_id"]},
+    )
 
     # Invoke AI Orchestration Lambda asynchronously (durable execution)
     if AI_FUNCTION_NAME:
@@ -271,22 +279,32 @@ def create_report():
             lambda_client.invoke(
                 FunctionName=AI_FUNCTION_NAME,
                 InvocationType="Event",
-                Payload=json.dumps({
-                    "report_id": report_id,
-                    "idea_text": idea_text,
-                    "org_id": org_id,
-                }),
+                Payload=json.dumps(
+                    {
+                        "report_id": report_id,
+                        "idea_text": idea_text,
+                        "org_id": org_id,
+                    }
+                ),
             )
             table.update_item(
-                Key={"pk": f"ORG#{org_id}#REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
+                Key={
+                    "pk": f"ORG#{org_id}#REPORT#{report_id}",
+                    "sk": f"REPORT#{report_id}",
+                },
                 UpdateExpression="SET invoke_status = :s",
                 ExpressionAttributeValues={":s": "invoked"},
             )
             logger.info("AI pipeline triggered", extra={"report_id": report_id})
         except Exception as e:
-            logger.error("AI invoke failed", extra={"report_id": report_id, "error": str(e)})
+            logger.error(
+                "AI invoke failed", extra={"report_id": report_id, "error": str(e)}
+            )
             table.update_item(
-                Key={"pk": f"ORG#{org_id}#REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
+                Key={
+                    "pk": f"ORG#{org_id}#REPORT#{report_id}",
+                    "sk": f"REPORT#{report_id}",
+                },
                 UpdateExpression="SET invoke_status = :s, invocation_failure = :m",
                 ExpressionAttributeValues={
                     ":s": "failed",

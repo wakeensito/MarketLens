@@ -9,6 +9,7 @@ Supports mixed mode:
   - Anonymous requests get a limited "anonymous" context
     (API Lambda enforces the 1-free-report limit)
 """
+
 import os
 
 import boto3
@@ -71,7 +72,9 @@ def _extract_cookie_header(event: dict) -> str:
     return headers.get("Cookie") or headers.get("cookie") or ""
 
 
-def _generate_policy(principal_id: str, effect: str, resource: str, context: dict) -> dict:
+def _generate_policy(
+    principal_id: str, effect: str, resource: str, context: dict
+) -> dict:
     """Generate IAM policy document for API Gateway authorizer."""
     # Use a wildcard resource so the policy is cached across all API methods
     # Strip the specific method/path and replace with wildcard
@@ -111,11 +114,16 @@ def lambda_handler(event: dict, context) -> dict:
     # No token → deny
     if not access_token:
         logger.info("Anonymous request denied (no token)")
-        return _generate_policy("anonymous", "Deny", method_arn, {
-            "user_id": "anonymous",
-            "org_id": "anonymous",
-            "is_authenticated": "false",
-        })
+        return _generate_policy(
+            "anonymous",
+            "Deny",
+            method_arn,
+            {
+                "user_id": "anonymous",
+                "org_id": "anonymous",
+                "is_authenticated": "false",
+            },
+        )
 
     # Validate JWT
     try:
@@ -132,78 +140,123 @@ def lambda_handler(event: dict, context) -> dict:
         )
 
         if claims.get("token_use") != "access":
-            logger.warning("Token is not an access token", extra={"token_use": claims.get("token_use")})
-            return _generate_policy("anonymous", "Deny", method_arn, {
-                "user_id": "anonymous",
-                "org_id": "anonymous",
-                "is_authenticated": "false",
-            })
+            logger.warning(
+                "Token is not an access token",
+                extra={"token_use": claims.get("token_use")},
+            )
+            return _generate_policy(
+                "anonymous",
+                "Deny",
+                method_arn,
+                {
+                    "user_id": "anonymous",
+                    "org_id": "anonymous",
+                    "is_authenticated": "false",
+                },
+            )
 
         if claims.get("client_id") != CLIENT_ID:
             logger.warning("Access token client_id mismatch")
-            return _generate_policy("anonymous", "Deny", method_arn, {
-                "user_id": "anonymous",
-                "org_id": "anonymous",
-                "is_authenticated": "false",
-            })
+            return _generate_policy(
+                "anonymous",
+                "Deny",
+                method_arn,
+                {
+                    "user_id": "anonymous",
+                    "org_id": "anonymous",
+                    "is_authenticated": "false",
+                },
+            )
     except jwt.ExpiredSignatureError:
         logger.info("Expired access token — denied")
         metrics.add_metric(name="AuthTokenExpired", unit=MetricUnit.Count, value=1)
-        return _generate_policy("anonymous", "Deny", method_arn, {
-            "user_id": "anonymous",
-            "org_id": "anonymous",
-            "is_authenticated": "false",
-            "token_expired": "true",
-        })
+        return _generate_policy(
+            "anonymous",
+            "Deny",
+            method_arn,
+            {
+                "user_id": "anonymous",
+                "org_id": "anonymous",
+                "is_authenticated": "false",
+                "token_expired": "true",
+            },
+        )
     except Exception as e:
         logger.warning("JWT validation failed — denied", extra={"error": str(e)})
         metrics.add_metric(name="AuthTokenInvalid", unit=MetricUnit.Count, value=1)
-        return _generate_policy("anonymous", "Deny", method_arn, {
-            "user_id": "anonymous",
-            "org_id": "anonymous",
-            "is_authenticated": "false",
-        })
+        return _generate_policy(
+            "anonymous",
+            "Deny",
+            method_arn,
+            {
+                "user_id": "anonymous",
+                "org_id": "anonymous",
+                "is_authenticated": "false",
+            },
+        )
 
     sub = claims.get("sub", "")
 
     # Look up user record to get org_id
     try:
         table = _get_table()
-        result = table.get_item(Key={"pk": f"USER#{sub}", "sk": f"USER#{sub}"}, ConsistentRead=True)
+        result = table.get_item(
+            Key={"pk": f"USER#{sub}", "sk": f"USER#{sub}"}, ConsistentRead=True
+        )
         user = result.get("Item")
         if not user:
             logger.warning("Authenticated user not found in DB", extra={"sub": sub})
             metrics.add_metric(name="AuthUserNotFound", unit=MetricUnit.Count, value=1)
-            return _generate_policy(sub, "Deny", method_arn, {
-                "user_id": sub,
-                "org_id": "anonymous",
-                "is_authenticated": "false",
-            })
+            return _generate_policy(
+                sub,
+                "Deny",
+                method_arn,
+                {
+                    "user_id": sub,
+                    "org_id": "anonymous",
+                    "is_authenticated": "false",
+                },
+            )
 
         org_id = user.get("org_id", "")
         if not org_id:
             logger.warning("User record missing org_id — denied", extra={"sub": sub})
-            return _generate_policy(sub, "Deny", method_arn, {
-                "user_id": sub,
-                "org_id": "",
-                "is_authenticated": "false",
-            })
+            return _generate_policy(
+                sub,
+                "Deny",
+                method_arn,
+                {
+                    "user_id": sub,
+                    "org_id": "",
+                    "is_authenticated": "false",
+                },
+            )
 
         logger.info("Authenticated request", extra={"user_id": sub, "org_id": org_id})
 
-        return _generate_policy(sub, "Allow", method_arn, {
-            "user_id": sub,
-            "org_id": org_id,
-            "is_authenticated": "true",
-            "plan": user.get("plan", "free"),
-            "email": user.get("email", ""),
-        })
+        return _generate_policy(
+            sub,
+            "Allow",
+            method_arn,
+            {
+                "user_id": sub,
+                "org_id": org_id,
+                "is_authenticated": "true",
+                "plan": user.get("plan", "free"),
+                "email": user.get("email", ""),
+            },
+        )
 
     except Exception as e:
         logger.error("User lookup failed", extra={"error": str(e), "sub": sub})
         metrics.add_metric(name="AuthDbError", unit=MetricUnit.Count, value=1)
-        return _generate_policy(sub, "Deny", method_arn, {
-            "user_id": sub,
-            "org_id": "anonymous",
-            "is_authenticated": "false",
-        })
+        return _generate_policy(
+            sub,
+            "Deny",
+            method_arn,
+            {
+                "user_id": sub,
+                "org_id": "anonymous",
+                "is_authenticated": "false",
+            },
+        )

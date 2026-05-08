@@ -1,6 +1,7 @@
 """
 MarketLens Export Lambda — Generate PDF/CSV exports from reports.
 """
+
 import os
 import csv
 import io
@@ -63,11 +64,13 @@ def generate_csv(report: dict) -> str:
         writer.writerow(["Competitors"])
         writer.writerow(["Name", "Description", "URL"])
         for comp in competitors:
-            writer.writerow([
-                _safe_cell(comp.get("name", "")),
-                _safe_cell(comp.get("description", "")),
-                _safe_cell(comp.get("url", "")),
-            ])
+            writer.writerow(
+                [
+                    _safe_cell(comp.get("name", "")),
+                    _safe_cell(comp.get("description", "")),
+                    _safe_cell(comp.get("url", "")),
+                ]
+            )
 
     return output.getvalue()
 
@@ -76,9 +79,10 @@ def _get_auth_context() -> dict:
     """Extract auth context injected by the Lambda Authorizer."""
     raw_event = app.current_event.raw_event
     authorizer = (
-        raw_event.get("requestContext", {})
-        .get("authorizer", {})
-    ) if isinstance(raw_event, dict) else {}
+        (raw_event.get("requestContext", {}).get("authorizer", {}))
+        if isinstance(raw_event, dict)
+        else {}
+    )
     return {
         "user_id": authorizer.get("user_id", "anonymous"),
         "org_id": authorizer.get("org_id", "anonymous"),
@@ -103,15 +107,20 @@ def _resolve_current_plan(auth: dict) -> str:
         return snapshot
     try:
         user_pk = f"USER#{auth['user_id']}"
-        item = table.get_item(
-            Key={"pk": user_pk, "sk": user_pk},
-            ConsistentRead=True,
-            ProjectionExpression="#p",
-            ExpressionAttributeNames={"#p": "plan"},
-        ).get("Item") or {}
+        item = (
+            table.get_item(
+                Key={"pk": user_pk, "sk": user_pk},
+                ConsistentRead=True,
+                ProjectionExpression="#p",
+                ExpressionAttributeNames={"#p": "plan"},
+            ).get("Item")
+            or {}
+        )
         return item.get("plan") or snapshot
     except ClientError as e:
-        logger.warning("Plan refresh failed; using authorizer snapshot", extra={"error": str(e)})
+        logger.warning(
+            "Plan refresh failed; using authorizer snapshot", extra={"error": str(e)}
+        )
         return snapshot
 
 
@@ -139,9 +148,15 @@ def generate_markdown(report: dict) -> str:
     lines.append("")
     lines.append("| Metric | Score |")
     lines.append("|---|---|")
-    lines.append(f"| Saturation | {result.get('saturation_score', 'N/A')}/100 ({result.get('saturation_label', '')}) |")
-    lines.append(f"| Difficulty | {result.get('difficulty_score', 'N/A')}/100 ({result.get('difficulty_label', '')}) |")
-    lines.append(f"| Opportunity | {result.get('opportunity_score', 'N/A')}/100 ({result.get('opportunity_label', '')}) |")
+    lines.append(
+        f"| Saturation | {result.get('saturation_score', 'N/A')}/100 ({result.get('saturation_label', '')}) |"
+    )
+    lines.append(
+        f"| Difficulty | {result.get('difficulty_score', 'N/A')}/100 ({result.get('difficulty_label', '')}) |"
+    )
+    lines.append(
+        f"| Opportunity | {result.get('opportunity_score', 'N/A')}/100 ({result.get('opportunity_label', '')}) |"
+    )
     lines.append("")
 
     # Competitors
@@ -213,7 +228,9 @@ def export_report(report_id: str):
     org_id = auth["org_id"]
 
     # Fetch report (org-scoped)
-    result = table.get_item(Key={"pk": f"ORG#{org_id}#REPORT#{report_id}", "sk": f"REPORT#{report_id}"})
+    result = table.get_item(
+        Key={"pk": f"ORG#{org_id}#REPORT#{report_id}", "sk": f"REPORT#{report_id}"}
+    )
     item = result.get("Item")
 
     if not item or item.get("status") == "deleted":
@@ -242,7 +259,9 @@ def export_report(report_id: str):
         content_type = "text/csv"
         extension = "csv"
     else:
-        return {"error": f"Unsupported format: {export_format}. Supported: md, csv"}, 400
+        return {
+            "error": f"Unsupported format: {export_format}. Supported: md, csv"
+        }, 400
 
     # Upload to S3
     now = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
@@ -262,7 +281,9 @@ def export_report(report_id: str):
         ExpiresIn=86400,
     )
 
-    logger.info("Export generated", extra={"report_id": report_id, "format": export_format})
+    logger.info(
+        "Export generated", extra={"report_id": report_id, "format": export_format}
+    )
 
     return {
         "report_id": report_id,
