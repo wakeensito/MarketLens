@@ -2,7 +2,6 @@
 MarketLens Export Lambda — Generate PDF/CSV exports from reports.
 """
 import os
-import json
 import csv
 import io
 import re

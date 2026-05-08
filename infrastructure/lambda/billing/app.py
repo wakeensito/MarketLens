@@ -7,7 +7,6 @@ Endpoints:
   POST /api/billing/webhook        → Stripe webhook receiver (no auth, signature-verified)
 """
 import os
-import json
 import time
 import boto3
 import stripe

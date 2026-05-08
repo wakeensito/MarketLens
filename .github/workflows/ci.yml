@@ -74,6 +74,14 @@ jobs:
 
       - uses: aws-actions/setup-sam@v2
 
+      # SAM CLI expects credentials + region even for validate --lint (no real AWS calls needed).
+      - name: Configure AWS credentials (lint-only placeholders)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: AKIAIOSFODNN7EXAMPLE
+          aws-secret-access-key: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+          aws-region: us-east-1
+
       - name: Validate SAM template
         run: sam validate --lint
 

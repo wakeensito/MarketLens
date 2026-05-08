@@ -10,8 +10,6 @@ Supports mixed mode:
     (API Lambda enforces the 1-free-report limit)
 """
 import os
-import json
-import re
 
 import boto3
 import jwt
