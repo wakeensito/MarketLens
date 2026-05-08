@@ -4,6 +4,7 @@ Cognito CreateAuthChallenge trigger — generates a 6-digit OTP and sends it via
 The OTP is stored in privateChallengeParameters (never sent to the client).
 The client receives only metadata (email destination hint).
 """
+
 import os
 import secrets
 

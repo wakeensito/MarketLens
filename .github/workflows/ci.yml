@@ -42,6 +42,57 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
+  # ─── Python Backend ───
+  python-lint:
+    name: Python Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install linting tools
+        run: pip install ruff mypy
+
+      - name: Ruff lint
+        run: ruff check infrastructure/lambda/ scripts/
+
+      - name: Ruff format check
+        run: ruff format --check infrastructure/lambda/ scripts/
+
+      # Each Lambda is its own folder with app.py — checking infrastructure/lambda/ as one tree
+      # makes mypy treat every app.py as duplicate module "app".
+      - name: Type check with mypy
+        run: |
+          set -euo pipefail
+          for d in infrastructure/lambda/*/; do
+            mypy "$d" --ignore-missing-imports --no-strict-optional
+          done
+          mypy scripts/ --ignore-missing-imports --no-strict-optional
+
+  # ─── SAM Template ───
+  sam-validate:
+    name: SAM Template Validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/setup-sam@v2
+
+      # SAM validate --lint needs AWS_* env vars; dummy keys are enough. Do not use
+      # aws-actions/configure-aws-credentials here — it calls STS and rejects placeholders.
+      - name: Set AWS env for SAM validate (lint-only placeholders)
+        run: |
+          echo "AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE" >> "$GITHUB_ENV"
+          echo "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" >> "$GITHUB_ENV"
+          echo "AWS_DEFAULT_REGION=us-east-1" >> "$GITHUB_ENV"
+          echo "AWS_REGION=us-east-1" >> "$GITHUB_ENV"
+
+      - name: Validate SAM template
+        run: sam validate --lint
+
   # ─── Security Scanning ───
   trivy:
     name: Trivy Security Scan

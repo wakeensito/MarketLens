@@ -13,6 +13,7 @@ Endpoints:
   POST /auth/logout    → revoke tokens, clear cookies
   GET  /auth/me        → return current user info from access token
 """
+
 import os
 import json
 import secrets
@@ -51,6 +52,8 @@ def _get_client_secret() -> str:
             WithDecryption=True,
         )["Parameter"]["Value"]
     return _CLIENT_SECRET
+
+
 USER_POOL_ID = os.environ["COGNITO_USER_POOL_ID"]
 AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
 APP_DOMAIN = os.environ["APP_DOMAIN"].rstrip("/")
@@ -62,9 +65,9 @@ JWKS_URI = f"https://cognito-idp.{AWS_REGION}.amazonaws.com/{USER_POOL_ID}/.well
 EXPECTED_ISSUER = f"https://cognito-idp.{AWS_REGION}.amazonaws.com/{USER_POOL_ID}"
 
 # Cookie config
-ACCESS_TOKEN_MAX_AGE = 3600        # 1 hour
-REFRESH_TOKEN_MAX_AGE = 2592000    # 30 days
-STATE_COOKIE_MAX_AGE = 600         # 10 minutes (OAuth state CSRF)
+ACCESS_TOKEN_MAX_AGE = 3600  # 1 hour
+REFRESH_TOKEN_MAX_AGE = 2592000  # 30 days
+STATE_COOKIE_MAX_AGE = 600  # 10 minutes (OAuth state CSRF)
 
 # DynamoDB for user records
 dynamodb = boto3.resource("dynamodb")
@@ -92,7 +95,13 @@ _SAMESITE_MAP = {
 }
 
 
-def _set_cookie(name: str, value: str, max_age: int, http_only: bool = True, samesite: str = "Strict") -> Cookie:
+def _set_cookie(
+    name: str,
+    value: str,
+    max_age: int,
+    http_only: bool = True,
+    samesite: str = "Strict",
+) -> Cookie:
     """Build a Cookie object that Powertools' Response will serialize as Set-Cookie."""
     return Cookie(
         name=name,
@@ -118,9 +127,9 @@ def _clear_cookie(name: str, samesite: str = "Strict") -> Cookie:
     )
 
 
-def _parse_cookies(cookie_header: str) -> dict:
+def _parse_cookies(cookie_header: str) -> dict[str, str]:
     """Parse Cookie header into dict."""
-    cookies = {}
+    cookies: dict[str, str] = {}
     if not cookie_header:
         return cookies
     for pair in cookie_header.split(";"):
@@ -236,7 +245,9 @@ def _ensure_user_record(sub: str, email: str, name: str) -> dict:
     except dynamodb_client.exceptions.TransactionCanceledException:
         # Race condition: another concurrent login already created the user.
         # ConsistentRead ensures we see the item written by the winning transaction.
-        result = reports_table.get_item(Key={"pk": user_pk, "sk": user_pk}, ConsistentRead=True)
+        result = reports_table.get_item(
+            Key={"pk": user_pk, "sk": user_pk}, ConsistentRead=True
+        )
         existing = result.get("Item")
         if existing:
             return existing
@@ -258,6 +269,7 @@ def _serialize_value(val):
 
 def _iso_now() -> str:
     from datetime import datetime, timezone
+
     return datetime.now(timezone.utc).isoformat()
 
 
@@ -275,7 +287,9 @@ cognito_client = boto3.client("cognito-idp")
 
 def _compute_secret_hash(username: str) -> str:
     msg = username + CLIENT_ID
-    dig = hmac.new(_get_client_secret().encode("utf-8"), msg.encode("utf-8"), hashlib.sha256).digest()
+    dig = hmac.new(
+        _get_client_secret().encode("utf-8"), msg.encode("utf-8"), hashlib.sha256
+    ).digest()
     return base64.b64encode(dig).decode("utf-8")
 
 
@@ -330,7 +344,10 @@ def initiate():
                     {"Name": "email_verified", "Value": "true"},
                 ],
             )
-            logger.info("Auto-created Cognito user", extra={"email_domain": email.split("@")[-1]})
+            logger.info(
+                "Auto-created Cognito user",
+                extra={"email_domain": email.split("@")[-1]},
+            )
         except cognito_client.exceptions.UsernameExistsException:
             pass  # Race condition — another request created them
         except Exception as e:
@@ -362,7 +379,7 @@ def initiate():
     return {
         "session": session,
         "challenge": challenge,
-        "email_hint": email[:3] + "***" + email[email.index("@"):],
+        "email_hint": email[:3] + "***" + email[email.index("@") :],
     }
 
 
@@ -457,19 +474,23 @@ def login():
     """Redirect to Cognito Hosted UI with CSRF state parameter."""
     state = secrets.token_urlsafe(32)
 
-    params = urllib.parse.urlencode({
-        "client_id": CLIENT_ID,
-        "response_type": "code",
-        "scope": "openid email profile",
-        "redirect_uri": _get_redirect_uri(),
-        "state": state,
-    })
+    params = urllib.parse.urlencode(
+        {
+            "client_id": CLIENT_ID,
+            "response_type": "code",
+            "scope": "openid email profile",
+            "redirect_uri": _get_redirect_uri(),
+            "state": state,
+        }
+    )
 
     return Response(
         status_code=302,
         body="",
         headers={"Location": f"{AUTHORIZE_ENDPOINT}?{params}"},
-        cookies=[_set_cookie("ml_oauth_state", state, STATE_COOKIE_MAX_AGE, samesite="Lax")],
+        cookies=[
+            _set_cookie("ml_oauth_state", state, STATE_COOKIE_MAX_AGE, samesite="Lax")
+        ],
     )
 
 
@@ -493,7 +514,11 @@ def callback():
     cookies = _parse_cookies(cookie_header)
     expected_state = cookies.get("ml_oauth_state", "")
 
-    if not state or not expected_state or not secrets.compare_digest(state, expected_state):
+    if (
+        not state
+        or not expected_state
+        or not secrets.compare_digest(state, expected_state)
+    ):
         logger.warning("OAuth state mismatch (CSRF check failed)")
         return _redirect_with_error("Authentication failed. Please try again.")
 
@@ -523,10 +548,13 @@ def callback():
 
     # Validate tokens are present
     if not access_token or not refresh_token:
-        logger.error("Cognito returned incomplete tokens", extra={
-            "has_access": bool(access_token),
-            "has_refresh": bool(refresh_token),
-        })
+        logger.error(
+            "Cognito returned incomplete tokens",
+            extra={
+                "has_access": bool(access_token),
+                "has_refresh": bool(refresh_token),
+            },
+        )
         return _redirect_with_error("Login failed. Please try again.")
 
     # Decode and verify ID token (full signature + issuer validation)

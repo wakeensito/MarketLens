@@ -10,6 +10,7 @@ Models (per stage):
   - Analyse:   DeepSeek V3.2       ($0.62/$1.85 per 1M tokens)
   - Summarise: Claude 3 Haiku      ($0.25/$1.25 per 1M tokens)
 """
+
 import os
 import json
 import boto3
@@ -65,7 +66,9 @@ def _estimate_cost_usd(model_id: str, input_tokens: int, output_tokens: int) -> 
     """Estimate LLM cost in USD for a single call."""
     key = _model_cost_key(model_id)
     input_cost = (input_tokens / 1_000_000) * _MODEL_COST_PER_1M["input"].get(key, 0.25)
-    output_cost = (output_tokens / 1_000_000) * _MODEL_COST_PER_1M["output"].get(key, 1.25)
+    output_cost = (output_tokens / 1_000_000) * _MODEL_COST_PER_1M["output"].get(
+        key, 1.25
+    )
     return input_cost + output_cost
 
 
@@ -144,16 +147,18 @@ WIKIDATA_SPARQL_URL = "https://query.wikidata.org/sparql"
 WIKI_HEADERS = {"User-Agent": "MarketLens/1.0 (market intelligence platform)"}
 
 # Wikidata "instance of" (P31) values that indicate a company / business organization
-_WD_COMPANY_LIKE = frozenset({
-    "Q783794",  # company
-    "Q6881511",  # enterprise
-    "Q891723",  # publicly traded company
-    "Q4830453",  # business
-    "Q43229",  # organization
-    "Q219577",  # holding company
-    "Q167037",  # corporation
-    "Q3187459",  # internet company
-})
+_WD_COMPANY_LIKE = frozenset(
+    {
+        "Q783794",  # company
+        "Q6881511",  # enterprise
+        "Q891723",  # publicly traded company
+        "Q4830453",  # business
+        "Q43229",  # organization
+        "Q219577",  # holding company
+        "Q167037",  # corporation
+        "Q3187459",  # internet company
+    }
+)
 
 
 def _wikidata_entity_is_company_like(entity_id: str) -> bool:
@@ -205,7 +210,9 @@ def _get_brave_api_key() -> str | None:
         _brave_api_key = resp["Parameter"]["Value"]
         return _brave_api_key
     except Exception as e:
-        logger.warning("Failed to retrieve Brave API key from SSM", extra={"error": str(e)})
+        logger.warning(
+            "Failed to retrieve Brave API key from SSM", extra={"error": str(e)}
+        )
         return None
 
 
@@ -233,7 +240,9 @@ def _brave_search(query: str, count: int = 20) -> list[dict]:
             for r in results
         ]
     except Exception as e:
-        logger.warning("Brave Search API call failed", extra={"query": query, "error": str(e)})
+        logger.warning(
+            "Brave Search API call failed", extra={"query": query, "error": str(e)}
+        )
         return []
 
 
@@ -289,7 +298,15 @@ def _wikidata_company_facts(company_name: str) -> dict | None:
         if not results:
             return None
 
-        skip_words = {"album", "song", "film", "village", "river", "person", "character"}
+        skip_words = {
+            "album",
+            "song",
+            "film",
+            "village",
+            "river",
+            "person",
+            "character",
+        }
         entity_id = None
         for cand in results:
             cid = cand.get("id")
@@ -371,7 +388,9 @@ def _wikidata_company_facts(company_name: str) -> dict | None:
             "parent_org": _val("parentLabel"),
         }
     except Exception as e:
-        logger.warning("Wikidata lookup failed", extra={"company": company_name, "error": str(e)})
+        logger.warning(
+            "Wikidata lookup failed", extra={"company": company_name, "error": str(e)}
+        )
         return None
 
 
@@ -428,27 +447,38 @@ def _set_stage(report_id: str, stage: str, org_id: str) -> None:
         )
 
 
-def _build_payload(model_id: str, prompt: str, max_tokens: int, temperature: float) -> str:
+def _build_payload(
+    model_id: str, prompt: str, max_tokens: int, temperature: float
+) -> str:
     """Build the invoke_model payload based on model provider."""
     if "anthropic" in model_id:
-        return json.dumps({
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "messages": [{"role": "user", "content": prompt}],
-        })
+        return json.dumps(
+            {
+                "anthropic_version": "bedrock-2023-05-31",
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "messages": [{"role": "user", "content": prompt}],
+            }
+        )
     if "deepseek" in model_id:
         # DeepSeek uses OpenAI-compatible format
-        return json.dumps({
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "messages": [{"role": "user", "content": prompt}],
-        })
+        return json.dumps(
+            {
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+                "messages": [{"role": "user", "content": prompt}],
+            }
+        )
     # Amazon Nova — Converse-style payload
-    return json.dumps({
-        "inferenceConfig": {"max_new_tokens": max_tokens, "temperature": temperature},
-        "messages": [{"role": "user", "content": [{"text": prompt}]}],
-    })
+    return json.dumps(
+        {
+            "inferenceConfig": {
+                "max_new_tokens": max_tokens,
+                "temperature": temperature,
+            },
+            "messages": [{"role": "user", "content": [{"text": prompt}]}],
+        }
+    )
 
 
 def _extract_text(model_id: str, response_body: dict) -> str:
@@ -478,7 +508,13 @@ def _extract_token_usage(model_id: str, response_body: dict) -> tuple[int, int]:
         return 0, 0
 
 
-def call_llm(prompt: str, model_id: str, max_tokens: int = 1024, temperature: float = 0.2, stage: str = "unknown") -> str:
+def call_llm(
+    prompt: str,
+    model_id: str,
+    max_tokens: int = 1024,
+    temperature: float = 0.2,
+    stage: str = "unknown",
+) -> str:
     """Call a Bedrock model and return the text response. Handles retries with backoff.
 
     Also records token usage to the module-level TokenTracker if active.
@@ -528,7 +564,9 @@ def call_llm(prompt: str, model_id: str, max_tokens: int = 1024, temperature: fl
             if isinstance(e, ClientError):
                 code = e.response.get("Error", {}).get("Code")
 
-            retryable = isinstance(e, ValueError) or (code in transient_codes if code else True)
+            retryable = isinstance(e, ValueError) or (
+                code in transient_codes if code else True
+            )
             if (not retryable) or attempt >= max_attempts:
                 logger.exception(
                     "Bedrock invoke failed",
@@ -546,11 +584,18 @@ def call_llm(prompt: str, model_id: str, max_tokens: int = 1024, temperature: fl
             sleep_s = (backoff_ms + jitter_ms) / 1000.0
             logger.warning(
                 "Bedrock invoke transient failure; retrying",
-                extra={"model_id": model_id, "attempt": attempt, "sleep_s": sleep_s, "error_code": code},
+                extra={
+                    "model_id": model_id,
+                    "attempt": attempt,
+                    "sleep_s": sleep_s,
+                    "error_code": code,
+                },
             )
             time.sleep(sleep_s)
 
-    raise RuntimeError(f"Bedrock invoke failed after {max_attempts} attempts: {last_err}")
+    raise RuntimeError(
+        f"Bedrock invoke failed after {max_attempts} attempts: {last_err}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -584,7 +629,9 @@ Return ONLY valid JSON with these fields:
 
 Business idea: <<<{cleaned_idea}>>>"""
 
-    response = call_llm(prompt, model_id=MODEL_ID_PARSE, max_tokens=512, temperature=0.1, stage="parse")
+    response = call_llm(
+        prompt, model_id=MODEL_ID_PARSE, max_tokens=512, temperature=0.1, stage="parse"
+    )
     try:
         return json.loads(response)
     except json.JSONDecodeError:
@@ -625,7 +672,8 @@ def search(parsed: dict) -> dict:
     )
     # 2. Competitors via general web (broader net)
     competitor_general = _brave_search(
-        f"{industry} {sub_industry} competitors alternatives companies {keyword_str}", count=15
+        f"{industry} {sub_industry} competitors alternatives companies {keyword_str}",
+        count=15,
     )
     # 3. Market size from research firms
     market_size = _brave_search(
@@ -682,7 +730,13 @@ def search(parsed: dict) -> dict:
     if brave_company_names:
         try:
             wiki_enrichment = _enrich_competitors_with_wiki(brave_company_names)
-            logger.info("Wiki enrichment complete", extra={"enriched": len(wiki_enrichment), "attempted": len(brave_company_names)})
+            logger.info(
+                "Wiki enrichment complete",
+                extra={
+                    "enriched": len(wiki_enrichment),
+                    "attempted": len(brave_company_names),
+                },
+            )
         except Exception as e:
             logger.warning("Wiki enrichment failed", extra={"error": str(e)})
 
@@ -699,9 +753,9 @@ def search(parsed: dict) -> dict:
             if data.get("revenue_usd"):
                 rev = data["revenue_usd"]
                 if rev >= 1e9:
-                    parts.append(f"${rev/1e9:.1f}B revenue")
+                    parts.append(f"${rev / 1e9:.1f}B revenue")
                 elif rev >= 1e6:
-                    parts.append(f"${rev/1e6:.0f}M revenue")
+                    parts.append(f"${rev / 1e6:.0f}M revenue")
             if data.get("industry"):
                 parts.append(f"industry: {data['industry']}")
             if data.get("hq_location"):
@@ -779,7 +833,13 @@ RULES:
 - For user pain points, extract real complaints from the community/review results.
 - If a data point isn't in the search results or structured data, set it to null — do not guess."""
 
-    response = call_llm(prompt, model_id=MODEL_ID_PARSE, max_tokens=2048, temperature=0.1, stage="search")
+    response = call_llm(
+        prompt,
+        model_id=MODEL_ID_PARSE,
+        max_tokens=2048,
+        temperature=0.1,
+        stage="search",
+    )
     try:
         result = json.loads(response)
         competitors = result.get("competitors", [])
@@ -788,14 +848,18 @@ RULES:
         return {
             "competitors": competitors,
             "market_size_tam_usd": _safe_number(result.get("market_size_tam_usd")),
-            "market_growth_rate_pct": _safe_number(result.get("market_growth_rate_pct")),
+            "market_growth_rate_pct": _safe_number(
+                result.get("market_growth_rate_pct")
+            ),
             "market_age_years": _safe_number(result.get("market_age_years"), default=5),
             "trends": result.get("trends", []),
             "user_pain_points": result.get("user_pain_points", []),
             "wiki_enrichment": wiki_enrichment,
         }
     except json.JSONDecodeError:
-        logger.warning("Failed to parse structured search results, falling back to LLM-only")
+        logger.warning(
+            "Failed to parse structured search results, falling back to LLM-only"
+        )
         return _search_fallback_llm(parsed)
 
 
@@ -840,7 +904,13 @@ RULES:
 - For market size, use your best estimate. Set to null if truly unknown.
 - For growth rate, estimate based on industry knowledge. Set to null if unknown."""
 
-    response = call_llm(prompt, model_id=MODEL_ID_PARSE, max_tokens=2048, temperature=0.2, stage="search")
+    response = call_llm(
+        prompt,
+        model_id=MODEL_ID_PARSE,
+        max_tokens=2048,
+        temperature=0.2,
+        stage="search",
+    )
     try:
         result = json.loads(response)
         competitors = result.get("competitors", [])
@@ -849,7 +919,9 @@ RULES:
         return {
             "competitors": competitors,
             "market_size_tam_usd": _safe_number(result.get("market_size_tam_usd")),
-            "market_growth_rate_pct": _safe_number(result.get("market_growth_rate_pct")),
+            "market_growth_rate_pct": _safe_number(
+                result.get("market_growth_rate_pct")
+            ),
             "market_age_years": _safe_number(result.get("market_age_years"), default=5),
             "trends": result.get("trends", []),
         }
@@ -919,7 +991,13 @@ RULES:
 - For the 1-10 scores: use the FULL range. A 3 and a 7 should feel meaningfully different. Don't default to 5.
 - estimated_tam_usd and estimated_growth_pct: infer from competitor scale, funding levels, and market context. Set to null ONLY if you truly cannot estimate."""
 
-    response = call_llm(prompt, model_id=MODEL_ID_ANALYSE, max_tokens=2048, temperature=0.3, stage="analyse")
+    response = call_llm(
+        prompt,
+        model_id=MODEL_ID_ANALYSE,
+        max_tokens=2048,
+        temperature=0.3,
+        stage="analyse",
+    )
     try:
         return json.loads(response)
     except json.JSONDecodeError:
@@ -966,7 +1044,13 @@ def _safe_number(val, default=None) -> float | None:
         return float(val)
     if isinstance(val, str):
         # Strip currency symbols, commas, whitespace
-        cleaned = val.strip().replace(",", "").replace("$", "").replace("€", "").replace("£", "")
+        cleaned = (
+            val.strip()
+            .replace(",", "")
+            .replace("$", "")
+            .replace("€", "")
+            .replace("£", "")
+        )
         if not cleaned:
             return default
         # Handle suffixes: B(illion), M(illion), K(thousand), T(rillion)
@@ -1003,7 +1087,9 @@ def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
     num_gaps = len(analysis.get("market_gaps", []))
 
     # Market age: prefer search data, fall back to parse estimate (preserve 0; don't use "or")
-    _market_age_search = _safe_number(search_results.get("market_age_years"), default=None)
+    _market_age_search = _safe_number(
+        search_results.get("market_age_years"), default=None
+    )
     market_age = (
         _market_age_search
         if _market_age_search is not None
@@ -1025,11 +1111,21 @@ def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
     industry = (parsed.get("industry") or "").lower()
 
     # 1-10 gradient signals from analyse (with sane defaults)
-    funding_maturity = max(1, min(10, int(_safe_number(analysis.get("funding_maturity"), default=5))))
-    market_consolidation = max(1, min(10, int(_safe_number(analysis.get("market_consolidation"), default=5))))
-    switching_cost = max(1, min(10, int(_safe_number(analysis.get("switching_cost"), default=5))))
-    cac_pressure = max(1, min(10, int(_safe_number(analysis.get("cac_pressure"), default=5))))
-    innovation_velocity = max(1, min(10, int(_safe_number(analysis.get("innovation_velocity"), default=5))))
+    funding_maturity = max(
+        1, min(10, int(_safe_number(analysis.get("funding_maturity"), default=5)))
+    )
+    market_consolidation = max(
+        1, min(10, int(_safe_number(analysis.get("market_consolidation"), default=5)))
+    )
+    switching_cost = max(
+        1, min(10, int(_safe_number(analysis.get("switching_cost"), default=5)))
+    )
+    cac_pressure = max(
+        1, min(10, int(_safe_number(analysis.get("cac_pressure"), default=5)))
+    )
+    innovation_velocity = max(
+        1, min(10, int(_safe_number(analysis.get("innovation_velocity"), default=5)))
+    )
 
     # Backward compat: if old boolean signals exist, convert them to gradient
     if "has_public_companies" in analysis and "funding_maturity" not in analysis:
@@ -1037,13 +1133,22 @@ def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
         has_series_c = analysis.get("has_series_c_plus", False)
         funding_concentrated = analysis.get("funding_concentration_high", False)
         rising_cac = analysis.get("rising_cac_signals", False)
-        funding_maturity = 10 if (has_public and funding_concentrated) else 8 if has_public else 6 if has_series_c else 3
+        funding_maturity = (
+            10
+            if (has_public and funding_concentrated)
+            else 8
+            if has_public
+            else 6
+            if has_series_c
+            else 3
+        )
         market_consolidation = 8 if funding_concentrated else 4
         cac_pressure = 7 if rising_cac else 3
 
     # ── Saturation Score (0-100) ──
     # Competitor count: logarithmic scaling (diminishing returns after 8)
     import math
+
     if num_direct > 0:
         # 1→5, 4→14, 8→22, 12→27, 16→30 (log curve, max 30)
         competitor_factor = min(30.0, 5.0 * math.log2(num_direct + 1))
@@ -1068,7 +1173,14 @@ def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
     # Innovation velocity adds to saturation (fast-moving = harder to enter)
     innovation_factor = (innovation_velocity - 1) * (10.0 / 9.0)
 
-    saturation_raw = competitor_factor + funding_factor + consolidation_factor + age_factor + cac_factor + innovation_factor
+    saturation_raw = (
+        competitor_factor
+        + funding_factor
+        + consolidation_factor
+        + age_factor
+        + cac_factor
+        + innovation_factor
+    )
     saturation = _clamp(saturation_raw)
 
     # ── Difficulty Score (0-100) ──
@@ -1076,15 +1188,35 @@ def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
     technical_score = complexity_map.get(complexity, 13)
 
     capital_map = {
-        "hardware": 22, "b2b_saas": 16, "marketplace": 18,
-        "b2c_saas": 9, "ecommerce": 7, "service": 4, "other": 10,
+        "hardware": 22,
+        "b2b_saas": 16,
+        "marketplace": 18,
+        "b2c_saas": 9,
+        "ecommerce": 7,
+        "service": 4,
+        "other": 10,
     }
     capital_score = capital_map.get(business_model, 10)
 
-    segment_map = {"enterprise": 18, "mid_market": 11, "smb": 5, "prosumer": 2, "consumer": 0, "mixed": 7}
+    segment_map = {
+        "enterprise": 18,
+        "mid_market": 11,
+        "smb": 5,
+        "prosumer": 2,
+        "consumer": 0,
+        "mixed": 7,
+    }
     sales_cycle_score = segment_map.get(dominant_segment, 5)
 
-    regulated_industries = {"healthcare", "fintech", "finance", "legal", "edtech", "insurance", "banking"}
+    regulated_industries = {
+        "healthcare",
+        "fintech",
+        "finance",
+        "legal",
+        "edtech",
+        "insurance",
+        "banking",
+    }
     semi_regulated = {"proptech", "foodtech", "transport", "logistics", "real estate"}
     if any(r in industry for r in regulated_industries):
         regulatory_score = 18
@@ -1099,7 +1231,14 @@ def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
     # Funding maturity also makes it harder (well-funded incumbents)
     incumbent_strength = (funding_maturity - 1) * (10.0 / 9.0)
 
-    difficulty = _clamp(technical_score + capital_score + sales_cycle_score + regulatory_score + switching_factor + incumbent_strength)
+    difficulty = _clamp(
+        technical_score
+        + capital_score
+        + sales_cycle_score
+        + regulatory_score
+        + switching_factor
+        + incumbent_strength
+    )
 
     # ── Opportunity Score (0-100) ──
     # Market size: log scale
@@ -1112,16 +1251,30 @@ def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
 
     # Growth: continuous
     if growth_pct is not None and growth_pct > 0:
-        growth_score = min(22.0, growth_pct * 0.7 if growth_pct <= 25 else 17.5 + (growth_pct - 25) * 0.15)
+        growth_score = min(
+            22.0,
+            growth_pct * 0.7 if growth_pct <= 25 else 17.5 + (growth_pct - 25) * 0.15,
+        )
     else:
         growth_score = 5.0  # moderate default
 
     # Gap signals
-    weakness_keywords = {"expensive", "complex", "no smb", "limited", "outdated", "slow", "poor",
-                         "lacking", "missing", "frustrating", "clunky", "overpriced", "rigid"}
-    weaknesses_text = " ".join(
-        (c.get("weakness") or "").lower() for c in competitors
-    )
+    weakness_keywords = {
+        "expensive",
+        "complex",
+        "no smb",
+        "limited",
+        "outdated",
+        "slow",
+        "poor",
+        "lacking",
+        "missing",
+        "frustrating",
+        "clunky",
+        "overpriced",
+        "rigid",
+    }
+    weaknesses_text = " ".join((c.get("weakness") or "").lower() for c in competitors)
     pain_points = search_results.get("user_pain_points", [])
     pain_text = " ".join(p.lower() for p in pain_points if isinstance(p, str))
     combined_complaints = weaknesses_text + " " + pain_text
@@ -1140,9 +1293,15 @@ def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
     saturation_penalty = saturation * 0.15
     difficulty_penalty = difficulty * 0.10
 
-    opportunity_raw = (market_size_score + growth_score + gap_score
-                       + fragmentation_bonus + low_switching_bonus
-                       - saturation_penalty - difficulty_penalty)
+    opportunity_raw = (
+        market_size_score
+        + growth_score
+        + gap_score
+        + fragmentation_bonus
+        + low_switching_bonus
+        - saturation_penalty
+        - difficulty_penalty
+    )
     opportunity = _clamp(opportunity_raw)
 
     logger.info(
@@ -1184,8 +1343,12 @@ def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
         else:
             return labels[3]
 
-    saturation_label = _band(saturation, ["Wide Open", "Some Players", "Competitive", "Saturated"])
-    difficulty_label = _band(difficulty, ["Easy Entry", "Manageable", "Challenging", "Very Hard"])
+    saturation_label = _band(
+        saturation, ["Wide Open", "Some Players", "Competitive", "Saturated"]
+    )
+    difficulty_label = _band(
+        difficulty, ["Easy Entry", "Manageable", "Challenging", "Very Hard"]
+    )
     opportunity_label = _band(opportunity, ["Low", "Modest", "Strong", "Excellent"])
 
     return {
@@ -1220,16 +1383,16 @@ VOICE GUIDELINES:
 - Do NOT inflate numbers or make up data.
 
 INPUT:
-Industry: {parsed.get('industry', '')} / {parsed.get('sub_industry', '')}
-Business model: {parsed.get('business_model', '')}
-Target customer: {parsed.get('target_customer', '')}
-Saturation score: {scores['saturation_score']}/100 ({scores['saturation_label']})
-Difficulty score: {scores['difficulty_score']}/100 ({scores.get('difficulty_label', '')})
-Opportunity score: {scores['opportunity_score']}/100 ({scores.get('opportunity_label', '')})
-Market gaps: {json.dumps(analysis.get('market_gaps', []), indent=2)}
-User pain points from reviews: {json.dumps(search_results.get('user_pain_points', []))}
-Competitor count: {len(analysis.get('competitor_analysis', []))}
-Key positioning advice: {analysis.get('positioning', '')}
+Industry: {parsed.get("industry", "")} / {parsed.get("sub_industry", "")}
+Business model: {parsed.get("business_model", "")}
+Target customer: {parsed.get("target_customer", "")}
+Saturation score: {scores["saturation_score"]}/100 ({scores["saturation_label"]})
+Difficulty score: {scores["difficulty_score"]}/100 ({scores.get("difficulty_label", "")})
+Opportunity score: {scores["opportunity_score"]}/100 ({scores.get("opportunity_label", "")})
+Market gaps: {json.dumps(analysis.get("market_gaps", []), indent=2)}
+User pain points from reviews: {json.dumps(search_results.get("user_pain_points", []))}
+Competitor count: {len(analysis.get("competitor_analysis", []))}
+Key positioning advice: {analysis.get("positioning", "")}
 
 Return ONLY valid JSON with:
 {{
@@ -1246,7 +1409,13 @@ Return ONLY valid JSON with:
 
 Include 2-3 gaps, and 3-4 roadmap phases."""
 
-    response = call_llm(prompt, model_id=MODEL_ID_SUMMARISE, max_tokens=1500, temperature=0.6, stage="summarise")
+    response = call_llm(
+        prompt,
+        model_id=MODEL_ID_SUMMARISE,
+        max_tokens=1500,
+        temperature=0.6,
+        stage="summarise",
+    )
     try:
         return json.loads(response)
     except json.JSONDecodeError:
@@ -1262,7 +1431,9 @@ Include 2-3 gaps, and 3-4 roadmap phases."""
 # ---------------------------------------------------------------------------
 # Stage 7: Assemble  (no LLM)
 # ---------------------------------------------------------------------------
-def assemble(parsed: dict, search_results: dict, analysis: dict, scores: dict, summary: dict) -> dict:
+def assemble(
+    parsed: dict, search_results: dict, analysis: dict, scores: dict, summary: dict
+) -> dict:
     """Combine all results into the final report JSON."""
     return {
         "vertical": parsed.get("industry", ""),
@@ -1319,15 +1490,22 @@ def handler(event: dict, context: DurableContext) -> dict:
         _set_stage(report_id, "search", org_id)
 
         # Stage 4: Analyse  (DeepSeek V3.2)
-        analysis = context.step(lambda _: analyse(parsed, search_results), name="analyse")
+        analysis = context.step(
+            lambda _: analyse(parsed, search_results), name="analyse"
+        )
         _set_stage(report_id, "analyse", org_id)
 
         # Stage 5: Score  (deterministic)
-        scores = context.step(lambda _: score(parsed, analysis, search_results), name="score")
+        scores = context.step(
+            lambda _: score(parsed, analysis, search_results), name="score"
+        )
         _set_stage(report_id, "score", org_id)
 
         # Stage 6: Summarise  (Claude 3 Haiku)
-        summary = context.step(lambda _: summarise(analysis, scores, parsed, search_results), name="summarise")
+        summary = context.step(
+            lambda _: summarise(analysis, scores, parsed, search_results),
+            name="summarise",
+        )
         _set_stage(report_id, "summarise", org_id)
 
         # Stage 7: Assemble
@@ -1379,7 +1557,7 @@ def handler(event: dict, context: DurableContext) -> dict:
                     "token_usage": token_summary["stages"],
                     "result": result,
                 }
-                
+
                 # Write to S3: reports/raw/{org_id}/{report_id}.json
                 s3.put_object(
                     Bucket=s3_bucket,
@@ -1387,16 +1565,38 @@ def handler(event: dict, context: DurableContext) -> dict:
                     Body=json.dumps(report_obj, default=str),
                     ContentType="application/json",
                 )
-                logger.info("Report written to S3", extra={"report_id": report_id, "bucket": s3_bucket})
+                logger.info(
+                    "Report written to S3",
+                    extra={"report_id": report_id, "bucket": s3_bucket},
+                )
             except Exception as e:
                 # S3 write is best-effort — don't fail the pipeline if it fails
-                logger.warning("S3 write failed (non-fatal)", extra={"report_id": report_id, "error": str(e)})
+                logger.warning(
+                    "S3 write failed (non-fatal)",
+                    extra={"report_id": report_id, "error": str(e)},
+                )
 
         # Emit CloudWatch metrics
-        metrics.add_metric(name="TokensInput", unit=MetricUnit.Count, value=token_summary["total_input_tokens"])
-        metrics.add_metric(name="TokensOutput", unit=MetricUnit.Count, value=token_summary["total_output_tokens"])
-        metrics.add_metric(name="TokensTotal", unit=MetricUnit.Count, value=token_summary["total_tokens"])
-        metrics.add_metric(name="EstimatedCostUsd", unit=MetricUnit.Count, value=token_summary["total_cost_usd"])
+        metrics.add_metric(
+            name="TokensInput",
+            unit=MetricUnit.Count,
+            value=token_summary["total_input_tokens"],
+        )
+        metrics.add_metric(
+            name="TokensOutput",
+            unit=MetricUnit.Count,
+            value=token_summary["total_output_tokens"],
+        )
+        metrics.add_metric(
+            name="TokensTotal",
+            unit=MetricUnit.Count,
+            value=token_summary["total_tokens"],
+        )
+        metrics.add_metric(
+            name="EstimatedCostUsd",
+            unit=MetricUnit.Count,
+            value=token_summary["total_cost_usd"],
+        )
         metrics.add_metric(name="ReportCompleted", unit=MetricUnit.Count, value=1)
         metrics.add_dimension(name="org_id", value=org_id)
         metrics.flush_metrics()
@@ -1415,13 +1615,28 @@ def handler(event: dict, context: DurableContext) -> dict:
         token_summary = _token_tracker.summary() if _token_tracker else {}
         metrics.add_metric(name="ReportFailed", unit=MetricUnit.Count, value=1)
         if token_summary:
-            metrics.add_metric(name="TokensInput", unit=MetricUnit.Count, value=token_summary.get("total_input_tokens", 0))
-            metrics.add_metric(name="TokensOutput", unit=MetricUnit.Count, value=token_summary.get("total_output_tokens", 0))
-            metrics.add_metric(name="EstimatedCostUsd", unit=MetricUnit.Count, value=token_summary.get("total_cost_usd", 0))
+            metrics.add_metric(
+                name="TokensInput",
+                unit=MetricUnit.Count,
+                value=token_summary.get("total_input_tokens", 0),
+            )
+            metrics.add_metric(
+                name="TokensOutput",
+                unit=MetricUnit.Count,
+                value=token_summary.get("total_output_tokens", 0),
+            )
+            metrics.add_metric(
+                name="EstimatedCostUsd",
+                unit=MetricUnit.Count,
+                value=token_summary.get("total_cost_usd", 0),
+            )
         metrics.add_dimension(name="org_id", value=org_id)
         metrics.flush_metrics()
 
-        logger.exception("Pipeline failed", extra={"report_id": report_id, "token_usage": token_summary})
+        logger.exception(
+            "Pipeline failed",
+            extra={"report_id": report_id, "token_usage": token_summary},
+        )
         if report_id:
             now = datetime.utcnow().isoformat()
             table.update_item(
