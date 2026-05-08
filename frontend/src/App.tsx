@@ -21,6 +21,8 @@ import { submitFeedback } from './api';
 
 const SPRING = { type: 'spring' as const, stiffness: 280, damping: 36 };
 
+const PENDING_QUERY_KEY = 'plinths-pending-query';
+
 export default function App() {
   const auth = useAuthContext();
   const {
@@ -140,14 +142,20 @@ export default function App() {
       if (pendingCheckoutPlanRef.current) {
         const plan = pendingCheckoutPlanRef.current;
         pendingCheckoutPlanRef.current = null;
+        pendingQueryRef.current = null;
+        try { sessionStorage.removeItem(PENDING_QUERY_KEY); } catch { /* private mode */ }
         setShowPricing(false);
         void billing.startCheckout(plan);
         return;
       }
       setShowPricing(false);
-      if (pendingQueryRef.current) {
-        const q = pendingQueryRef.current;
-        pendingQueryRef.current = null;
+      let q = pendingQueryRef.current;
+      pendingQueryRef.current = null;
+      if (!q) {
+        try { q = sessionStorage.getItem(PENDING_QUERY_KEY); } catch { /* private mode */ }
+      }
+      try { sessionStorage.removeItem(PENDING_QUERY_KEY); } catch { /* private mode */ }
+      if (q) {
         startAnalysis(q);
         setInputValue('');
       }
@@ -188,8 +196,12 @@ export default function App() {
     if (val.trim().length <= 4) return;
 
     if (!auth.isAuthenticated) {
-      // Store the query so we can auto-submit after sign-in
-      pendingQueryRef.current = val.trim();
+      // Store the query so we can auto-submit after sign-in. Also mirror to
+      // sessionStorage so the query survives the Cognito Hosted UI redirect
+      // (full page reload wipes the ref).
+      const q = val.trim();
+      pendingQueryRef.current = q;
+      try { sessionStorage.setItem(PENDING_QUERY_KEY, q); } catch { /* private mode */ }
       setShowSignIn(true);
       return;
     }
