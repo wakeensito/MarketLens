@@ -150,7 +150,7 @@
   text-decoration-color: var(--accent-border);
   text-underline-offset: 3px;
   transition: text-decoration-color 0.15s ease;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 @media (hover: hover) {

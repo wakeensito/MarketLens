@@ -1,9 +1,8 @@
 import { Link } from 'react-router-dom';
 import { BrandWordmarkInner } from '../components/BrandWordmark';
 import { ThemePicker } from '../components/ThemePicker';
+import { CONTACT_EMAIL } from './legalConstants';
 import './legal.css';
-
-const CONTACT_EMAIL = 'wakeenproduction@gmail.com';
 
 export default function TermsPage() {
   return (

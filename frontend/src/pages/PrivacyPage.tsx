@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom';
 import { BrandWordmarkInner } from '../components/BrandWordmark';
 import { ThemePicker } from '../components/ThemePicker';
+import { CONTACT_EMAIL } from './legalConstants';
 import './legal.css';
 
 const LAST_UPDATED = 'May 09, 2026';
-const CONTACT_EMAIL = 'wakeenproduction@gmail.com';
 
 export default function PrivacyPage() {
   return (
