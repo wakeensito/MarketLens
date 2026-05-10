@@ -116,7 +116,7 @@ rounded:
   sm:    "3px"
   md:    "4px"
   lg:    "6px"
-  xl:    "10px"
+  xl:    "12px"
   input: "16px"
   full:  "9999px"
 spacing:
@@ -301,7 +301,7 @@ Going up one layer means going up one level of importance. Don't skip layers, do
 
 - **Focus glow.** Applied to the AI input on `:focus-within`. Light: `0 0 0 3px oklch(13% 0.008 245 / 0.10)` (subtle dark-ink halo). Stealth: `0 0 0 3px #c9965a40` (warm amber halo).
 - **Send-button hover lift.** Applied to the primary send affordance on hover only. Light: `0 4px 14px oklch(13% 0.008 245 / 0.18)`. Stealth: `0 4px 14px #00000060`.
-- **Modal scrim.** `backdrop-filter: blur(6px)` on the modal backdrop. Both themes.
+- **Modal scrim.** Sign-in modal: `backdrop-filter: blur(10px) saturate(1.4)`. Plan-activation modal: `backdrop-filter: blur(6px) saturate(1.2)`. Both themes.
 
 ### Named Rules
 
