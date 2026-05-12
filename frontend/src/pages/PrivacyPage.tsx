@@ -30,11 +30,8 @@ export default function PrivacyPage() {
 
           <ul>
             <li>
-              Visit our website at{' '}
-              <a href="https://plinths.net/" target="_blank" rel="noopener noreferrer">
-                https://plinths.net
-              </a>{' '}
-              or any website of ours that links to this Privacy Notice.
+              Visit our website at <Link to="/">https://plinths.net</Link> or any website of ours that links to this
+              Privacy Notice.
             </li>
             <li>
               Use Plinths. Plinths is an AI-powered market intelligence product. Users
@@ -114,21 +111,21 @@ export default function PrivacyPage() {
           <nav className="legal-toc" aria-label="Table of contents">
             <p className="legal-toc-title">Contents</p>
             <ol className="legal-toc-list">
-              <li><a href="#infocollect"><span className="legal-toc-num">01</span>What information do we collect?</a></li>
-              <li><a href="#infouse"><span className="legal-toc-num">02</span>How do we process your information?</a></li>
-              <li><a href="#legalbases"><span className="legal-toc-num">03</span>What legal bases do we rely on to process your personal information?</a></li>
-              <li><a href="#whoshare"><span className="legal-toc-num">04</span>When and with whom do we share your personal information?</a></li>
-              <li><a href="#ai"><span className="legal-toc-num">05</span>Do we offer artificial-intelligence-based products?</a></li>
-              <li><a href="#sociallogins"><span className="legal-toc-num">06</span>How do we handle your social logins?</a></li>
-              <li><a href="#inforetain"><span className="legal-toc-num">07</span>How long do we keep your information?</a></li>
-              <li><a href="#infosafe"><span className="legal-toc-num">08</span>How do we keep your information safe?</a></li>
-              <li><a href="#infominors"><span className="legal-toc-num">09</span>Do we collect information from minors?</a></li>
-              <li><a href="#privacyrights"><span className="legal-toc-num">10</span>What are your privacy rights?</a></li>
-              <li><a href="#DNT"><span className="legal-toc-num">11</span>Controls for do-not-track features</a></li>
-              <li><a href="#uslaws"><span className="legal-toc-num">12</span>Do United States residents have specific privacy rights?</a></li>
-              <li><a href="#policyupdates"><span className="legal-toc-num">13</span>Do we make updates to this notice?</a></li>
-              <li><a href="#contact"><span className="legal-toc-num">14</span>How can you contact us about this notice?</a></li>
-              <li><a href="#request"><span className="legal-toc-num">15</span>How can you review, update, or delete the data we collect?</a></li>
+              <li><a href="#infocollect"><span className="legal-toc-num" aria-hidden="true">01</span>What information do we collect?</a></li>
+              <li><a href="#infouse"><span className="legal-toc-num" aria-hidden="true">02</span>How do we process your information?</a></li>
+              <li><a href="#legalbases"><span className="legal-toc-num" aria-hidden="true">03</span>What legal bases do we rely on to process your personal information?</a></li>
+              <li><a href="#whoshare"><span className="legal-toc-num" aria-hidden="true">04</span>When and with whom do we share your personal information?</a></li>
+              <li><a href="#ai"><span className="legal-toc-num" aria-hidden="true">05</span>Do we offer artificial-intelligence-based products?</a></li>
+              <li><a href="#sociallogins"><span className="legal-toc-num" aria-hidden="true">06</span>How do we handle your social logins?</a></li>
+              <li><a href="#inforetain"><span className="legal-toc-num" aria-hidden="true">07</span>How long do we keep your information?</a></li>
+              <li><a href="#infosafe"><span className="legal-toc-num" aria-hidden="true">08</span>How do we keep your information safe?</a></li>
+              <li><a href="#infominors"><span className="legal-toc-num" aria-hidden="true">09</span>Do we collect information from minors?</a></li>
+              <li><a href="#privacyrights"><span className="legal-toc-num" aria-hidden="true">10</span>What are your privacy rights?</a></li>
+              <li><a href="#DNT"><span className="legal-toc-num" aria-hidden="true">11</span>Controls for do-not-track features</a></li>
+              <li><a href="#uslaws"><span className="legal-toc-num" aria-hidden="true">12</span>Do United States residents have specific privacy rights?</a></li>
+              <li><a href="#policyupdates"><span className="legal-toc-num" aria-hidden="true">13</span>Do we make updates to this notice?</a></li>
+              <li><a href="#contact"><span className="legal-toc-num" aria-hidden="true">14</span>How can you contact us about this notice?</a></li>
+              <li><a href="#request"><span className="legal-toc-num" aria-hidden="true">15</span>How can you review, update, or delete the data we collect?</a></li>
             </ol>
           </nav>
 
@@ -863,6 +860,10 @@ export default function PrivacyPage() {
               .
             </p>
           </section>
+
+          <p className="legal-back-to-top">
+            <a href="#main">Back to top</a>
+          </p>
         </article>
       </main>
     </div>

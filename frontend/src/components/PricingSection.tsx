@@ -306,8 +306,8 @@ export default function PricingSection({
           </p>
           <p className="pricing-footer-sub">
             Questions?{' '}
-            <a href="mailto:hello@plinths.ai" className="pricing-footer-link">
-              hello@plinths.ai
+            <a href="mailto:info@plinths.net" className="pricing-footer-link">
+              info@plinths.net
             </a>
           </p>
         </footer>

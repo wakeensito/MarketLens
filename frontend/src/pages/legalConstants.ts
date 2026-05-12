@@ -1,1 +1,1 @@
-export const CONTACT_EMAIL = 'wakeenproduction@gmail.com';
+export const CONTACT_EMAIL = 'info@plinths.net';
