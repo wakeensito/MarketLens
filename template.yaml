@@ -863,7 +863,7 @@ Resources:
             - Effect: Allow
               Action:
                 - ses:SendRawEmail
-              Resource: "*"
+              Resource: !Sub arn:aws:ses:${AWS::Region}:${AWS::AccountId}:identity/plinths.net
               Condition:
                 StringEquals:
                   "ses:FromAddress": "info@plinths.net"

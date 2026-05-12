@@ -41,6 +41,9 @@ def _extract_body(message: Message) -> str:
     for part in message.walk():
         if part.is_multipart():
             continue
+        disposition = part.get_content_disposition()
+        if disposition not in (None, "inline") or part.get_filename():
+            continue
         content_type = part.get_content_type()
         payload = part.get_payload(decode=True)
         if not isinstance(payload, bytes):
