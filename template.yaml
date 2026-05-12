@@ -838,6 +838,76 @@ Resources:
       LogGroupName: !Sub /aws/lambda/${BillingFunction}
       RetentionInDays: 90
 
+  # ─── Lambda: Email Forwarder ───
+  EmailForwarderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.handler
+      CodeUri: infrastructure/lambda/email-forwarder/
+      Description: Forwards incoming SES emails to personal Gmail
+      MemorySize: 128
+      Timeout: 10
+      Environment:
+        Variables:
+          FORWARD_TO_EMAIL: wakeenproduction@gmail.com
+      Policies:
+        - S3ReadPolicy:
+            BucketName: plinths-incoming-email
+        - Statement:
+            - Effect: Allow
+              Action:
+                - ses:SendRawEmail
+              Resource: "*"
+              Condition:
+                StringEquals:
+                  "ses:FromAddress": "info@plinths.net"
+      Events:
+        S3Event:
+          Type: S3
+          Properties:
+            Bucket: !Ref IncomingEmailBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: incoming/
+
+  # ─── Lambda: Email Forwarder ───
+  EmailForwarderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.handler
+      CodeUri: infrastructure/lambda/email-forwarder/
+      Description: Forwards incoming SES emails to personal Gmail
+      MemorySize: 128
+      Timeout: 10
+      Environment:
+        Variables:
+          FORWARD_TO_EMAIL: wakeenproduction@gmail.com
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+              Resource: arn:aws:s3:::plinths-incoming-email/*
+            - Effect: Allow
+              Action:
+                - ses:SendRawEmail
+              Resource: "*"
+              Condition:
+                StringEquals:
+                  "ses:FromAddress": "info@plinths.net"
+
+  EmailForwarderLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${EmailForwarderFunction}
+      RetentionInDays: 90
+
+  # S3 trigger wired manually after deploy (bucket pre-exists, not managed by SAM)
+  # aws s3api put-bucket-notification-configuration --bucket plinths-incoming-email ...
+
 Outputs:
   WebUIBucketName:
     Description: S3 bucket for frontend assets

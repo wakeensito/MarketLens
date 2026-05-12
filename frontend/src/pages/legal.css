@@ -274,6 +274,14 @@
   color: var(--text);
 }
 
+/* All-caps disclaimer / liability clauses (Termly-style) */
+.legal-article .legal-allcaps {
+  font-size: 0.8125rem;
+  line-height: 1.65;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+}
+
 .legal-table-wrap {
   overflow-x: auto;
   margin: 0 0 1.5rem;

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { X } from 'lucide-react';
 import { BrandWordmarkInner } from './BrandWordmark';
@@ -16,8 +17,11 @@ function getTabbableIn(root: HTMLElement): HTMLElement[] {
 
 const SHOW_DEV_MOCK = import.meta.env.DEV && import.meta.env.VITE_USE_MOCK === 'true';
 
-const TERMS_URL = (import.meta.env.VITE_LEGAL_TERMS_URL as string | undefined)?.trim();
-const PRIVACY_URL = (import.meta.env.VITE_LEGAL_PRIVACY_URL as string | undefined)?.trim();
+/** In-app routes unless overridden (e.g. hosted policy URL). */
+const TERMS_URL =
+  (import.meta.env.VITE_LEGAL_TERMS_URL as string | undefined)?.trim() || '/terms';
+const PRIVACY_URL =
+  (import.meta.env.VITE_LEGAL_PRIVACY_URL as string | undefined)?.trim() || '/privacy';
 
 function GoogleIcon() {
   return (
@@ -170,7 +174,7 @@ export default function SignInModal({ isOpen, onClose, auth, onShowPricing, vari
     }
   }
 
-  return (
+  const tree = (
     <AnimatePresence>
       {isOpen && (
         <motion.div
@@ -180,7 +184,7 @@ export default function SignInModal({ isOpen, onClose, auth, onShowPricing, vari
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18, ease: 'easeOut' as const }}
-            onClick={handleBackdropClick}
+          onClick={handleBackdropClick}
         >
           <motion.div
             ref={dialogRef}
@@ -326,37 +330,33 @@ export default function SignInModal({ isOpen, onClose, auth, onShowPricing, vari
               )}
             </AnimatePresence>
 
-            {onShowPricing ? (
-              <button
-                className="signin-modal-pricing-link"
-                type="button"
-                onClick={() => { closeModal(); onShowPricing(); }}
-              >
-                View plans &amp; pricing →
-              </button>
-            ) : null}
+            <div className="signin-modal-footer">
+              {onShowPricing ? (
+                <button
+                  className="signin-modal-pricing-link"
+                  type="button"
+                  onClick={() => { closeModal(); onShowPricing(); }}
+                >
+                  View plans &amp; pricing →
+                </button>
+              ) : null}
 
-            <p className="signin-modal-legal">
-              By continuing you agree to our{' '}
-              {TERMS_URL ? (
+              <p className="signin-modal-legal">
+                By continuing you agree to our{' '}
                 <a href={TERMS_URL} target="_blank" rel="noopener noreferrer">
                   Terms
                 </a>
-              ) : (
-                <span className="signin-modal-legal-plain">Terms</span>
-              )}
-              {' '}and{' '}
-              {PRIVACY_URL ? (
+                {' '}and{' '}
                 <a href={PRIVACY_URL} target="_blank" rel="noopener noreferrer">
                   Privacy Policy
                 </a>
-              ) : (
-                <span className="signin-modal-legal-plain">Privacy Policy</span>
-              )}
-            </p>
+              </p>
+            </div>
           </motion.div>
         </motion.div>
       )}
     </AnimatePresence>
   );
+
+  return createPortal(tree, document.body);
 }
