@@ -839,53 +839,22 @@ Resources:
       RetentionInDays: 90
 
   # ─── Lambda: Email Forwarder ───
+  # FORWARD_TO_EMAIL_PARAM points at an SSM SecureString populated manually after deploy
+  # (CloudFormation cannot write SecureString from a resource attribute).
   EmailForwarderFunction:
     Type: AWS::Serverless::Function
     Properties:
       Handler: app.handler
       CodeUri: infrastructure/lambda/email-forwarder/
-      Description: Forwards incoming SES emails to personal Gmail
+      Description: Forwards incoming SES emails to a personal address (recipient stored in SSM)
       MemorySize: 128
       Timeout: 10
       Environment:
         Variables:
-          FORWARD_TO_EMAIL: wakeenproduction@gmail.com
+          FORWARD_TO_EMAIL_PARAM: !Sub /marketlens/${Stage}/forward-to-email
       Policies:
-        - S3ReadPolicy:
-            BucketName: plinths-incoming-email
-        - Statement:
-            - Effect: Allow
-              Action:
-                - ses:SendRawEmail
-              Resource: "*"
-              Condition:
-                StringEquals:
-                  "ses:FromAddress": "info@plinths.net"
-      Events:
-        S3Event:
-          Type: S3
-          Properties:
-            Bucket: !Ref IncomingEmailBucket
-            Events: s3:ObjectCreated:*
-            Filter:
-              S3Key:
-                Rules:
-                  - Name: prefix
-                    Value: incoming/
-
-  # ─── Lambda: Email Forwarder ───
-  EmailForwarderFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      Handler: app.handler
-      CodeUri: infrastructure/lambda/email-forwarder/
-      Description: Forwards incoming SES emails to personal Gmail
-      MemorySize: 128
-      Timeout: 10
-      Environment:
-        Variables:
-          FORWARD_TO_EMAIL: wakeenproduction@gmail.com
-      Policies:
+        - SSMParameterReadPolicy:
+            ParameterName: !Sub marketlens/${Stage}/forward-to-email
         - Statement:
             - Effect: Allow
               Action:

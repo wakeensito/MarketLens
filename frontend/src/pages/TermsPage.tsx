@@ -26,9 +26,7 @@ export default function TermsPage() {
             These Terms of Use constitute a legally binding agreement made between you, whether personally or on
             behalf of an entity (&quot;you&quot;), and <strong>Plinths</strong> (&quot;Company,&quot; &quot;we,&quot;
             &quot;us,&quot; or &quot;our&quot;), concerning your access to and use of the{' '}
-            <a href="https://plinths.net/" target="_blank" rel="noopener noreferrer">
-              https://plinths.net
-            </a>{' '}
+            <Link to="/">https://plinths.net</Link>{' '}
             website and our market-intelligence services (collectively, the &quot;Services&quot;). You agree that by
             accessing the Services, you have read, understood, and agreed to be bound by all of these Legal Terms. If
             you do not agree with all of these Legal Terms, then you are expressly prohibited from using the Services
@@ -56,28 +54,62 @@ export default function TermsPage() {
             <Link to="/privacy">Privacy Policy</Link> describes how we collect, use, and protect your information.
           </p>
 
+          <section className="legal-summary" aria-label="Summary of key points">
+            <p className="legal-summary-title">Summary of key points</p>
+            <p>
+              <strong>Who is this agreement between?</strong> These Terms bind you (or the entity you represent) and
+              Plinths. By accessing the Services, you agree to be bound. If you don&apos;t agree, stop using them.
+              See <a href="#our-services">1. Our services</a>.
+            </p>
+            <p>
+              <strong>Who can use Plinths?</strong> You must be at least 18. The Services are not for minors.
+              See <a href="#user-representations">3. User representations</a>.
+            </p>
+            <p>
+              <strong>Who owns what?</strong> We own the platform, code, design, and brand. You retain ownership of
+              any Contributions you submit, but you grant us a broad license to use them.
+              See <a href="#ip-rights">2. Intellectual property rights</a> and{' '}
+              <a href="#contribution-license">6. Contribution license</a>.
+            </p>
+            <p>
+              <strong>What can&apos;t I do?</strong> No systematic scraping, no automation, no reverse engineering,
+              no commercial use without consent, no interference with the Services.
+              See <a href="#prohibited">4. Prohibited activities</a>.
+            </p>
+            <p>
+              <strong>Where are disputes resolved?</strong> Governing law is the State of Florida. Disputes go to
+              binding arbitration in Miami, Florida after a 30-day informal negotiation period. Class actions are
+              waived. See <a href="#dispute-resolution">11. Dispute resolution</a>.
+            </p>
+            <p>
+              <strong>What is the liability cap?</strong> Our total liability is limited to what you have paid us in
+              the 12 months before the cause of action arose.
+              See <a href="#liability">14. Limitations of liability</a>.
+            </p>
+          </section>
+
           <nav className="legal-toc" aria-label="Table of contents">
             <p className="legal-toc-title">Table of contents</p>
             <ol className="legal-toc-list">
-              <li><a href="#our-services"><span className="legal-toc-num">01</span>Our services</a></li>
-              <li><a href="#ip-rights"><span className="legal-toc-num">02</span>Intellectual property rights</a></li>
-              <li><a href="#user-representations"><span className="legal-toc-num">03</span>User representations</a></li>
-              <li><a href="#prohibited"><span className="legal-toc-num">04</span>Prohibited activities</a></li>
-              <li><a href="#ugc"><span className="legal-toc-num">05</span>User generated contributions</a></li>
-              <li><a href="#contribution-license"><span className="legal-toc-num">06</span>Contribution license</a></li>
-              <li><a href="#services-management"><span className="legal-toc-num">07</span>Services management</a></li>
-              <li><a href="#term-termination"><span className="legal-toc-num">08</span>Term and termination</a></li>
-              <li><a href="#modifications"><span className="legal-toc-num">09</span>Modifications and interruptions</a></li>
-              <li><a href="#governing-law"><span className="legal-toc-num">10</span>Governing law</a></li>
-              <li><a href="#dispute-resolution"><span className="legal-toc-num">11</span>Dispute resolution</a></li>
-              <li><a href="#corrections"><span className="legal-toc-num">12</span>Corrections</a></li>
-              <li><a href="#disclaimer"><span className="legal-toc-num">13</span>Disclaimer</a></li>
-              <li><a href="#liability"><span className="legal-toc-num">14</span>Limitations of liability</a></li>
-              <li><a href="#indemnification"><span className="legal-toc-num">15</span>Indemnification</a></li>
-              <li><a href="#user-data"><span className="legal-toc-num">16</span>User data</a></li>
-              <li><a href="#electronic"><span className="legal-toc-num">17</span>Electronic communications, transactions, and signatures</a></li>
-              <li><a href="#miscellaneous"><span className="legal-toc-num">18</span>Miscellaneous</a></li>
-              <li><a href="#contact"><span className="legal-toc-num">19</span>Contact us</a></li>
+              <li><a href="#our-services"><span className="legal-toc-num" aria-hidden="true">01</span>Our services</a></li>
+              <li><a href="#ip-rights"><span className="legal-toc-num" aria-hidden="true">02</span>Intellectual property rights</a></li>
+              <li><a href="#user-representations"><span className="legal-toc-num" aria-hidden="true">03</span>User representations</a></li>
+              <li><a href="#prohibited"><span className="legal-toc-num" aria-hidden="true">04</span>Prohibited activities</a></li>
+              <li><a href="#ugc"><span className="legal-toc-num" aria-hidden="true">05</span>User generated contributions</a></li>
+              <li><a href="#contribution-license"><span className="legal-toc-num" aria-hidden="true">06</span>Contribution license</a></li>
+              <li><a href="#services-management"><span className="legal-toc-num" aria-hidden="true">07</span>Services management</a></li>
+              <li><a href="#term-termination"><span className="legal-toc-num" aria-hidden="true">08</span>Term and termination</a></li>
+              <li><a href="#modifications"><span className="legal-toc-num" aria-hidden="true">09</span>Modifications and interruptions</a></li>
+              <li><a href="#governing-law"><span className="legal-toc-num" aria-hidden="true">10</span>Governing law</a></li>
+              <li><a href="#dispute-resolution"><span className="legal-toc-num" aria-hidden="true">11</span>Dispute resolution</a></li>
+              <li><a href="#corrections"><span className="legal-toc-num" aria-hidden="true">12</span>Corrections</a></li>
+              <li><a href="#disclaimer"><span className="legal-toc-num" aria-hidden="true">13</span>Disclaimer</a></li>
+              <li><a href="#liability"><span className="legal-toc-num" aria-hidden="true">14</span>Limitations of liability</a></li>
+              <li><a href="#indemnification"><span className="legal-toc-num" aria-hidden="true">15</span>Indemnification</a></li>
+              <li><a href="#user-data"><span className="legal-toc-num" aria-hidden="true">16</span>User data</a></li>
+              <li><a href="#electronic"><span className="legal-toc-num" aria-hidden="true">17</span>Electronic communications, transactions, and signatures</a></li>
+              <li><a href="#miscellaneous"><span className="legal-toc-num" aria-hidden="true">18</span>Miscellaneous</a></li>
+              <li><a href="#contact"><span className="legal-toc-num" aria-hidden="true">19</span>Contact us</a></li>
             </ol>
           </nav>
 
@@ -295,9 +327,9 @@ export default function TermsPage() {
 
           <h2 id="governing-law">10. Governing law</h2>
           <p>
-            These Legal Terms shall be governed by and defined following the laws of __________. __________ and
-            yourself irrevocably consent that the courts of __________ shall have exclusive jurisdiction to resolve any
-            dispute which may arise in connection with these Legal Terms.
+            These Legal Terms shall be governed by and defined following the laws of the State of Florida. You and we
+            irrevocably consent that the courts of the State of Florida shall have exclusive jurisdiction to resolve
+            any dispute which may arise in connection with these Legal Terms.
           </p>
 
           <h2 id="dispute-resolution">11. Dispute resolution</h2>
@@ -307,7 +339,7 @@ export default function TermsPage() {
             (each a &quot;Dispute&quot; and collectively, the &quot;Disputes&quot;) brought by either you or us
             (individually, a &quot;Party&quot; and collectively, the &quot;Parties&quot;), the Parties agree to first
             attempt to negotiate any Dispute (except those Disputes expressly provided below) informally for at least
-            __________ days before initiating arbitration. Such informal negotiations commence upon written notice from
+            thirty (30) days before initiating arbitration. Such informal negotiations commence upon written notice from
             one Party to the other Party.
           </p>
           <h3>Binding arbitration</h3>
@@ -324,13 +356,13 @@ export default function TermsPage() {
             submission of documents, by phone, or online. The arbitrator will make a decision in writing, but need not
             provide a statement of reasons unless requested by either Party. The arbitrator must follow applicable law, and
             any award may be challenged if the arbitrator fails to do so. Except where otherwise required by the
-            applicable AAA rules or applicable law, the arbitration will take place in __________, __________. Except as
+            applicable AAA rules or applicable law, the arbitration will take place in Miami, Florida. Except as
             otherwise provided herein, the Parties may litigate in court to compel arbitration, stay proceedings pending
             arbitration, or to confirm, vacate, or enter judgment on the award entered by the arbitrator.
           </p>
           <p>
             If for any reason, a Dispute proceeds in court rather than arbitration, the Dispute shall be commenced or
-            prosecuted in the state and federal courts located in __________, __________, and the Parties hereby consent
+            prosecuted in the state and federal courts located in Miami, Florida, and the Parties hereby consent
             to, and waive all defenses of lack of personal jurisdiction, and forum non conveniens with respect to venue
             and jurisdiction in such state and federal courts. Application of the United Nations Convention on Contracts
             for the International Sale of Goods and the Uniform Computer Information Transaction Act (UCITA) are excluded
@@ -338,7 +370,7 @@ export default function TermsPage() {
           </p>
           <p>
             In no event shall any Dispute brought by either Party related in any way to the Services be commenced more
-            than __________ years after the cause of action arose. If this provision is found to be illegal or
+            than one (1) year after the cause of action arose. If this provision is found to be illegal or
             unenforceable, then neither Party will elect to arbitrate any Dispute falling within that portion of this
             provision found to be illegal or unenforceable and such Dispute shall be decided by a court of competent
             jurisdiction within the courts listed for jurisdiction above, and the Parties agree to submit to the personal
@@ -402,7 +434,7 @@ export default function TermsPage() {
             LOST REVENUE, LOSS OF DATA, OR OTHER DAMAGES ARISING FROM YOUR USE OF THE SERVICES, EVEN IF WE HAVE BEEN
             ADVISED OF THE POSSIBILITY OF SUCH DAMAGES. NOTWITHSTANDING ANYTHING TO THE CONTRARY CONTAINED HEREIN, OUR
             LIABILITY TO YOU FOR ANY CAUSE WHATSOEVER AND REGARDLESS OF THE FORM OF THE ACTION, WILL AT ALL TIMES BE
-            LIMITED TO THE AMOUNT PAID, IF ANY, BY YOU TO US DURING THE __________ MONTH PERIOD PRIOR TO ANY CAUSE OF
+            LIMITED TO THE AMOUNT PAID, IF ANY, BY YOU TO US DURING THE TWELVE (12) MONTH PERIOD PRIOR TO ANY CAUSE OF
             ACTION ARISING. CERTAIN US STATE LAWS AND INTERNATIONAL LAWS DO NOT ALLOW LIMITATIONS ON IMPLIED WARRANTIES
             OR THE EXCLUSION OR LIMITATION OF CERTAIN DAMAGES. IF THESE LAWS APPLY TO YOU, SOME OR ALL OF THE ABOVE
             DISCLAIMERS OR LIMITATIONS MAY NOT APPLY TO YOU, AND YOU MAY HAVE ADDITIONAL RIGHTS.
@@ -469,7 +501,11 @@ export default function TermsPage() {
             Services, please contact us at:{' '}
             <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
             {' '}or visit{' '}
-            <a href="https://plinths.net/" target="_blank" rel="noopener noreferrer">https://plinths.net</a>.
+            <Link to="/">https://plinths.net</Link>.
+          </p>
+
+          <p className="legal-back-to-top">
+            <a href="#main">Back to top</a>
           </p>
         </article>
       </main>

@@ -166,35 +166,36 @@ reports_table = dynamodb.Table(os.environ["REPORTS_TABLE"])
 
 def handler(event, context):
     """
-    Streaming chat handler.
-    
+    Chat handler (buffered).
+
     Input: { report_id, message, org_id, user_id, plan }
-    Output: SSE stream of tokens
+    Output: JSON response with full assistant message.
+
+    NOTE: this example buffers the full response and returns JSON. Token-by-token
+    streaming requires a different transport (Lambda response streaming via Function
+    URL with InvokeMode=RESPONSE_STREAM, or ASGI app behind Lambda Web Adapter).
+    That choice is still TBD — see CLAUDE.md > Muse > "Still TBD". A standard sync
+    Python Lambda handler cannot stream; mixing `yield` with `return` would make
+    this function a generator and break invocation.
     """
     report_id = event["report_id"]
     user_message = event["message"]
     org_id = event["org_id"]
     plan = event["plan"]
-    
-    # 1. Check message limit
+
     message_count = _get_message_count(report_id)
     limit = _get_message_limit(plan)
     if message_count >= limit:
         return {"statusCode": 429, "body": json.dumps({"error": "Message limit reached"})}
-    
-    # 2. Load report context
+
     report = _get_report(org_id, report_id)
     if not report:
         return {"statusCode": 404, "body": json.dumps({"error": "Report not found"})}
-    
-    # 3. Load conversation history
+
     history = _get_conversation_history(report_id, limit=10)
-    
-    # 4. Build prompt
     system_prompt = _build_system_prompt(report)
     messages = _build_messages(history, user_message)
-    
-    # 5. Call Bedrock with streaming
+
     response = bedrock.invoke_model_with_response_stream(
         modelId=os.environ["CHAT_MODEL_ID"],
         contentType="application/json",
@@ -207,21 +208,17 @@ def handler(event, context):
             "messages": messages,
         })
     )
-    
-    # 6. Stream tokens + save to DynamoDB
+
     assistant_message = ""
     for chunk in response["body"]:
         chunk_data = json.loads(chunk["chunk"]["bytes"])
         if chunk_data["type"] == "content_block_delta":
-            token = chunk_data["delta"]["text"]
-            assistant_message += token
-            yield token  # SSE stream
-    
-    # 7. Save conversation
+            assistant_message += chunk_data["delta"]["text"]
+
     _save_message(report_id, "user", user_message, plan)
     _save_message(report_id, "assistant", assistant_message, plan)
-    
-    return {"statusCode": 200}
+
+    return {"statusCode": 200, "body": json.dumps({"message": assistant_message})}
 
 def _build_system_prompt(report: dict) -> str:
     """Inject report context into system prompt."""

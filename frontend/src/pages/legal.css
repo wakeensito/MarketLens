@@ -239,7 +239,7 @@
   color: var(--text-secondary);
   text-decoration: none;
   line-height: 1.5;
-  padding: 0.625rem 0.75rem;
+  padding: 0.8125rem 0.75rem;
   margin: 0 -0.75rem;
   border-radius: 6px;
   transition: background-color 0.15s ease, color 0.15s ease;
@@ -274,7 +274,8 @@
   color: var(--text);
 }
 
-/* All-caps disclaimer / liability clauses (Termly-style) */
+/* All-caps disclaimer / liability clauses — kept literal uppercase so the
+   contract still satisfies UCC §1-201 conspicuousness conventions. */
 .legal-article .legal-allcaps {
   font-size: 0.8125rem;
   line-height: 1.65;
@@ -327,6 +328,48 @@
   color: var(--text-secondary);
   text-align: center;
   width: 5rem;
+}
+
+.legal-back-to-top {
+  margin: 4rem 0 0;
+  padding-top: 2rem;
+  border-top: 1px solid var(--accent-border);
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.legal-back-to-top a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-secondary);
+  text-decoration: none;
+  padding: 0.625rem 0.75rem;
+  margin: 0 -0.75rem;
+  border-radius: 6px;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.legal-back-to-top a::before {
+  content: "↑";
+  font-size: 0.875rem;
+  line-height: 1;
+}
+
+@media (hover: hover) {
+  .legal-back-to-top a:hover {
+    color: var(--text);
+    background: var(--accent-light);
+  }
+}
+
+.legal-back-to-top a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  color: var(--text);
 }
 
 @media (max-width: 640px) {
