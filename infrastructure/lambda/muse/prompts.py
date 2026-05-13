@@ -52,10 +52,15 @@ Here is the user's report (JSON). Ground every claim that touches its content in
 def build_system_prompt(result_json: dict[str, Any] | None) -> str:
     """Render the system prompt with the user's report context inlined.
 
+    Uses a literal string replace, not `str.format`, because the template
+    contains placeholder-shaped literals like `gap-{N}` and `key-stat-{slug}`
+    plus a JSON envelope `<<MUSE_META>>{...}<<END>>` — `.format()` would treat
+    those as fields and raise `KeyError`/`ValueError` on every call.
+
     Truncates ridiculously large reports defensively (shouldn't happen in
     practice — Plinths reports are ~3-5KB of JSON).
     """
     report_text = json.dumps(result_json or {}, ensure_ascii=False, indent=2)
     if len(report_text) > 60_000:
         report_text = report_text[:60_000] + "\n/* truncated */"
-    return SYSTEM_PROMPT_TEMPLATE.format(report_json=report_text)
+    return SYSTEM_PROMPT_TEMPLATE.replace("{report_json}", report_text)

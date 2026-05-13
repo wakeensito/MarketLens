@@ -11,6 +11,7 @@ Reports table is read-only from this Lambda.
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 import uuid
@@ -21,6 +22,9 @@ from typing import Any, Iterable
 
 import boto3
 from boto3.dynamodb.conditions import Key
+from botocore.exceptions import ClientError
+
+logger = logging.getLogger(__name__)
 
 
 CONVERSATIONS_TABLE_NAME = os.environ.get("MUSE_CONVERSATIONS_TABLE", "")
@@ -128,14 +132,6 @@ def count_user_messages(report_id: str) -> int:
     return sum(1 for r in rows if r.get("role") == "user")
 
 
-def get_conversation_id(report_id: str) -> str | None:
-    """Return the conversation_id stored on the first row, or None if no thread."""
-    rows = list_messages(report_id)
-    if not rows:
-        return None
-    return rows[0].get("conversation_id")
-
-
 # ─── Conversation writes ───
 
 
@@ -228,8 +224,18 @@ def get_report_for_user(report_id: str, user_id: str, org_id: str) -> dict | Non
             Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
             ConsistentRead=True,
         )
-    except Exception:
-        return None
+    except ClientError as e:
+        # Treat "resource not found" as a missing report so the caller emits
+        # `report_not_found`. Surface anything else (throttling, credentials,
+        # network) so the stream/sync handler returns 5xx and ops sees it.
+        code = e.response.get("Error", {}).get("Code", "")
+        if code == "ResourceNotFoundException":
+            return None
+        logger.exception(
+            "Reports table get_item failed",
+            extra={"report_id": report_id, "error_code": code},
+        )
+        raise
     item = result.get("Item")
     if not item:
         return None

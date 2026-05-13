@@ -68,9 +68,7 @@ def get_conversation(report_id: str):
     # Confirm the caller owns the report. We do this even on GET because the
     # conversations table key is per-report; without the ownership check, a
     # user could attempt to read someone else's thread by guessing report ids.
-    report = persistence.get_report_for_user(
-        report_id, auth["user_id"], auth["org_id"]
-    )
+    report = persistence.get_report_for_user(report_id, auth["user_id"], auth["org_id"])
     if report is None:
         return {"conversation_id": None, "messages": []}
 
@@ -90,9 +88,7 @@ def delete_conversation(report_id: str):
     if not auth["is_authenticated"]:
         return {"error": "Authentication required"}, 401
 
-    report = persistence.get_report_for_user(
-        report_id, auth["user_id"], auth["org_id"]
-    )
+    report = persistence.get_report_for_user(report_id, auth["user_id"], auth["org_id"])
     if report is None:
         # Per the contract: always return deleted: true. Don't leak whether
         # the report exists.

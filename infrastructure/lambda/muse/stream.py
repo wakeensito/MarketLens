@@ -2,12 +2,15 @@
 
 Wiring:
   Browser → CloudFront /api/muse/stream* (OAC, AllViewerExceptHostHeader)
-         → Lambda Function URL (AuthType: NONE, InvokeMode: RESPONSE_STREAM)
+         → Lambda Function URL (AuthType: AWS_IAM, InvokeMode: RESPONSE_STREAM)
          → this handler
 
-Auth is verified inside this Lambda using the shared `plinths_auth` layer —
-Function URLs only support `AuthType: NONE` or `AWS_IAM`, neither of which
-composes with the existing HttpOnly cookie session.
+The Function URL is `AuthType: AWS_IAM` so the OAC's SigV4 signature is
+actually validated and the resource policy (only `cloudfront.amazonaws.com` on
+this distribution can invoke) takes effect. Application-level user auth still
+happens inside this Lambda using the shared `plinths_auth` layer because IAM
+auth on the URL only proves "CloudFront signed this request" — it doesn't
+identify the end user; that identity lives in the `ml_access` cookie.
 
 Output: `text/event-stream`. Event types emitted, in order:
   - `token` (multiple): {"delta": "..."}
@@ -131,8 +134,7 @@ def _build_nova_payload(
     in `messages` (each message wraps content blocks).
     """
     messages = [
-        {"role": h["role"], "content": [{"text": h["content"]}]}
-        for h in history
+        {"role": h["role"], "content": [{"text": h["content"]}]} for h in history
     ]
     messages.append({"role": "user", "content": [{"text": user_message}]})
     payload = {
@@ -178,9 +180,7 @@ def _iter_bedrock_deltas(
             )
 
 
-def _stream_bedrock_async(
-    payload: str, out: Queue
-) -> None:
+def _stream_bedrock_async(payload: str, out: Queue) -> None:
     """Run Bedrock streaming in a worker thread; push events onto `out`.
 
     Events:
@@ -222,9 +222,7 @@ def _stream_bedrock_async(
 # ─── Main streaming loop ───
 
 
-def _stream_response(
-    auth: AuthContext, body: dict
-) -> Generator[bytes, None, None]:
+def _stream_response(auth: AuthContext, body: dict) -> Generator[bytes, None, None]:
     """Yield SSE-framed bytes for the entire turn lifecycle."""
     report_id = (body.get("report_id") or "").strip()
     message = (body.get("message") or "").strip()
@@ -237,20 +235,24 @@ def _stream_response(
         )
         return
 
-    # 1. Plan gate (early reject — no Bedrock call billed).
-    allowed, gate_event = _check_plan_gate(auth.plan, report_id)
-    if not allowed:
-        assert gate_event is not None
-        yield gate_event
-        return
-
-    # 2. Confirm the report exists and is owned by the caller.
+    # 1. Confirm the report exists and is owned by the caller. Ownership is
+    # verified BEFORE the plan gate so that a Free user POSTing an arbitrary
+    # `report_id` gets `report_not_found` (truthful) rather than `plan_locked`
+    # (which would confirm both that the caller is on Free AND that they're
+    # at least authenticated — a minor info leak via error-code timing).
     report = persistence.get_report_for_user(report_id, auth.user_id, auth.org_id)
     if report is None:
         yield _sse_error(
             "report_not_found",
             "That report doesn't exist or isn't yours.",
         )
+        return
+
+    # 2. Plan gate (early reject — no Bedrock call billed).
+    allowed, gate_event = _check_plan_gate(auth.plan, report_id)
+    if not allowed:
+        assert gate_event is not None
+        yield gate_event
         return
 
     # 3. Load history and resolve conversation_id.
@@ -408,11 +410,7 @@ def handler(event: dict, context) -> Generator[bytes, None, None]:
     the chunked HTTP response body."""
     # Reject non-POST early. Function URL's CORS preflight (OPTIONS) is
     # handled by AWS automatically when CORS is configured on the URL.
-    method = (
-        event.get("requestContext", {})
-        .get("http", {})
-        .get("method", "POST")
-    )
+    method = event.get("requestContext", {}).get("http", {}).get("method", "POST")
     if method != "POST":
         yield _sse_error("validation", f"Method {method} not allowed.")
         return

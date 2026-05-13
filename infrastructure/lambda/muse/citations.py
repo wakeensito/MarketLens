@@ -86,8 +86,10 @@ class MetaStripper:
     """
 
     def __init__(self) -> None:
-        self._tail: str = ""              # last few chars held back (potential prefix of META_START)
-        self._meta_buf: str = ""          # characters captured between META_START and META_END
+        self._tail: str = (
+            ""  # last few chars held back (potential prefix of META_START)
+        )
+        self._meta_buf: str = ""  # characters captured between META_START and META_END
         self._in_meta: bool = False
         self._meta_done: bool = False
         self._safe_tail_len: int = len(META_START) - 1
@@ -95,6 +97,13 @@ class MetaStripper:
     def feed(self, chunk: str) -> str:
         """Consume a chunk; return the substring safe to forward to the client."""
         if not chunk:
+            return ""
+
+        # Once META_END has been observed, the meta envelope is closed and the
+        # response is over. Any further chunks are model trailing noise we must
+        # never forward (otherwise text could leak through after the sentinel).
+        if self._meta_done:
+            self._tail = ""
             return ""
 
         if self._in_meta:
@@ -112,7 +121,7 @@ class MetaStripper:
         start_idx = combined.find(META_START)
         if start_idx != -1:
             visible = combined[:start_idx]
-            after_start = combined[start_idx + len(META_START):]
+            after_start = combined[start_idx + len(META_START) :]
             self._tail = ""
             # Re-enter the in_meta path to consume the rest in this chunk too.
             self._in_meta = True

@@ -713,9 +713,8 @@ Resources:
       MemorySize: 256
       Timeout: 10
       Layers:
-        # Powertools layer is appended via Globals; this entry preserves it
-        # alongside the new shared-auth layer so the Lambda gets both.
-        - !Sub arn:aws:lambda:${AWS::Region}:017000801446:layer:AWSLambdaPowertoolsPythonV3-python313-x86_64:18
+        # Powertools layer comes from Globals.Function.Layers (SAM appends
+        # function-level Layers to the global list).
         - !Ref PlinthsAuthLayer
       Policies:
         - DynamoDBReadPolicy:
@@ -784,7 +783,7 @@ Resources:
       MemorySize: 1024
       Timeout: 120
       Layers:
-        - !Sub arn:aws:lambda:${AWS::Region}:017000801446:layer:AWSLambdaPowertoolsPythonV3-python313-x86_64:18
+        # Powertools layer comes from Globals.Function.Layers.
         - !Ref PlinthsAuthLayer
       Policies:
         - DynamoDBCrudPolicy:
@@ -811,11 +810,17 @@ Resources:
   # Explicit Function URL resource (instead of FunctionUrlConfig on the
   # Serverless::Function) so the URL is referenceable by other resources
   # without relying on the SAM transform's implicit resource generation.
+  #
+  # AuthType is AWS_IAM (not NONE) so CloudFront's OAC SigV4 signing is actually
+  # enforced — with NONE the OAC signature is ignored and the URL is reachable
+  # by anyone who learns it. The MuseStreamFunctionUrlPermission below grants
+  # only `cloudfront.amazonaws.com` (scoped to this distribution) the right to
+  # invoke; AWS_IAM evaluates that resource policy against the signed request.
   MuseStreamFunctionUrl:
     Type: AWS::Lambda::Url
     Properties:
       TargetFunctionArn: !GetAtt MuseStreamFunction.Arn
-      AuthType: NONE
+      AuthType: AWS_IAM
       InvokeMode: RESPONSE_STREAM
       Cors:
         AllowOrigins:
@@ -829,13 +834,15 @@ Resources:
         MaxAge: 300
 
   # Allow only this CloudFront distribution to invoke the function URL.
+  # FunctionUrlAuthType matches the URL's AuthType (AWS_IAM) so the grant takes
+  # effect against SigV4-signed requests.
   MuseStreamFunctionUrlPermission:
     Type: AWS::Lambda::Permission
     Properties:
       FunctionName: !Ref MuseStreamFunction
       Action: lambda:InvokeFunctionUrl
       Principal: cloudfront.amazonaws.com
-      FunctionUrlAuthType: NONE
+      FunctionUrlAuthType: AWS_IAM
       SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}"
 
   # ─── Lambda: API ───

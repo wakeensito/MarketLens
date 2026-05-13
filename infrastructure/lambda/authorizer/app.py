@@ -46,9 +46,7 @@ def _generate_policy(
     """
     arn_parts = resource.split(":")
     api_gw_arn = arn_parts[5].split("/")
-    wildcard_resource = (
-        ":".join(arn_parts[:5]) + ":" + "/".join(api_gw_arn[:2]) + "/*"
-    )
+    wildcard_resource = ":".join(arn_parts[:5]) + ":" + "/".join(api_gw_arn[:2]) + "/*"
 
     return {
         "principalId": principal_id,

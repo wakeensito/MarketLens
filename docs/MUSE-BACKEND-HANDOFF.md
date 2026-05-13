@@ -89,7 +89,7 @@ Notes:
 - **Emit `sentence_boundary` after every sentence-final punctuation token** (`.`, `!`, `?`) that the model produces. The frontend uses this to drive a 60ms settle pause per the locked craft direction. Do not emit it inside parenthesized punctuation or mid-citation tokens.
 - **`sources` and `follow_ups` go inside `event: done`**, not as separate event types. Decided to minimize the event surface area on the frontend.
 - **Citation tokens in `delta` strings** use the format `[[target|Label]]` (e.g. `[[gap-2|Gap 2]]`). The frontend's `MuseThread.tsx` already parses this — keep the format.
-- **Error path:** emit `event: error\ndata: {"code": "...", "message": "..."}\n\n` then close the stream. Codes the frontend will recognize: `limit_reached`, `report_not_found`, `auth_failed`, `model_error`, `timeout`.
+- **Error path:** emit `event: error\ndata: {"code": "...", "message": "..."}\n\n` then close the stream. Codes the frontend will recognize: `plan_locked`, `limit_reached`, `report_not_found`, `auth_failed`, `model_error`, `validation`, `timeout`.
 - **Heartbeat:** if the model is slow to first token, emit `: keep-alive\n\n` (SSE comment line) every ~15s so CloudFront doesn't idle-disconnect.
 
 ### `GET /api/muse/conversations/{report_id}`
@@ -228,24 +228,21 @@ MuseStreamFunction:
     Handler: app.handler
     CodeUri: infrastructure/lambda/muse/
     MemorySize: 1024              # bigger heap for Bedrock streaming buffers
-    Timeout: 120                  # match CloudFront idle timeout ceiling
-    FunctionUrlConfig:
-      AuthType: NONE
-      InvokeMode: RESPONSE_STREAM
-      Cors:
-        AllowOrigins:
-          - !Sub https://${CognitoCallbackDomain}    # plinths.net in prod
-        AllowMethods: [POST]
-        AllowHeaders: [content-type, cookie]
-        AllowCredentials: true
-        MaxAge: 300
+    Timeout: 120                  # Lambda's own max execution time (in seconds)
+    # The Function URL is defined as a separate AWS::Lambda::Url resource
+    # (not via FunctionUrlConfig) so other resources can reference its domain
+    # via !GetAtt. AuthType is AWS_IAM so CloudFront's OAC SigV4 signature is
+    # actually validated — AuthType: NONE would leave the URL reachable by
+    # anyone who learns it. CloudFront's idle timeout is 60s between data
+    # chunks; the 15s heartbeat in the Lambda prevents that ceiling from
+    # being hit during slow Bedrock responses.
     Environment:
       Variables:
         MUSE_CONVERSATIONS_TABLE: !Ref MuseConversationsTable
         REPORTS_TABLE: !Ref ReportsTable
         COGNITO_USER_POOL_ID: !Ref CognitoUserPool
         COGNITO_CLIENT_ID: !Ref CognitoUserPoolClient
-        CHAT_MODEL_ID: amazon.nova-2-lite-v1:0
+        CHAT_MODEL_ID: !Ref BedrockModelIdMuseChat
     Policies:
       - DynamoDBCrudPolicy:
           TableName: !Ref MuseConversationsTable
@@ -254,7 +251,7 @@ MuseStreamFunction:
       - Statement:
           - Effect: Allow
             Action: bedrock:InvokeModelWithResponseStream
-            Resource: !Sub arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.nova-2-lite-v1:0
+            Resource: !Sub arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockModelIdMuseChat}
 ```
 
 Scoped IAM per CLAUDE.md: model ARN is **exact**, not wildcard. Same rule for the table policies.
