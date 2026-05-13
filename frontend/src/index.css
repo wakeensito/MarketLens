@@ -1840,37 +1840,6 @@ textarea:focus-visible {
   flex-shrink: 0;
 }
 
-.ai-input__attach {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 32px;
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-
-.ai-input__attach:hover {
-  background: var(--bg);
-  color: var(--text-secondary);
-}
-
-.ai-input__file {
-  position: absolute;
-  width: 0;
-  height: 0;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.ai-input__attach-icon {
-  width: 16px;
-  height: 16px;
-}
-
 .ai-input__send {
   display: inline-flex;
   align-items: center;

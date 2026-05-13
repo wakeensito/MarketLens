@@ -15,6 +15,10 @@ import { ThemePicker } from './components/ThemePicker';
 import { useAnalysis } from './hooks/useAnalysis';
 import { useAuthContext } from './hooks/useAuth';
 import { useBilling } from './hooks/useBilling';
+import { useMuse } from './hooks/useMuse';
+import { MuseThread } from './components/muse/MuseThread';
+import { MuseEmptyLine } from './components/muse/MuseEmptyLine';
+import './components/muse/muse.css';
 import { EXAMPLE_QUERIES } from './mockData';
 import { landingEntryAnimate, landingEntryInitial } from './motion';
 import { submitFeedback } from './api';
@@ -54,6 +58,44 @@ export default function App() {
   });
 
   const billing = useBilling();
+  const muse = useMuse(reportId);
+
+  // When a citation routes the user to report-open with a target cell, scroll
+  // smoothly to the matching `[data-muse-cell]` element and pulse it once.
+  // Lives at the App boundary so ReportView stays pure — it just emits stable
+  // data attributes; the routing logic is owned by the Muse integration layer.
+  useEffect(() => {
+    if (!muse.enabled) return;
+    if (muse.view !== 'report-open' || !muse.highlightTarget) return;
+    const target = muse.highlightTarget;
+    type WithMuseClear = HTMLElement & { _museClear?: number };
+    let pulsed: WithMuseClear | null = null;
+    const t = window.setTimeout(() => {
+      const el = document.querySelector<HTMLElement>(
+        `[data-muse-cell="${target}"]`,
+      ) as WithMuseClear | null;
+      if (!el) return;
+      // Clear any prior pulse timer on this element before starting a new one.
+      if (el._museClear !== undefined) {
+        window.clearTimeout(el._museClear);
+      }
+      pulsed = el;
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('muse-cell-pulsing');
+      el._museClear = window.setTimeout(() => {
+        el.classList.remove('muse-cell-pulsing');
+        el._museClear = undefined;
+      }, 1600);
+    }, 120);
+    return () => {
+      window.clearTimeout(t);
+      if (pulsed?._museClear !== undefined) {
+        window.clearTimeout(pulsed._museClear);
+        pulsed._museClear = undefined;
+        pulsed.classList.remove('muse-cell-pulsing');
+      }
+    };
+  }, [muse.enabled, muse.view, muse.highlightTarget]);
   const [billingCancelToast, setBillingCancelToast] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     const params = new URLSearchParams(window.location.search);
@@ -187,6 +229,7 @@ export default function App() {
     } else {
       setShowSignIn(true);
     }
+    // Muse state is per-report and auto-clears when reportId becomes null.
     setInputValue('');
     setShowSavePrompt(false);
   }, [auth.isAuthenticated, startNewChat]);
@@ -194,6 +237,14 @@ export default function App() {
 
   const onSubmit = useCallback((val: string) => {
     if (val.trim().length <= 4) return;
+
+    // Muse hijack: when the preview is enabled and we're sitting on a finished
+    // report, the bottom input talks to Muse instead of starting a new analysis.
+    if (muse.enabled && screen === 'report' && report && reportId) {
+      muse.sendMessage(val.trim());
+      setInputValue('');
+      return;
+    }
 
     if (!auth.isAuthenticated) {
       // Store the query so we can auto-submit after sign-in. Also mirror to
@@ -209,7 +260,7 @@ export default function App() {
     startAnalysis(val.trim());
     setInputValue('');
     setShowSavePrompt(false);
-  }, [startAnalysis, auth.isAuthenticated]);
+  }, [startAnalysis, auth.isAuthenticated, muse, screen, report, reportId]);
 
   // ── Loading ─────────────────────────────────────────────
   if (auth.loading) {
@@ -587,24 +638,73 @@ export default function App() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1, transition: { duration: 0.4 } }}
                   >
-                    {report && reportId && (
-                      <ReportView
-                        report={report}
-                        reportId={reportId}
-                        onRequestUpgrade={() => setProactiveUpgrade(true)}
-                        onUpgradeToPro={() => {
-                          if (!auth.isAuthenticated) {
-                            pendingCheckoutPlanRef.current = 'pro';
-                            setShowSignIn(true);
-                            return;
-                          }
-                          void billing.startCheckout('pro');
-                        }}
-                        onFeedback={async (rating, comment) => {
-                          await submitFeedback(reportId, rating, comment);
-                        }}
-                      />
-                    )}
+                    {report && reportId && (() => {
+                      const reportEl = (
+                        <ReportView
+                          report={report}
+                          reportId={reportId}
+                          onRequestUpgrade={() => setProactiveUpgrade(true)}
+                          onUpgradeToPro={() => {
+                            if (!auth.isAuthenticated) {
+                              pendingCheckoutPlanRef.current = 'pro';
+                              setShowSignIn(true);
+                              return;
+                            }
+                            void billing.startCheckout('pro');
+                          }}
+                          onFeedback={async (rating, comment) => {
+                            await submitFeedback(reportId, rating, comment);
+                          }}
+                        />
+                      );
+
+                      if (!muse.enabled) return reportEl;
+
+                      return (
+                        <>
+                          {muse.view !== 'chat' && (
+                            <div
+                              className={
+                                'muse-report-surface' +
+                                (muse.view === 'report-open' ? ' muse-report-surface--open' : '')
+                              }
+                            >
+                              {muse.view === 'report-open' && muse.highlightTarget && (
+                                <div className="muse-back-banner">
+                                  <span className="muse-back-banner__label">
+                                    From your conversation
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="muse-back-banner__btn"
+                                    onClick={muse.closeReport}
+                                  >
+                                    <span aria-hidden>←</span>
+                                    <span>Back to chat</span>
+                                  </button>
+                                </div>
+                              )}
+                              {reportEl}
+                            </div>
+                          )}
+
+                          {muse.view === 'idle' && muse.thread.length === 0 && (
+                            <MuseEmptyLine />
+                          )}
+
+                          {muse.view === 'chat' && (
+                            <MuseThread
+                              thread={muse.thread}
+                              streamingText={muse.streamingText}
+                              onCite={muse.cite}
+                              onAsk={muse.sendMessage}
+                              onRegenerate={muse.regenerate}
+                              onFeedback={muse.setFeedback}
+                            />
+                          )}
+                        </>
+                      );
+                    })()}
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -623,10 +723,33 @@ export default function App() {
                   value={inputValue}
                   onChange={setInputValue}
                   onSubmit={onSubmit}
-                  placeholder="Type a new idea to analyse"
+                  placeholder={
+                    muse.enabled && screen === 'report'
+                      ? muse.view === 'idle'
+                        ? 'Ask about this report…'
+                        : 'Reply…'
+                      : 'Type a new idea to analyse'
+                  }
                   compact
+                  museMode={
+                    muse.enabled && screen === 'report' ? muse.view : null
+                  }
+                  onMuseToggle={muse.toggleReport}
                 />
               </motion.div>
+            )}
+
+            {/* Dev chip — visible only while muse preview is enabled. Informational
+                only; destructive actions (delete report + its thread) live in the sidebar. */}
+            {muse.enabled && (
+              <div className="muse-dev-chip">
+                <span className="muse-dev-chip__dot" aria-hidden />
+                <span>
+                  muse · {muse.view}
+                  {reportId ? ` · #${reportId.slice(-6)}` : ' · no report'}
+                  {muse.thread.length > 0 ? ` · ${muse.thread.length}` : ''}
+                </span>
+              </div>
             )}
           </div>
         </>

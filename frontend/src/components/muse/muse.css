@@ -1,0 +1,572 @@
+/* Muse — chat agent UI integrated into the workspace.
+   Optimized for "prestigious LLM" feel (Perplexity-grade) while preserving
+   Plinths' document register. No new color tokens. */
+
+/* ────────────────────────────────────────────────────────────
+   Thread
+   ──────────────────────────────────────────────────────────── */
+
+.muse-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+  padding: 1rem 0 2rem;
+}
+
+/* ────────────────────────────────────────────────────────────
+   User query — rendered as a heading, not a bubble
+   ──────────────────────────────────────────────────────────── */
+
+.muse-query {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.muse-query__heading {
+  font-family: var(--font-display);
+  font-size: clamp(1.25rem, 1.8vw, 1.625rem);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.3;
+  color: var(--text);
+  margin: 0;
+}
+
+.muse-query__rule {
+  height: 1px;
+  background: var(--accent-border);
+}
+
+/* ────────────────────────────────────────────────────────────
+   Muse answer block
+   ──────────────────────────────────────────────────────────── */
+
+.muse-answer {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: -1rem; /* tuck the answer closer to its query */
+}
+
+/* ── Sources row ─────────────────────────────────────────── */
+
+.muse-sources {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.muse-sources__label {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.muse-sources__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+/* ── Prose — serif body, prestige reading ─────────────── */
+
+.muse-prose {
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  line-height: 1.7;
+  color: var(--text);
+  max-width: 38rem;
+}
+
+.muse-prose__p {
+  margin: 0;
+}
+
+.muse-prose__p + .muse-prose__p {
+  margin-top: 1rem;
+}
+
+.muse-prose strong {
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* ── Stream cursor — thin vertical line, not a block ── */
+
+.muse-stream-cursor {
+  display: inline-block;
+  width: 1px;
+  height: 1.05em;
+  margin-left: 2px;
+  vertical-align: -0.18em;
+  background: var(--text-secondary);
+  animation: muse-cursor 1s steps(2, end) infinite;
+}
+
+@keyframes muse-cursor {
+  0%, 50%      { opacity: 1; }
+  50.01%, 100% { opacity: 0; }
+}
+
+/* ── Citation pills — first-class, document-shaped ─── */
+
+.muse-cite {
+  display: inline-flex;
+  align-items: baseline;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--signal);
+  background: var(--signal-light);
+  border: 1px solid var(--signal-border);
+  border-radius: var(--radius-sm);
+  padding: 0.125rem 0.5rem;
+  margin: 0 0.0625rem;
+  cursor: pointer;
+  vertical-align: baseline;
+  line-height: 1.25;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+@media (hover: hover) {
+  .muse-cite:hover {
+    background: color-mix(in oklch, var(--signal) 14%, transparent);
+    border-color: color-mix(in oklch, var(--signal) 30%, transparent);
+  }
+}
+
+.muse-cite:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+.muse-cite__glyph {
+  display: inline-block;
+  margin-right: 0.25rem;
+  opacity: 0.7;
+}
+
+.muse-cite--cross {
+  border-radius: 4px 4px 2px 2px;
+}
+
+/* ── Action row — copy / regenerate / cite + feedback ─────── */
+
+.muse-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-top: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.muse-actions__group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.muse-actions__btn {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  padding: 0.25rem 0;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.muse-actions__btn:hover {
+  color: var(--text);
+}
+
+.muse-actions__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.muse-actions__dot {
+  font-family: var(--font-mono);
+  color: var(--border-mid);
+  font-size: 0.625rem;
+}
+
+/* Per-response feedback — thumbs up / down */
+.muse-feedback {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.muse-feedback__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease,
+    border-color 0.15s ease, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.muse-feedback__btn:hover {
+  color: var(--text);
+  background: var(--accent-light);
+}
+
+.muse-feedback__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.muse-feedback__btn.is-active {
+  border-color: var(--accent-border);
+  background: var(--accent-light);
+  transform: scale(1.05);
+}
+
+.muse-feedback__btn.is-up.is-active {
+  color: var(--signal);
+  border-color: var(--signal-border);
+  background: var(--signal-light);
+}
+
+.muse-feedback__btn.is-down.is-active {
+  color: var(--warning);
+  border-color: color-mix(in oklch, var(--warning) 22%, transparent);
+  background: var(--warning-light);
+}
+
+/* ── Follow-up suggestions — vertical list with arrows ─── */
+
+.muse-followups {
+  display: flex;
+  flex-direction: column;
+  margin-top: 0.5rem;
+  border-top: 1px solid var(--accent-border);
+}
+
+.muse-followup {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 0;
+  border: none;
+  border-bottom: 1px solid var(--accent-border);
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  text-align: left;
+  cursor: pointer;
+  transition: color 0.15s ease, padding-left 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.muse-followup:hover {
+  color: var(--text);
+  padding-left: 0.5rem;
+}
+
+.muse-followup:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+  border-radius: var(--radius-sm);
+}
+
+.muse-followup__text {
+  flex: 1 1 auto;
+}
+
+.muse-followup__arrow {
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  transition: color 0.15s ease, transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.muse-followup:hover .muse-followup__arrow {
+  color: var(--text);
+  transform: translateX(4px);
+}
+
+/* ────────────────────────────────────────────────────────────
+   Empty-state mono line
+   ──────────────────────────────────────────────────────────── */
+
+.muse-empty-line {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 2.5rem 0 1.5rem;
+}
+
+.muse-empty-line--locked {
+  color: var(--text-secondary);
+}
+
+.muse-empty-line__upgrade {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.muse-empty-line__upgrade:hover {
+  color: var(--text);
+  border-color: var(--border-mid);
+  background: var(--accent-light);
+}
+
+/* ────────────────────────────────────────────────────────────
+   Saturation toggle mark — the ▬▬ glyph (used in AnimatedAiInput toolbar)
+   ──────────────────────────────────────────────────────────── */
+
+.muse-toggle-mark {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 14px;
+}
+
+.muse-toggle-mark__bar {
+  height: 3px;
+  border-radius: 1px;
+  background: currentcolor;
+}
+
+.muse-toggle-mark__bar--low  { width: 100%; }
+.muse-toggle-mark__bar--high { width: 60%;  }
+
+/* ────────────────────────────────────────────────────────────
+   AnimatedAiInput muse-toggle slot
+   ──────────────────────────────────────────────────────────── */
+
+.ai-input__muse-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+@media (hover: hover) {
+  .ai-input__muse-toggle:hover {
+    background: var(--accent-light);
+    border-color: var(--accent-border);
+    color: var(--text);
+  }
+}
+
+.ai-input__muse-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ai-input__muse-toggle-inner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ai-input__muse-glyph {
+  width: 16px;
+  height: 16px;
+}
+
+/* ────────────────────────────────────────────────────────────
+   Workspace integration — wrapper around ReportView
+   ──────────────────────────────────────────────────────────── */
+
+.muse-report-surface {
+  display: block;
+}
+
+.muse-report-surface--open {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Cell pulse — fires when a citation routes here ─────── */
+
+[data-muse-cell].muse-cell-pulsing {
+  animation: muse-cell-pulse 1.6s cubic-bezier(0.22, 1, 0.36, 1) 1;
+  border-radius: var(--radius-lg);
+}
+
+@keyframes muse-cell-pulse {
+  0%   { box-shadow: 0 0 0 0 transparent; }
+  25%  { box-shadow: 0 0 0 4px var(--signal-light); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* Respect users who prefer reduced motion: disable the blinking cursor and
+   the cell pulse. The cursor stays at full opacity so the stream head is still
+   visible; the pulse becomes a no-op (citations still scroll into view). */
+@media (prefers-reduced-motion: reduce) {
+  .muse-stream-cursor {
+    animation: none;
+    opacity: 1;
+  }
+  [data-muse-cell].muse-cell-pulsing {
+    animation: none;
+  }
+}
+
+/* Help the scrollIntoView land below any sticky nav above */
+[data-muse-cell] {
+  scroll-margin-top: 5rem;
+  scroll-margin-bottom: 5rem;
+}
+
+/* ── Back banner — top of report when arrived via citation ── */
+
+.muse-back-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  margin: 0 0 1.5rem;
+  background: var(--surface);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-lg);
+  position: sticky;
+  top: 1rem;
+  z-index: 2;
+}
+
+.muse-back-banner__label {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.muse-back-banner__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.375rem 0.75rem;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.muse-back-banner__btn:hover {
+  color: var(--text);
+  border-color: var(--border-mid);
+  background: var(--accent-light);
+}
+
+.muse-back-banner__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ────────────────────────────────────────────────────────────
+   Dev chip — preview-mode indicator
+   ──────────────────────────────────────────────────────────── */
+
+.muse-dev-chip {
+  position: fixed;
+  left: 1rem;
+  bottom: 1rem;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: var(--surface);
+  border: 1px dashed var(--border-mid);
+  border-radius: var(--radius-sm);
+}
+
+.muse-dev-chip__dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--signal);
+}
+
+/* ────────────────────────────────────────────────────────────
+   Responsive
+   ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .muse-thread {
+    gap: 2.25rem;
+  }
+
+  .muse-answer {
+    gap: 1rem;
+  }
+
+  .muse-prose {
+    font-size: 1rem;
+    line-height: 1.65;
+  }
+
+  .muse-empty-line {
+    flex-direction: column;
+    gap: 0.625rem;
+    padding: 2rem 0 1.25rem;
+  }
+
+  .muse-followup {
+    font-size: 0.9375rem;
+  }
+}

@@ -216,6 +216,7 @@ function CompetitorTable({ competitors }: { competitors: Competitor[] }) {
         {competitors.map((c, i) => (
           <motion.tr
             key={c.name}
+            data-muse-cell={`competitor-${i + 1}`}
             initial={{ opacity: 0, x: -4 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={VIEWPORT}
@@ -243,6 +244,7 @@ function CompetitorCard({ c, index }: { c: Competitor; index: number }) {
   return (
     <motion.div
       className={`comp-card comp-card--${c.strength}`}
+      data-muse-cell={`competitor-${index + 1}`}
       initial={{ opacity: 0, y: 8 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={VIEWPORT}
@@ -302,6 +304,7 @@ function GapRow({ gap, index }: { gap: MarketGap; index: number }) {
   return (
     <motion.div
       className="gap-row"
+      data-muse-cell={`gap-${index + 1}`}
       initial={{ opacity: 0, y: 8 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={VIEWPORT}
@@ -326,6 +329,7 @@ function RoadmapRow({ phase, index }: { phase: RoadmapPhase; index: number }) {
   return (
     <motion.div
       className="roadmap-phase"
+      data-muse-cell={`roadmap-${index + 1}`}
       initial={{ opacity: 0, y: 8 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={VIEWPORT}
