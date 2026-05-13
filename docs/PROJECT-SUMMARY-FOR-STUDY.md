@@ -92,16 +92,16 @@ The pipeline uses **3 different foundation models** via Amazon Bedrock, each cho
 
 | Stage | Model | Why This Model | Cost/1M tokens (in/out) |
 |---|---|---|---|
-| Parse + Search | Amazon Nova Micro | Cheap structured extraction, fast | $0.035 / $0.14 |
+| Parse + Search | Amazon Nova 2 Lite | Fast structured extraction; unified with Summarise | sync AWS pricing |
 | Analyse | DeepSeek V3.2 | Strong reasoning at mid-tier price | $0.62 / $1.85 |
-| Summarise | Claude 3 Haiku | Natural prose generation | $0.25 / $1.25 |
+| Summarise | Amazon Nova 2 Lite | Natural prose JSON (replaces Claude 3 Haiku) | sync AWS pricing |
 
-**Per-report total LLM cost: ~$0.007**
+**Per-report total LLM cost:** re-benchmark after Nova 2 Lite cutover (prior ~$0.007 with Nova Micro + DeepSeek + Haiku). See `docs/BEDROCK-MODEL-CONFIG.md`.
 
 ### Why Multi-Model?
 
-- **Cost optimization:** Using the cheapest model that can handle each task. Nova Micro for structured extraction is 7x cheaper than Haiku.
-- **Quality optimization:** DeepSeek V3.2 for reasoning outperforms Nova Micro on competitive analysis tasks.
+- **Cost optimization:** Using the right-sized model per task. **Nova 2 Lite** covers Parse, Search structuring, and Summarise (replacing Nova Micro + Claude Haiku on those stages). See `docs/BEDROCK-MODEL-CONFIG.md`.
+- **Quality optimization:** DeepSeek V3.2 for reasoning outperforms lighter models on competitive analysis tasks.
 - **Latency optimization:** Smaller models respond faster for simple tasks.
 
 ---
@@ -441,9 +441,9 @@ ORDER BY result_opportunity_score DESC;
    ┌────────┐           ┌────────┐ ┌────────┐ ┌────────────────┐
    │DynamoDB│           │   S3   │ │ Stripe │ │ Amazon Bedrock  │
    │(reports│           │(exports│ │  API   │ │                 │
-   │ users) │           │  .csv) │ │        │ │ Nova Micro      │
+   │ users) │           │  .csv) │ │        │ │ Nova 2 Lite     │
    └────────┘           └────────┘ └────────┘ │ DeepSeek V3.2   │
-                                               │ Claude 3 Haiku  │
+                                               │ Nova 2 Lite     │
        ┌───────────────────────────────────────┘
        │
        ▼

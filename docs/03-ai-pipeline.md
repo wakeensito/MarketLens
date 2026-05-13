@@ -5,11 +5,11 @@
 **Status:** v1.1 · **Owner:** AI Lead · **Last reviewed:** April 2026
 
 > **Implementation note (v1.1):** The PoC uses a 3-model setup optimized for cost + quality:
-> - **Parse + Search:** Amazon Nova Micro ($0.035/$0.14 per 1M tokens) — cheap structured extraction
+> - **Parse + Search:** Amazon Nova 2 Lite — structured extraction (Bedrock ID `amazon.nova-2-lite-v1:0`; sync pricing on AWS)
 > - **Analyse:** DeepSeek V3.2 ($0.62/$1.85 per 1M tokens) — strong reasoning at mid-tier price
-> - **Summarise:** Claude 3 Haiku ($0.25/$1.25 per 1M tokens) — natural prose generation
+> - **Summarise:** Amazon Nova 2 Lite — natural prose generation (replaces Claude 3 Haiku on this stage)
 >
-> Per-report LLM cost: ~$0.007. The design-doc models (Haiku for Parse, Sonnet for Analyse/Summarise) remain the target for paid tiers.
+> Per-report LLM cost: re-benchmark after cutover. Canonical deploy defaults: `docs/BEDROCK-MODEL-CONFIG.md`. The design-doc models (Haiku for Parse, Sonnet for Analyse/Summarise) remain a reference for future paid-tier upgrades.
 
 > 📖 **Prerequisites:** Read [02 — Microservices Design](./02-microservices-design.md) §7 (AI Orchestration Service) for high-level context.
 

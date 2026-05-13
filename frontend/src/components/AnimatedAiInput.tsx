@@ -80,11 +80,11 @@ export interface AnimatedAiInputProps {
   compact?: boolean;
   /** Override auto-focus behaviour. Defaults to true when not compact. */
   autoFocus?: boolean;
-  /** When set (and not 'idle'), the paperclip slot is replaced by the Muse report toggle.
-   *  - 'chat'         → mini saturation-bar glyph (▬▬), tap opens the report
-   *  - 'report-open'  → close glyph (✕), tap returns to the chat
-   *  The button shares `layoutId="muse-report-surface"` with the workspace report element,
-   *  so framer-motion morphs the report into/out of this slot. */
+  /** When set to 'chat' or 'report-open', the toolbar renders the Muse view-toggle.
+   *  When `null` or 'idle' the slot is absent (no separator, no placeholder).
+   *  - 'chat'         → mini saturation-bar glyph (▬▬); `onMuseToggle` opens the report
+   *  - 'report-open'  → chat-bubble glyph (lucide `MessageSquare`); `onMuseToggle` returns to chat
+   *  Plain button — no `layoutId` morph; view swap is a clean mount/unmount. */
   museMode?: MuseView | null;
   onMuseToggle?: () => void;
 }

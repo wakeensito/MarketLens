@@ -72,9 +72,9 @@ export interface UseMuseResult {
  *  Threads persist in localStorage keyed by reportId so switching reports in the
  *  sidebar surfaces each report's own conversation. */
 export function useMuse(reportId: string | null): UseMuseResult {
-  const flagRef = useRef(readMuseFlag());
-  const enabled = flagRef.current.enabled;
-  const demo = flagRef.current.demo;
+  // Read the flag once at mount via lazy useState — using a ref + .current
+  // would trigger react-hooks/refs at every render-phase access.
+  const [{ enabled, demo }] = useState(readMuseFlag);
   const demoSeededRef = useRef(false);
 
   const [thread, setThread] = useState<MuseTurn[]>([]);
@@ -98,7 +98,11 @@ export function useMuse(reportId: string | null): UseMuseResult {
     return id;
   }, []);
 
-  // Swap thread + view when reportId changes — per-report scoping.
+  // Swap thread + view when reportId changes — per-report scoping is the whole
+  // point of this hook. Legitimately syncs internal state to a prop change;
+  // refactoring to useReducer wouldn't change the cascading-render shape and
+  // would substantially churn the hook for no functional gain.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     clearTimers();
     setStreamingText(null);
@@ -123,6 +127,7 @@ export function useMuse(reportId: string | null): UseMuseResult {
     setView(initial.length > 0 ? 'chat' : 'idle');
     replyIndexRef.current = initial.filter(t => t.speaker === 'muse').length;
   }, [reportId, demo, clearTimers]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Persist thread on change.
   useEffect(() => {
@@ -203,13 +208,29 @@ export function useMuse(reportId: string | null): UseMuseResult {
     [reportId, thread, clearTimers, beginStream],
   );
 
-  const openReport = useCallback(() => setView('report-open'), []);
+  const openReport = useCallback(() => {
+    // Opening via the toolbar (not via a citation) clears any lingering
+    // highlight so the back-banner doesn't show — the user navigated here
+    // themselves and doesn't need a "back to your conversation" affordance.
+    setHighlightTarget(null);
+    setView('report-open');
+  }, []);
   const closeReport = useCallback(() => {
     setView('chat');
-    queueTimer(() => setHighlightTarget(null), 1200);
-  }, [queueTimer]);
+    setHighlightTarget(null);
+  }, []);
   const toggleReport = useCallback(() => {
-    setView(v => (v === 'report-open' ? 'chat' : v === 'chat' ? 'report-open' : v));
+    setView(v => {
+      if (v === 'report-open') {
+        setHighlightTarget(null);
+        return 'chat';
+      }
+      if (v === 'chat') {
+        setHighlightTarget(null);
+        return 'report-open';
+      }
+      return v;
+    });
   }, []);
 
   const cite = useCallback((target: string) => {

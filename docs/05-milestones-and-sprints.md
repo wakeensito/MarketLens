@@ -45,7 +45,7 @@ This plan starts with the simplest possible AWS deployment — Lambda Durable Fu
 
 All items completed. See [Phase 0 checklist in v1.0](docs/05-milestones-and-sprints.md at tag `v1.0-poc`) for the full task list.
 
-**Result:** Full 7-stage AI pipeline (sanitize → parse → search → analyse → score → summarise → assemble) running on Lambda Durable Functions with multi-model setup (Nova Micro + DeepSeek V3.2 + Claude 3 Haiku). Per-report cost: ~$0.007.
+**Result:** Full 7-stage AI pipeline (sanitize → parse → search → analyse → score → summarise → assemble) running on Lambda Durable Functions with multi-model setup (**Amazon Nova 2 Lite** on Parse/Search + Summarise, **DeepSeek V3.2** on Analyse). Per-report cost: re-benchmark after model change; see `docs/BEDROCK-MODEL-CONFIG.md`.
 
 ---
 
@@ -165,7 +165,7 @@ Tier structure decided (solo-only — no multi-seat plan):
 
 Notes on what is intentionally **not** plan-gated:
 - Live web search (Brave + Wikipedia + Wikidata) runs on every report regardless of plan
-- Report-pipeline model selection is the same on every plan (Bedrock Nova + DeepSeek + Haiku)
+- Report-pipeline model selection is the same on every plan (Bedrock Nova 2 Lite + DeepSeek)
 - The model selection differentiator is **for Muse only**, not the report pipeline
 
 ### Gate enforcement status:
@@ -249,7 +249,7 @@ INDEPENDENT:
 | # | Lambda | Purpose |
 |---|---|---|
 | 1 | API | REST CRUD for reports (org-scoped, plan-aware rate limits) |
-| 2 | AI Orchestration | 7-stage durable pipeline (Nova Micro + DeepSeek + Haiku) |
+| 2 | AI Orchestration | 7-stage durable pipeline (Nova 2 Lite + DeepSeek + Nova 2 Lite) |
 | 3 | Export | CSV generation with presigned S3 URLs |
 | 4 | BFF Auth | `/auth/initiate`, `/auth/verify`, `/auth/login`, `/auth/callback`, `/auth/refresh`, `/auth/logout`, `/auth/me` |
 | 5 | Authorizer | Cookie → JWT validation → DynamoDB user lookup → context injection |

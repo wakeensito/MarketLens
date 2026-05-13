@@ -68,21 +68,33 @@ export default function App() {
     if (!muse.enabled) return;
     if (muse.view !== 'report-open' || !muse.highlightTarget) return;
     const target = muse.highlightTarget;
-    // Wait a frame for the report DOM to mount, then scroll + pulse.
+    type WithMuseClear = HTMLElement & { _museClear?: number };
+    let pulsed: WithMuseClear | null = null;
     const t = window.setTimeout(() => {
       const el = document.querySelector<HTMLElement>(
         `[data-muse-cell="${target}"]`,
-      );
+      ) as WithMuseClear | null;
       if (!el) return;
+      // Clear any prior pulse timer on this element before starting a new one.
+      if (el._museClear !== undefined) {
+        window.clearTimeout(el._museClear);
+      }
+      pulsed = el;
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       el.classList.add('muse-cell-pulsing');
-      const clear = window.setTimeout(() => {
+      el._museClear = window.setTimeout(() => {
         el.classList.remove('muse-cell-pulsing');
+        el._museClear = undefined;
       }, 1600);
-      // Store the clear timer on the element so a re-cite doesn't leak it.
-      (el as HTMLElement & { _museClear?: number })._museClear = clear;
     }, 120);
-    return () => window.clearTimeout(t);
+    return () => {
+      window.clearTimeout(t);
+      if (pulsed?._museClear !== undefined) {
+        window.clearTimeout(pulsed._museClear);
+        pulsed._museClear = undefined;
+        pulsed.classList.remove('muse-cell-pulsing');
+      }
+    };
   }, [muse.enabled, muse.view, muse.highlightTarget]);
   const [billingCancelToast, setBillingCancelToast] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
@@ -657,12 +669,10 @@ export default function App() {
                                 (muse.view === 'report-open' ? ' muse-report-surface--open' : '')
                               }
                             >
-                              {muse.view === 'report-open' && (
+                              {muse.view === 'report-open' && muse.highlightTarget && (
                                 <div className="muse-back-banner">
                                   <span className="muse-back-banner__label">
-                                    {muse.highlightTarget
-                                      ? 'From your conversation'
-                                      : 'Viewing report'}
+                                    From your conversation
                                   </span>
                                   <button
                                     type="button"

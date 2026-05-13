@@ -5,10 +5,10 @@ Stages: sanitize → parse → search → analyse → score → summarise → as
 Each stage is a durable step with automatic checkpointing and retry.
 
 Models (per stage):
-  - Parse:     Amazon Nova Micro   ($0.035/$0.14 per 1M tokens)
-  - Search:    Brave Search API    ($5/1K requests) + Nova Micro (structuring)
+  - Parse:     Amazon Nova 2 Lite  (see _MODEL_COST_PER_1M; sync with AWS pricing)
+  - Search:    Brave Search API    ($5/1K requests) + Nova 2 Lite (structuring)
   - Analyse:   DeepSeek V3.2       ($0.62/$1.85 per 1M tokens)
-  - Summarise: Claude 3 Haiku      ($0.25/$1.25 per 1M tokens)
+  - Summarise: Amazon Nova 2 Lite  (replaces Claude 3 Haiku; same ID family as Parse)
 """
 
 import os
@@ -34,11 +34,14 @@ metrics = Metrics()
 _MODEL_COST_PER_1M = {
     "input": {
         "amazon.nova-micro": 0.035,
+        # Nova 2 Lite — approximate; reconcile with https://aws.amazon.com/bedrock/pricing/
+        "amazon.nova-2-lite": 0.30,
         "deepseek": 0.62,
         "anthropic.claude-3-haiku": 0.25,
     },
     "output": {
         "amazon.nova-micro": 0.14,
+        "amazon.nova-2-lite": 2.50,
         "deepseek": 1.85,
         "anthropic.claude-3-haiku": 1.25,
     },
@@ -48,6 +51,8 @@ _MODEL_COST_PER_1M = {
 def _model_cost_key(model_id: str) -> str:
     """Map a full Bedrock model ID to a cost-table key."""
     mid = model_id.lower()
+    if "nova-2-lite" in mid:
+        return "amazon.nova-2-lite"
     if "nova-micro" in mid:
         return "amazon.nova-micro"
     if "nova-lite" in mid:
@@ -612,7 +617,7 @@ def sanitize(idea_text: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Stage 2: Parse  (Nova Micro — cheap structured extraction)
+# Stage 2: Parse  (Amazon Nova 2 Lite — structured extraction)
 # ---------------------------------------------------------------------------
 def parse(cleaned_idea: str) -> dict:
     """Extract industry, geography, business model, complexity via LLM."""
@@ -648,12 +653,12 @@ Business idea: <<<{cleaned_idea}>>>"""
 
 
 # ---------------------------------------------------------------------------
-# Stage 3: Search  (Brave Search API + Nova Micro for structuring)
+# Stage 3: Search  (Brave Search API + Nova 2 Lite for structuring)
 # ---------------------------------------------------------------------------
 def search(parsed: dict) -> dict:
     """Search for competitors, market size, and trends via Brave Search API.
 
-    Runs 6 targeted searches across high-quality sources, then uses Nova Micro
+    Runs 6 targeted searches across high-quality sources, then uses Nova 2 Lite
     to structure the raw results into the schema the pipeline expects.
     Falls back to pure LLM search if Brave API is unavailable.
     """
@@ -864,7 +869,7 @@ RULES:
 
 
 def _search_fallback_llm(parsed: dict) -> dict:
-    """Fallback: use Nova Micro to generate search results when Brave is unavailable."""
+    """Fallback: use Nova 2 Lite to generate search results when Brave is unavailable."""
     keywords = parsed.get("keywords", [])
     industry = parsed.get("industry", "")
     sub_industry = parsed.get("sub_industry", "")
@@ -1368,7 +1373,7 @@ def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Stage 6: Summarise  (Claude 3 Haiku — natural prose)
+# Stage 6: Summarise  (Amazon Nova 2 Lite — natural prose JSON)
 # ---------------------------------------------------------------------------
 def summarise(analysis: dict, scores: dict, parsed: dict, search_results: dict) -> dict:
     """Generate beginner-friendly explanation and gap analysis via LLM."""
@@ -1481,11 +1486,11 @@ def handler(event: dict, context: DurableContext) -> dict:
         sanitized = context.step(lambda _: sanitize(idea_text), name="sanitize")
         _set_stage(report_id, "sanitize", org_id)
 
-        # Stage 2: Parse  (Nova Micro)
+        # Stage 2: Parse  (Nova 2 Lite)
         parsed = context.step(lambda _: parse(sanitized["cleaned_idea"]), name="parse")
         _set_stage(report_id, "parse", org_id)
 
-        # Stage 3: Search  (Brave Search API + Nova Micro)
+        # Stage 3: Search  (Brave Search API + Nova 2 Lite)
         search_results = context.step(lambda _: search(parsed), name="search")
         _set_stage(report_id, "search", org_id)
 
@@ -1501,7 +1506,7 @@ def handler(event: dict, context: DurableContext) -> dict:
         )
         _set_stage(report_id, "score", org_id)
 
-        # Stage 6: Summarise  (Claude 3 Haiku)
+        # Stage 6: Summarise  (Nova 2 Lite)
         summary = context.step(
             lambda _: summarise(analysis, scores, parsed, search_results),
             name="summarise",

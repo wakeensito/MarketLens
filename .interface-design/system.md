@@ -48,7 +48,7 @@ Typical scale in CSS: `0.25 · 0.5 · 0.625 · 0.75 · 1 · 1.25 · 1.5 · 2 · 
 
 ## Radius
 
-```
+```text
 --radius-sm:   3px   inputs, small pills
 --radius-md:   4px   buttons
 --radius-lg:   6px   surface chips, attachment buttons, focus targets
@@ -122,7 +122,7 @@ These decisions sit on top of the structural locks in CLAUDE.md (inline thread, 
 
 Every turn is a **query → answer** document pair. No bubbles, no avatars, no left-side rules, no right-alignment. The hierarchy is the speaker indicator.
 
-```
+```text
 how does the gap around onboarding compare to mid-market HR tools?
 ──────────────────────────────────────────────────────────────────
 (thin --accent-border rule under the heading)
@@ -150,7 +150,7 @@ Typography:
 
 Mono pills in `--signal`. Cite cells, not URLs.
 
-```
+```text
 [Gap 2]                   in-report citation
 [Competitor 3]            in-report citation
 [Roadmap · Phase 1]       in-report citation, subsection
@@ -171,7 +171,7 @@ Model output uses `[[target|Label]]` syntax — renderer parses these inline. St
 
 Above the Muse prose, a horizontal row of all citations used in the response:
 
-```
+```text
 GROUNDED IN  ·  [Gap 2]  [Competitor 3]  [Roadmap · Phase 1]
 ```
 
@@ -195,7 +195,7 @@ If a future iteration wants to surface real backend tool calls (search, lookup, 
 
 Below the prose, two groups separated by `justify-between`:
 
-```
+```text
 COPY  ·  REGENERATE  ·  CITE AS MARKDOWN              [👍]  [👎]
 ```
 
@@ -216,7 +216,7 @@ COPY  ·  REGENERATE  ·  CITE AS MARKDOWN              [👍]  [👎]
 
 Below the action row, a vertical list (not pill buttons) of 3 suggested questions:
 
-```
+```text
 ──────────────────────────────────────────
 what about retention?                    →
 compare to Future                        →
@@ -226,14 +226,16 @@ how big is the Phase 1 risk?             →
 
 Style: `--font-body`, 0.9375rem, `--text-secondary` → `--text` on hover. Each row has hairline `--accent-border` top/bottom. The arrow slides 4px right on hover; the row indents 6px left. Tap → fires the question through `sendMessage` (creates the next turn).
 
-### Back-to-chat banner
+### Back-to-chat banner (citation-only)
 
-When the user is in `report-open` view, a sticky banner sits at the top of the report column. Two pieces:
+A sticky banner appears at the top of the report column **only when the user arrived via a citation pill** — not when they opened the report via the toolbar toggle.
 
-- **Label** (left, mono uppercase, `--text-muted`): `FROM YOUR CONVERSATION` when navigated via a citation pill; `VIEWING REPORT` when arrived via the toolbar toggle. The wording tells the user *why* they're seeing the report.
+- **Label** (left, mono uppercase, `--text-muted`): `FROM YOUR CONVERSATION`. The banner exists to ferry the reader back to where they left off mid-conversation.
 - **Button** (right, mono uppercase, bordered): `← BACK TO CHAT`. Tap returns to the thread.
 
-Style: `--surface` bg, `--accent-border` border, `--radius-lg`. Sticky `top: 1rem` so it stays visible during scroll. The toolbar toggle (`MessageSquare` glyph) remains available as the always-accessible secondary path — the banner makes the back-nav explicit at the top of the report, where the eye naturally lands first.
+**Why citation-only:** when the user explicitly taps the toolbar's `▬▬` glyph to open the report, they already know how to navigate back — they took an explicit action. The banner would be redundant chrome in that case. When they tap a citation, they got teleported mid-read and need an obvious "continue where I left off" path.
+
+Style: `--surface` bg, `--accent-border` border, `--radius-lg`. Sticky `top: 1rem` so it stays visible during scroll. State management: opening via toolbar / closing via toolbar both clear `highlightTarget` so the banner state stays honest.
 
 ### Toggle glyph — destination semantics
 
@@ -249,14 +251,14 @@ The button is a plain `<button>` with the appropriate glyph inside — no `layou
 
 Single Plex Mono line where the thread will live:
 
-```
+```text
 MUSE · ready · grounded in this report
 ```
 
 Style: `--font-mono`, 0.75rem, uppercase, letter-spacing 0.08em, `--text-muted`, centered. No box, no bubble, no greeting.
 
 Free-locked variant:
-```
+```text
 MUSE · upgrade to chat with this report      [ see plans ]
 ```
 

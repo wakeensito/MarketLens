@@ -43,7 +43,7 @@ function renderContent(
     while (cursor < para.length) {
       const openIdx = para.indexOf('[[', cursor);
       if (openIdx === -1) {
-        nodes.push(...renderInline(para.slice(cursor), `${keyBase}-${pIdx}-${nodeIdx++}`));
+        nodes.push(...renderInline(para.slice(cursor), `${keyBase}-${pIdx}-${nodeIdx}`));
         break;
       }
       if (openIdx > cursor) {
@@ -52,7 +52,7 @@ function renderContent(
       const closeIdx = para.indexOf(']]', openIdx + 2);
       if (closeIdx === -1) {
         // Streaming: incomplete token at end of partial content — render as plain text
-        nodes.push(...renderInline(para.slice(openIdx), `${keyBase}-${pIdx}-${nodeIdx++}`));
+        nodes.push(...renderInline(para.slice(openIdx), `${keyBase}-${pIdx}-${nodeIdx}`));
         break;
       }
       const inner = para.slice(openIdx + 2, closeIdx);
@@ -150,9 +150,11 @@ function ActionRow({
   };
   const copyMarkdown = async () => {
     try {
-      const md = contentToPlainText(content);
       const cited = contentToMarkdownCite(content);
-      const block = `> ${md}\n\n${cited}`;
+      const block = cited
+        .split('\n')
+        .map(line => `> ${line}`)
+        .join('\n');
       await navigator.clipboard.writeText(block);
     } catch {
       /* clipboard blocked */

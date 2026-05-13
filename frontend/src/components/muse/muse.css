@@ -364,7 +364,7 @@
 .muse-toggle-mark__bar {
   height: 3px;
   border-radius: 1px;
-  background: currentColor;
+  background: currentcolor;
 }
 
 .muse-toggle-mark__bar--low  { width: 100%; }
@@ -437,6 +437,19 @@
   0%   { box-shadow: 0 0 0 0 transparent; }
   25%  { box-shadow: 0 0 0 4px var(--signal-light); }
   100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+/* Respect users who prefer reduced motion: disable the blinking cursor and
+   the cell pulse. The cursor stays at full opacity so the stream head is still
+   visible; the pulse becomes a no-op (citations still scroll into view). */
+@media (prefers-reduced-motion: reduce) {
+  .muse-stream-cursor {
+    animation: none;
+    opacity: 1;
+  }
+  [data-muse-cell].muse-cell-pulsing {
+    animation: none;
+  }
 }
 
 /* Help the scrollIntoView land below any sticky nav above */

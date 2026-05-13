@@ -37,7 +37,7 @@ API Lambda
   ↓ invoke with RequestResponse
 Chat Lambda (streaming enabled)
   ↓ bedrock-runtime:InvokeModelWithResponseStream
-Amazon Bedrock (Claude 3 Haiku or Nova Lite)
+Amazon Bedrock (Amazon Nova 2 Lite default; Claude / DeepSeek / Sonnet optional on Max)
   ↓ SSE stream
 Chat Lambda
   ↓ SSE stream
@@ -90,7 +90,7 @@ Amazon Bedrock Agents with function calling (can query DynamoDB, call APIs, etc.
 
 ## 3. Cost Comparison: Bedrock vs SageMaker
 
-### Bedrock (Claude 3 Haiku)
+### Bedrock (Amazon Nova 2 Lite)
 
 | Metric | Value |
 |---|---|
@@ -141,7 +141,7 @@ Add conversation history table:
   "content": "message text",
   "tokens_input": 123,
   "tokens_output": 456,
-  "model_id": "anthropic.claude-3-haiku-20240307-v1:0",
+  "model_id": "amazon.nova-2-lite-v1:0",
   "created_at": "2026-05-10T12:34:56Z",
   "ttl": 1234567890  # 30 days for free, no TTL for paid
 }
@@ -296,7 +296,7 @@ ChatFunction:
     Environment:
       Variables:
         CONVERSATIONS_TABLE: !Ref ConversationsTable
-        CHAT_MODEL_ID: anthropic.claude-3-haiku-20240307-v1:0
+        CHAT_MODEL_ID: amazon.nova-2-lite-v1:0
     Policies:
       - DynamoDBCrudPolicy:
           TableName: !Ref ConversationsTable
@@ -305,7 +305,7 @@ ChatFunction:
       - Statement:
           - Effect: Allow
             Action: bedrock:InvokeModelWithResponseStream
-            Resource: !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/anthropic.claude-3-haiku-20240307-v1:0"
+            Resource: !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.nova-2-lite-v1:0"
     Events:
       ChatApi:
         Type: Api
@@ -484,15 +484,16 @@ if (messageCount >= limit) {
 
 | Model | Input $/1M | Output $/1M | Speed | Quality | Best For |
 |---|---|---|---|---|---|
-| **Amazon Nova Lite** | $0.06 | $0.24 | Fast | Good | Free tier (if offered) |
-| **Claude 3 Haiku** | $0.25 | $1.25 | Fast | Excellent | Pro tier (recommended) |
+| **Amazon Nova 2 Lite** | sync AWS | sync AWS | Fast | Strong | Pro tier default (aligned with report pipeline) |
+| **Amazon Nova Lite** | $0.06 | $0.24 | Fast | Good | Legacy reference only |
+| **Claude 3 Haiku** | $0.25 | $1.25 | Fast | Excellent | Optional / legacy |
 | **DeepSeek V3** | $0.62 | $1.85 | Medium | Excellent | Max tier (reasoning-heavy) |
 | **Claude 3.5 Sonnet** | $3.00 | $15.00 | Slow | Best | Enterprise (overkill for chat) |
 
 **Recommendation:**
 - **Free tier:** No chat (locked paywall)
-- **Pro tier:** Claude 3 Haiku (~$0.006/conversation)
-- **Max tier:** User choice (Haiku, DeepSeek, or Sonnet)
+- **Pro tier:** Amazon Nova 2 Lite (default; sync pricing on AWS)
+- **Max tier:** User choice (Nova 2 Lite, DeepSeek, or Sonnet, plus non-Bedrock providers per `CLAUDE.md`)
 
 ### SageMaker Options (For Learning)
 
@@ -503,7 +504,7 @@ if (messageCount >= limit) {
 | **Llama 3.1 70B** | ml.g5.12xlarge | $7.09 | ~20 | $0 (fixed cost) |
 
 **Break-even calculation:**
-- Bedrock (Haiku): $0.006/conversation × 120K conversations = $720/month
+- Bedrock (Nova 2 Lite baseline): re-run cost model × 120K conversations after pricing sync
 - SageMaker (8B): $724/month (fixed)
 
 **When to use SageMaker:**
@@ -654,7 +655,7 @@ predictor = model.deploy(
 
 | Concept | Where It Appears in Muse |
 |---|---|
-| **Model selection** | Choosing Haiku vs Sonnet vs Llama based on cost/quality |
+| **Model selection** | Choosing Nova 2 Lite vs Sonnet vs DeepSeek based on cost/quality |
 | **Inference optimization** | Streaming responses, token limits, caching |
 | **SageMaker endpoints** | Real-time vs serverless vs batch |
 | **Autoscaling** | Target tracking on invocations per instance |
@@ -692,7 +693,7 @@ predictor = model.deploy(
 |---|---|
 | Avg messages per conversation | >5 (indicates engagement) |
 | Response latency (p95) | <3 seconds |
-| Cost per conversation | <$0.01 (Bedrock Haiku) |
+| Cost per conversation | Re-benchmark with Nova 2 Lite on Bedrock |
 | Upgrade conversion (free → Pro) | >10% (chat is a key driver) |
 | User satisfaction (thumbs up) | >80% |
 

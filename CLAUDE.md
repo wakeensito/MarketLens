@@ -173,7 +173,7 @@ Plinths is solo-only. The plan axis is power, not audience.
 
 **Max differentiators vs Pro**: unlimited reports, cross-report memory in Muse, Muse model selection (Claude, GPT, Gemini, Perplexity vs. Pro's default model). Stripe price IDs live in the SAM template (`STRIPE_PRICE_ID_PRO`, `STRIPE_PRICE_ID_PRO_ANNUAL`, `STRIPE_PRICE_ID_MAX`, `STRIPE_PRICE_ID_MAX_ANNUAL`).
 
-**Things on the pricing page that are NOT plan-gated yet**: Brave Search + Wikipedia + Wikidata enrichment runs on every report regardless of plan (`infrastructure/lambda/ai-orchestration/app.py:133–246`). Model selection is unimplemented — every plan uses the same Bedrock pipeline (Nova Micro / DeepSeek / Claude 3 Haiku). If a future feature claims to gate either, verify the backend actually checks the plan before adding the row to PricingSection.
+**Things on the pricing page that are NOT plan-gated yet**: Brave Search + Wikipedia + Wikidata enrichment runs on every report regardless of plan (`infrastructure/lambda/ai-orchestration/app.py:133–246`). Model selection is unimplemented — every plan uses the same Bedrock pipeline (**Nova 2 Lite** on Parse/Search + Summarise, **DeepSeek V3.2** on Analyse). Canonical IDs and deploy notes: `docs/BEDROCK-MODEL-CONFIG.md`. If a future feature claims to gate either, verify the backend actually checks the plan before adding the row to PricingSection.
 
 There is no Team plan and no multi-seat workflow. Teams considering plinths are routed to a "Contact us" affordance (not built yet). If a future feature implies team usage, push back rather than scope-creeping it.
 
@@ -195,7 +195,7 @@ Conversational agent that lets authenticated users ask questions about a generat
 - Auth: required (Cognito SSO + existing JWT authorizer); no anonymous access
 - Persistence: per-report thread in DynamoDB, durable per-user across sessions
 - Tier gating: Free → locked placeholder with paywall to Pro · Pro → ~30 messages per report on a default model · Max → unlimited messages, **cross-report memory** (Muse cites the user's other reports inline), and **model selection** (Claude, GPT, Gemini, Perplexity)
-- Models for chat: Pro uses a single default model (Bedrock Claude). Max requires three new API integrations (OpenAI for GPT, Google AI for Gemini, Perplexity API), each with its own SSM SecureString secret + IAM-scoped permission. Plan accordingly when scaffolding.
+- Models for chat: Pro uses a single default model on Bedrock (**Amazon Nova 2 Lite** unless product changes it). Max requires three new API integrations (OpenAI for GPT, Google AI for Gemini, Perplexity API), each with its own SSM SecureString secret + IAM-scoped permission. Plan accordingly when scaffolding.
 - Tools: Brave Search API for live retrieval (reuse existing SSM-stored key + scoped IAM)
 
 **Craft (locked 2026-05-12) — non-negotiable for build:**
@@ -210,7 +210,7 @@ Direction: "prestigious LLM" register (Perplexity-grade) executed in the Pale In
 - **Action row:** below the prose, two groups split with `justify-between`. Left group: mono uppercase buttons — `COPY · REGENERATE · CITE AS MARKDOWN`. Right group: thumbs-up / thumbs-down icon buttons (`MuseFeedback`) for per-response feedback. Thumbs are toggle-able; active state colors up = `--signal`, down = `--warning`. Feedback persists with the thread (localStorage in preview, DynamoDB-bound when backend lands).
 - **Follow-up chips:** vertical list (not pill buttons) with hairline top/bottom borders. Each row is a question + right arrow that slides on hover. Tap → fires the question through `sendMessage`. 3 per Muse turn.
 - **Toggle glyph (destination semantics):** the icon shows *where the tap will take you*, not what action it performs. The slot is **empty** when there's no destination — no disabled placeholder, no ghost paperclip. **Chat active:** a two-bar mini-saturation mark (`▬▬`) — tap opens the report. **Report open:** a chat-bubble glyph (lucide `MessageSquare`) — tap returns to the conversation. Never an `✕` (reads as "delete"). Never a paperclip (implies an attachment affordance that doesn't exist).
-- **Back-to-chat banner:** in `report-open`, a sticky banner at the top of the report column shows the navigation context — `FROM YOUR CONVERSATION` (when arrived via a citation) or `VIEWING REPORT` (when arrived via toolbar toggle) on the left, `← BACK TO CHAT` button on the right. Mono uppercase. Tap returns to the thread. The toolbar toggle is still the always-accessible path; the banner is the explicit affordance the eye lands on first when the report opens.
+- **Back-to-chat banner (citation-only):** when the user arrives at the report via a citation pill, a sticky banner appears at the top of the report column: `FROM YOUR CONVERSATION` on the left, `← BACK TO CHAT` button on the right. Mono uppercase. Tap returns to the thread. The banner does **not** appear when the user opens the report via the toolbar toggle — that's an explicit nav action and the banner would be redundant chrome. Opening via toolbar / closing via toolbar both clear `highlightTarget` so the banner state stays honest about how the user arrived.
 - **Streaming rhythm:** char-by-char with ~240ms settle at sentence boundaries (`.?!`). Settles are skipped while *inside* a `[[…]]` citation token. Stream cursor is a 1px-wide vertical line in `--text-secondary` that blinks at 1s steps. No "Muse is typing…" dots.
 - **Per-report scoping:** threads are keyed by `reportId` and persisted to localStorage (preview only — production will hit DynamoDB). Switching reports in the sidebar surfaces each report's own conversation; opening a report with an existing thread defaults to chat-view.
 
@@ -259,7 +259,7 @@ applied as `data-theme` attribute on `<html>`.
 
 - **SAM**: Lambdas, API Gateway, S3, CloudFront, DynamoDB
 - **Terraform**: IAM roles (CD role with GitHub OIDC)
-- **Bedrock**: 3-model pipeline — Nova Micro (Parse/Search), DeepSeek V3.2 (Analyse), Claude 3 Haiku (Summarise)
+- **Bedrock**: 3-model pipeline — **Nova 2 Lite** (Parse/Search + Summarise), **DeepSeek V3.2** (Analyse). See `docs/BEDROCK-MODEL-CONFIG.md`.
 - **Brave Search API**: Real web search for competitor/market data (key in SSM Parameter Store)
 - **Lambda Durable Functions**: AI pipeline with automatic checkpointing per stage
 
