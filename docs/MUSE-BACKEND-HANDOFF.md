@@ -384,3 +384,86 @@ Suggested order if you're starting from zero:
 ## When you're done
 
 Drop a line in this file or in `CLAUDE.md` confirming what got built so the frontend Claude knows to flip `useMuse` from mock-mode to real-fetch mode.
+
+## Backend implementation status
+
+**Status:** v1 backend landed in-tree on 2026-05-12 (commit pending). All endpoints, the conversations table, the function URL, the OAC, and the CloudFront behavior are wired in `template.yaml`. **Awaiting `sam deploy`** — the resources do not exist in AWS yet. The frontend can begin migrating `useMuse` from mock-mode to real fetch against `/api/muse/stream` and `/api/muse/conversations/{report_id}` as soon as a deploy lands; until then, target the dev stack for integration testing.
+
+### What got built
+
+| Layer | Resource | Path |
+|---|---|---|
+| Layer | `PlinthsAuthLayer` (`plinths_auth.verify_session_cookie`) | `infrastructure/layers/plinths-auth-shared/` |
+| Lambda | `MuseSyncFunction` — `GET`/`DELETE /api/muse/conversations/{report_id}` | `infrastructure/lambda/muse/sync.py` |
+| Lambda | `MuseStreamFunction` — SSE via Function URL | `infrastructure/lambda/muse/stream.py` |
+| DDB | `MuseConversationsTable` (PAY_PER_REQUEST, GSI1, TTL, PITR) | `template.yaml` |
+| OAC | `MuseStreamLambdaOAC` (`OriginAccessControlOriginType: lambda`) | `template.yaml` |
+| URL | `MuseStreamFunctionUrl` (`AWS::Lambda::Url`, `RESPONSE_STREAM`) | `template.yaml` |
+| CF | `/api/muse/stream*` behavior, ordered above `/api/*` | `template.yaml` |
+
+The existing `AuthorizerFunction` was refactored to call `verify_session_cookie` from the shared layer — the duplicated PyJWT logic in `infrastructure/lambda/authorizer/app.py` is gone, and `authorizer/requirements.txt` no longer pins PyJWT/cryptography (the layer provides them).
+
+### Contract conformance
+
+Every event in the handoff contract is implemented as specified:
+
+- `event: token` carries `{"delta": "..."}`. Char-by-char from Bedrock `contentBlockDelta`.
+- `event: sentence_boundary` fires after sentence-final `.`, `!`, `?` **only when outside a `[[…]]` citation token**. Detection lives in `citations.detect_sentence_boundary`.
+- `event: done` carries `conversation_id`, `message_id`, `tokens_in`, `tokens_out`, `sources` (always inline kind in v1), `follow_ups` (always 3-element list, or empty if the model failed to emit the sentinel).
+- `event: error` codes: `plan_locked` (Free), `limit_reached` (Pro ≥30 user messages), `auth_failed` (cookie invalid), `report_not_found`, `model_error`, `validation`. `timeout` is not actively emitted — the CloudFront 60s idle ceiling will close the connection if the model is hung; the keep-alive heartbeat is meant to prevent that.
+- `: keep-alive` SSE comment emitted every 15s while waiting on the first Bedrock chunk (worker-thread + queue pattern in `stream._stream_response`).
+
+### Sources / follow-ups extraction
+
+Per the chosen approach (single Bedrock call):
+
+- **Sources** are parsed from `[[target|Label]]` tokens in the assembled prose. Deduped by `(target, label)` in order of first appearance.
+- **Follow-ups** come from a `<<MUSE_META>>{"follow_ups": [...]}<<END>>` envelope the system prompt instructs the model to append. The streaming layer (`citations.MetaStripper`) strips that envelope from the live stream so the user never sees it, then parses the JSON for the `done` payload. Cross-chunk-boundary splits handled. Malformed/missing → empty `follow_ups: []`.
+
+If the model misbehaves and never emits the sentinel, the response still goes through — `follow_ups` is just empty and the frontend renders the response without follow-up chips.
+
+### Report ownership
+
+`GET /api/muse/conversations/{report_id}` and the stream both confirm the caller's `org_id` matches the report's `org_id` before reading the conversation table or invoking Bedrock. A guess at someone else's `report_id` returns an empty thread (sync) or `report_not_found` (stream) — never leaks existence.
+
+### Plan tier behavior
+
+- **Free:** stream emits `event: error` with `plan_locked` before any Bedrock call. Zero billed tokens.
+- **Pro:** counts `role: "user"` rows in the conversation. On the 31st request, emits `limit_reached` with `{limit: 30, used: <count>}` before invoking Bedrock.
+- **Max:** treated identically to Pro for v1 — no cap, single default model (`amazon.nova-2-lite-v1:0`). Cross-report memory + model picker explicitly deferred.
+
+### Retention (TTL)
+
+- Free: `now + 30 days` on every row.
+- Pro & Max: no `ttl` field written → rows kept indefinitely.
+
+### Validation results
+
+- `sam validate --lint` — **passes**.
+- `ruff format --check infrastructure/lambda/` — **skipped locally** (ruff not installed on this machine); CI will run it on commit. Python AST parses on all changed files.
+
+### Things the frontend should know
+
+1. **Endpoints are at `/api/muse/stream` and `/api/muse/conversations/{report_id}`** under the same CloudFront origin as the rest of the app. No new base URL — `VITE_API_BASE_URL` works unchanged.
+2. **The streaming endpoint is `fetch` + `getReader()`-friendly**, but only on the production CloudFront domain. SAM local can't reproduce the function-URL-via-CloudFront topology; preview/dev against the deployed dev stack instead.
+3. **CORS `AllowOrigins` is set to `https://${CognitoCallbackDomain}`** — the production CloudFront domain. Local dev hitting the function URL directly from a different origin will fail CORS preflight. Route through CloudFront.
+4. **Empty thread = 200 with `{"conversation_id": null, "messages": []}`**. Frontend should not interpret that as an error.
+5. **`event: done` always fires** (except on `error`), even with empty `sources` and `follow_ups` arrays.
+6. **Authoritative model ID** is the `BedrockModelIdMuseChat` CFN parameter (default `amazon.nova-2-lite-v1:0`). If the model changes, the frontend doesn't need to do anything — the contract is model-agnostic.
+
+### Post-deploy steps
+
+After `sam deploy`:
+
+1. No SSM SecureString parameters need manual population for v1. (Max-tier provider keys are out of scope.)
+2. Confirm the new CloudFront behavior order in the AWS console — `/api/muse/stream*` MUST be ordered above `/api/*` (the template lists it first; CloudFront's UI shows precedence top-down).
+3. Smoke-test the sync path first (`curl -b 'ml_access=…' https://plinths.net/api/muse/conversations/<report_id>` should return an empty thread).
+4. Smoke-test the stream path with a POST including the cookie; you should see `event: token` lines arriving as soon as Bedrock starts.
+5. The first deploy will create `MuseConversationsTable` — point-in-time recovery is enabled from creation.
+
+### Things deliberately not built (out of scope per CLAUDE.md + handoff)
+
+- Max-tier model picker (Claude / GPT / Gemini / Perplexity) — no third-party API code, no extra SSM params.
+- Cross-report memory — GSI1 keys are written (`ORG#{org_id}`) so the index can be queried later without a table rebuild, but no read path uses GSI1 yet.
+- `regenerate` semantics with `regenerate_message_id` — frontend's `regenerate` just resends the same prompt; the backend treats it as a fresh turn.
+- Token-cap pivot for Pro — current cap is strictly 30 user messages per report.
