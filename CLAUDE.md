@@ -185,11 +185,11 @@ Conversational agent that lets authenticated users ask questions about a generat
 
 **UI direction (locked):**
 - **Inline conversation** lives in the workspace once a report exists — chat thread renders below the report on submit.
-- **The report collapses into a toggle** when chat starts: the (currently dead) attachment button next to the plinths wordmark in the input toolbar becomes the report toggle. One click expands the report fullscreen, exit returns to the chat scroll position.
+- **The report collapses into a toggle** when chat starts: a toggle button appears in the input toolbar next to the plinths wordmark — `▬▬` mini-saturation mark when the chat is active (tap opens the report fullscreen), chat-bubble glyph when the report is open (tap returns to the conversation). The toolbar has no toggle when chat is idle.
 - **Per-report thread**, persisted across sessions. When a user opens an old report from the sidebar, default to chat-view if a thread exists, report-view otherwise.
 - **No split-screen.** The "report-as-toggle" pattern means desktop and mobile behave identically — single-attention focus at any moment.
 - **Empty state copy** (no greeting bubble): a single Plex Mono line where the thread will be — `MUSE · ready · grounded in this report`.
-- The `layoutId` choreography that already morphs the input across landing/workspace gets reused for the report-collapse-into-button morph.
+- **No layoutId morph between the report and the toggle.** An earlier iteration animated the report shrinking into the toolbar button via shared `layoutId`. Removed — the spring physics over a large bounding box read as cinematic, not as a professional tool. View swaps are plain mount/unmount with no spring or scale animation. (`layoutId="ml-input"` for the landing↔compact input morph is preserved — that's a different element, smaller delta, and still earns its keep.)
 
 **Decided:**
 - Auth: required (Cognito SSO + existing JWT authorizer); no anonymous access
@@ -198,10 +198,28 @@ Conversational agent that lets authenticated users ask questions about a generat
 - Models for chat: Pro uses a single default model (Bedrock Claude). Max requires three new API integrations (OpenAI for GPT, Google AI for Gemini, Perplexity API), each with its own SSM SecureString secret + IAM-scoped permission. Plan accordingly when scaffolding.
 - Tools: Brave Search API for live retrieval (reuse existing SSM-stored key + scoped IAM)
 
+**Craft (locked 2026-05-12) — non-negotiable for build:**
+
+Direction: "prestigious LLM" register (Perplexity-grade) executed in the Pale Intelligence palette. The conversation reads as a series of document Q/A pairs, not as a chat exchange.
+
+- **Turn format:** each turn is rendered as a **document pair** — user query is a serif heading (`var(--font-display)`, ~1.5rem, weight 500) with a hairline rule under it; the Muse answer is a self-contained block beneath. No bubbles, no avatars, no right-alignment, no left-side speaker rules. The hierarchy *is* the speaker indicator.
+- **Sources row** (Muse turns only): a `GROUNDED IN` label in mono uppercase followed by a horizontal row of citation pills, sitting above the prose. The row tells the reader what report cells the answer rests on before they read it. Hidden when sources are empty.
+- **No "thinking" state.** The model just responds — sources row appears, then prose streams. No status lines, no "researching..." copy, no typing dots. The chat-style instinct to fill the pre-response gap with chrome was rejected — empty space + immediate streaming reads more like a normal chat and less like a stage performance.
+- **Prose:** Muse answers in `var(--font-display)` at 1.0625rem, line-height 1.7, capped at ~38rem column width. Inline `**bold**` supported. Citation tokens use `[[target|Label]]` syntax in the model output; rendered as inline pills. Stream-safe — partial `[[…` tokens degrade to plain text and snap into pills on `]]`.
+- **Citation pills:** mono, 0.8125rem (larger than a footnote — first-class), `--signal` color with `--signal-light` background and `--signal-border` border. Tap → view flips to `report-open`, the matching `[data-muse-cell="<target>"]` element scrolls into view (smooth, centered) and pulses once (1.6s ring in `--signal-light`). `ReportView` carries stable `data-muse-cell` attributes (`competitor-N` / `gap-N` / `roadmap-N`, 1-indexed); routing logic lives in the muse integration in `App.tsx` so `ReportView` stays pure. Cross-report citations on Max get a filing-tab glyph (`⌗ Other report · Cell`) instead of square brackets.
+- **Action row:** below the prose, two groups split with `justify-between`. Left group: mono uppercase buttons — `COPY · REGENERATE · CITE AS MARKDOWN`. Right group: thumbs-up / thumbs-down icon buttons (`MuseFeedback`) for per-response feedback. Thumbs are toggle-able; active state colors up = `--signal`, down = `--warning`. Feedback persists with the thread (localStorage in preview, DynamoDB-bound when backend lands).
+- **Follow-up chips:** vertical list (not pill buttons) with hairline top/bottom borders. Each row is a question + right arrow that slides on hover. Tap → fires the question through `sendMessage`. 3 per Muse turn.
+- **Toggle glyph (destination semantics):** the icon shows *where the tap will take you*, not what action it performs. The slot is **empty** when there's no destination — no disabled placeholder, no ghost paperclip. **Chat active:** a two-bar mini-saturation mark (`▬▬`) — tap opens the report. **Report open:** a chat-bubble glyph (lucide `MessageSquare`) — tap returns to the conversation. Never an `✕` (reads as "delete"). Never a paperclip (implies an attachment affordance that doesn't exist).
+- **Back-to-chat banner:** in `report-open`, a sticky banner at the top of the report column shows the navigation context — `FROM YOUR CONVERSATION` (when arrived via a citation) or `VIEWING REPORT` (when arrived via toolbar toggle) on the left, `← BACK TO CHAT` button on the right. Mono uppercase. Tap returns to the thread. The toolbar toggle is still the always-accessible path; the banner is the explicit affordance the eye lands on first when the report opens.
+- **Streaming rhythm:** char-by-char with ~240ms settle at sentence boundaries (`.?!`). Settles are skipped while *inside* a `[[…]]` citation token. Stream cursor is a 1px-wide vertical line in `--text-secondary` that blinks at 1s steps. No "Muse is typing…" dots.
+- **Per-report scoping:** threads are keyed by `reportId` and persisted to localStorage (preview only — production will hit DynamoDB). Switching reports in the sidebar surfaces each report's own conversation; opening a report with an existing thread defaults to chat-view.
+
+**Reference preview:** wired into the real workspace behind a flag — append `?muse=1` to any report URL, set `VITE_MUSE_PREVIEW=true`, or use `?muse=demo` for a pre-populated thread. Source: `frontend/src/hooks/useMuse.ts`, `frontend/src/components/muse/*`, integration in `frontend/src/App.tsx` and `frontend/src/components/AnimatedAiInput.tsx`. Replies are canned (3 mock muse turns rotated); backend not wired.
+
 **Still TBD when build resumes:**
 - Transport — SSE / WebSocket / Lambda response streaming / plain JSON. Pending research; affects API Gateway type and Lambda config.
 - DynamoDB key schema for the per-report thread (must accommodate cross-report memory queries on Max).
-- Animation timings for the report-collapse-into-button morph.
+- Animation timings: currently plain mount/unmount on view swap (no morph). Revisit only if hard snapping reads as broken in real use.
 
 **Naming convention when scaffolding:** Lambda dir `infrastructure/lambda/muse/`, API route prefix `/api/muse`, frontend hook `useMuse`, types prefixed `Muse*` (e.g., `MuseMessage`, `MuseConversation`).
 

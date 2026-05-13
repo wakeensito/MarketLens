@@ -8,10 +8,12 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowRight, Check, ChevronDown, Paperclip } from 'lucide-react';
+import { ArrowRight, Check, ChevronDown, MessageSquare } from 'lucide-react';
 import { AnthropicIcon, GeminiIcon, OpenAiIcon } from './model-brand-icons';
 import { PlinthsMark } from './BrandWordmark';
 import { SoonPill } from './SoonPill';
+import { SaturationToggleMark } from './muse/SaturationToggleMark';
+import type { MuseView } from './muse/museTypes';
 
 type BrandIcon = ComponentType<{ className?: string }>;
 
@@ -78,11 +80,28 @@ export interface AnimatedAiInputProps {
   compact?: boolean;
   /** Override auto-focus behaviour. Defaults to true when not compact. */
   autoFocus?: boolean;
+  /** When set (and not 'idle'), the paperclip slot is replaced by the Muse report toggle.
+   *  - 'chat'         → mini saturation-bar glyph (▬▬), tap opens the report
+   *  - 'report-open'  → close glyph (✕), tap returns to the chat
+   *  The button shares `layoutId="muse-report-surface"` with the workspace report element,
+   *  so framer-motion morphs the report into/out of this slot. */
+  museMode?: MuseView | null;
+  onMuseToggle?: () => void;
 }
 
 const AnimatedAiInput = forwardRef<HTMLTextAreaElement, AnimatedAiInputProps>(
   function AnimatedAiInput(
-    { value, onChange, onSubmit, placeholder, minChars = 4, compact = false, autoFocus: autoFocusProp },
+    {
+      value,
+      onChange,
+      onSubmit,
+      placeholder,
+      minChars = 4,
+      compact = false,
+      autoFocus: autoFocusProp,
+      museMode = null,
+      onMuseToggle,
+    },
     forwardedRef,
   ) {
     const MIN_H = compact ? 44 : 72;
@@ -201,12 +220,30 @@ const AnimatedAiInput = forwardRef<HTMLTextAreaElement, AnimatedAiInputProps>(
               </div>
             </details>
 
-            <span className="ai-input__sep" aria-hidden />
-
-            <label className="ai-input__attach is-soon" title="Attachments coming soon">
-              <input type="file" className="ai-input__file" tabIndex={-1} disabled />
-              <Paperclip className="ai-input__attach-icon" aria-hidden />
-            </label>
+            {(museMode === 'chat' || museMode === 'report-open') && (
+              <>
+                <span className="ai-input__sep" aria-hidden />
+                <button
+                  type="button"
+                  className="ai-input__muse-toggle"
+                  onClick={onMuseToggle}
+                  aria-label={museMode === 'chat' ? 'Open report' : 'Back to chat'}
+                  title={museMode === 'chat' ? 'Open report' : 'Back to chat'}
+                >
+                  <span className="ai-input__muse-toggle-inner">
+                    {museMode === 'chat' ? (
+                      <SaturationToggleMark />
+                    ) : (
+                      <MessageSquare
+                        className="ai-input__muse-glyph"
+                        strokeWidth={1.7}
+                        aria-hidden
+                      />
+                    )}
+                  </span>
+                </button>
+              </>
+            )}
           </div>
 
           <button
