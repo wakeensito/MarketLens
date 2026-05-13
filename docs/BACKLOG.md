@@ -8,15 +8,15 @@
 
 **Status:** Done — April 2026
 
-Replaced single-model pipeline (Claude 3 Haiku for everything) with a 3-model setup optimized for cost and quality. **As of May 2026:** Parse + Search + Summarise use **Amazon Nova 2 Lite** (`amazon.nova-2-lite-v1:0`); Analyse uses **DeepSeek V3.2**. Canonical reference: `docs/BEDROCK-MODEL-CONFIG.md`.
+Replaced single-model pipeline (Claude 3 Haiku for everything) with a 3-model setup optimized for cost and quality. **As of May 2026:** Parse + Search use **Amazon Nova Micro** (`amazon.nova-micro-v1:0`); Analyse uses **DeepSeek V3.2**; Summarise uses **Amazon Nova 2 Lite** (`amazon.nova-2-lite-v1:0`, replaces Haiku). Canonical reference: `docs/BEDROCK-MODEL-CONFIG.md`.
 
 | Stage | Model | Role | Cost/1M tokens (in/out) |
 |---|---|---|---|
-| Parse + Search | Amazon Nova 2 Lite | Structured extraction | sync AWS Bedrock pricing |
+| Parse + Search | Amazon Nova Micro | Structured extraction | $0.035 / $0.14 |
 | Analyse | DeepSeek V3.2 | Competitive reasoning | $0.62 / $1.85 |
 | Summarise | Amazon Nova 2 Lite | Narrative prose (replaces Claude 3 Haiku) | sync AWS Bedrock pricing |
 
-**Per-report cost:** re-benchmark after Nova 2 Lite cutover (prior baseline ~$0.007 with Nova Micro + DeepSeek + Haiku)
+**Per-report cost:** re-benchmark after Nova 2 Lite on Summarise only (prior baseline ~$0.007 with Nova Micro + DeepSeek + Haiku)
 
 Changes:
 - `template.yaml`: 3 separate model parameters (`BedrockModelIdParse`, `BedrockModelIdAnalyse`, `BedrockModelIdSummarise`) with per-model IAM permissions
@@ -90,13 +90,13 @@ Same pipeline, different output lens based on who's reading the report:
 
 **Priority:** Medium (post-billing)
 
-Free tier uses the current 3-model pipeline (Nova 2 Lite + DeepSeek + Nova 2 Lite). Paid tiers upgrade the Analyse and Summarise models:
+Free tier uses the current 3-model pipeline (Nova Micro + DeepSeek + Nova 2 Lite). Paid tiers upgrade the Analyse and Summarise models:
 
 | Tier | Parse | Analyse | Summarise | Est. cost/report |
 |---|---|---|---|---|
-| Free | Nova 2 Lite | DeepSeek V3.2 | Nova 2 Lite | TBD |
-| Pro | Nova 2 Lite | Claude 3.5 Sonnet v2 | Claude 3.5 Sonnet v2 | ~$0.04 |
-| Enterprise | Nova 2 Lite | Claude Sonnet 4.6 | Claude Sonnet 4.6 | ~$0.06 |
+| Free | Nova Micro | DeepSeek V3.2 | Nova 2 Lite | TBD |
+| Pro | Nova Micro | Claude 3.5 Sonnet v2 | Claude 3.5 Sonnet v2 | ~$0.04 |
+| Enterprise | Nova Micro | Claude Sonnet 4.6 | Claude Sonnet 4.6 | ~$0.06 |
 
 **Implementation:** Add `model_tier` to the report request (derived from user's subscription). AI Lambda reads the tier and selects the Bedrock model ID accordingly. IAM already has wildcard Bedrock permissions.
 
@@ -196,6 +196,20 @@ Add Crunchbase Basic API ($500/month) as a premium data source for an Investor-g
 - [ ] Frontend chat panel alongside report view with streaming token display
 - [ ] Plan-based limits: Pro = 30 messages/report, Max = unlimited
 - [ ] No WebSocket needed — SSE covers one-user-to-AI use case completely
+
+#### Muse Pro limit indicator — display pattern (deferred decision)
+
+**Priority:** Medium · own issue when Muse build resumes
+
+The cap mechanic itself is decided (Pro = 30 messages/report). The *how to show it* question is not. Three candidates surfaced during the May 2026 /feature-dev pass:
+
+1. **Silent + soft border warn.** Nothing visible during normal chat. As the user crosses ~25/30, the input border softens toward `--warning`. At 30, input disables and a clean upgrade card slides in below the last turn.
+2. **Quiet pill at ≤5 left.** A tiny mono-font line above the input ("5 left in this thread") appears only when 5 or fewer messages remain. Decrements as they're used.
+3. **No indicator at all.** Cap arrives unannounced; the 31st send is replaced by the paywall card.
+
+User also flagged a possible pivot to a **token-based cap** instead of message-based, which would change the indicator question entirely (tokens aren't easily countable mid-thread). Resolve the unit-of-cap first, then revisit the display.
+
+Upgrade-card CTA wording is also TBD — for Pro→Max the target is "unlimited" but Max is currently out of scope, so the cap-card may need to say something like "Reset on your next report" until Max ships.
 
 ### RBAC Expansion (original Phase 5)
 - [ ] Add remaining roles: `team_manager`, `api_developer`, `auditor`, `billing_admin`

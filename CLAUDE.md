@@ -173,7 +173,7 @@ Plinths is solo-only. The plan axis is power, not audience.
 
 **Max differentiators vs Pro**: unlimited reports, cross-report memory in Muse, Muse model selection (Claude, GPT, Gemini, Perplexity vs. Pro's default model). Stripe price IDs live in the SAM template (`STRIPE_PRICE_ID_PRO`, `STRIPE_PRICE_ID_PRO_ANNUAL`, `STRIPE_PRICE_ID_MAX`, `STRIPE_PRICE_ID_MAX_ANNUAL`).
 
-**Things on the pricing page that are NOT plan-gated yet**: Brave Search + Wikipedia + Wikidata enrichment runs on every report regardless of plan (`infrastructure/lambda/ai-orchestration/app.py:133–246`). Model selection is unimplemented — every plan uses the same Bedrock pipeline (**Nova 2 Lite** on Parse/Search + Summarise, **DeepSeek V3.2** on Analyse). Canonical IDs and deploy notes: `docs/BEDROCK-MODEL-CONFIG.md`. If a future feature claims to gate either, verify the backend actually checks the plan before adding the row to PricingSection.
+**Things on the pricing page that are NOT plan-gated yet**: Brave Search + Wikipedia + Wikidata enrichment runs on every report regardless of plan (`infrastructure/lambda/ai-orchestration/app.py:133–246`). Model selection is unimplemented — every plan uses the same Bedrock pipeline (**Nova Micro** on Parse/Search, **DeepSeek V3.2** on Analyse, **Nova 2 Lite** on Summarise). Canonical IDs and deploy notes: `docs/BEDROCK-MODEL-CONFIG.md`. If a future feature claims to gate either, verify the backend actually checks the plan before adding the row to PricingSection.
 
 There is no Team plan and no multi-seat workflow. Teams considering plinths are routed to a "Contact us" affordance (not built yet). If a future feature implies team usage, push back rather than scope-creeping it.
 
@@ -259,7 +259,7 @@ applied as `data-theme` attribute on `<html>`.
 
 - **SAM**: Lambdas, API Gateway, S3, CloudFront, DynamoDB
 - **Terraform**: IAM roles (CD role with GitHub OIDC)
-- **Bedrock**: 3-model pipeline — **Nova 2 Lite** (Parse/Search + Summarise), **DeepSeek V3.2** (Analyse). See `docs/BEDROCK-MODEL-CONFIG.md`.
+- **Bedrock**: 3-model pipeline — **Nova Micro** (Parse/Search), **DeepSeek V3.2** (Analyse), **Nova 2 Lite** (Summarise). See `docs/BEDROCK-MODEL-CONFIG.md`.
 - **Brave Search API**: Real web search for competitor/market data (key in SSM Parameter Store)
 - **Lambda Durable Functions**: AI pipeline with automatic checkpointing per stage
 

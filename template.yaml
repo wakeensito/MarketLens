@@ -16,8 +16,8 @@ Parameters:
     MaxLength: 128
   BedrockModelIdParse:
     Type: String
-    Default: amazon.nova-2-lite-v1:0
-    Description: Bedrock model for Parse stage (structured extraction) — Amazon Nova 2 Lite
+    Default: amazon.nova-micro-v1:0
+    Description: Bedrock model for Parse + Search structuring — Amazon Nova Micro (cheap extraction; not Nova 2 Lite)
   BedrockModelIdAnalyse:
     Type: String
     Default: deepseek.v3.2

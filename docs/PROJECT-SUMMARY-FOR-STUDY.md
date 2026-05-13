@@ -92,15 +92,15 @@ The pipeline uses **3 different foundation models** via Amazon Bedrock, each cho
 
 | Stage | Model | Why This Model | Cost/1M tokens (in/out) |
 |---|---|---|---|
-| Parse + Search | Amazon Nova 2 Lite | Fast structured extraction; unified with Summarise | sync AWS pricing |
+| Parse + Search | Amazon Nova Micro | Cheap structured extraction, fast | $0.035 / $0.14 |
 | Analyse | DeepSeek V3.2 | Strong reasoning at mid-tier price | $0.62 / $1.85 |
 | Summarise | Amazon Nova 2 Lite | Natural prose JSON (replaces Claude 3 Haiku) | sync AWS pricing |
 
-**Per-report total LLM cost:** re-benchmark after Nova 2 Lite cutover (prior ~$0.007 with Nova Micro + DeepSeek + Haiku). See `docs/BEDROCK-MODEL-CONFIG.md`.
+**Per-report total LLM cost:** re-benchmark after Nova 2 Lite on Summarise only (prior ~$0.007 with Nova Micro + DeepSeek + Haiku). See `docs/BEDROCK-MODEL-CONFIG.md`.
 
 ### Why Multi-Model?
 
-- **Cost optimization:** Using the right-sized model per task. **Nova 2 Lite** covers Parse, Search structuring, and Summarise (replacing Nova Micro + Claude Haiku on those stages). See `docs/BEDROCK-MODEL-CONFIG.md`.
+- **Cost optimization:** **Nova Micro** for Parse and Search structuring (minimal task); **Nova 2 Lite** only where prose quality matters (Summarise). See `docs/BEDROCK-MODEL-CONFIG.md`.
 - **Quality optimization:** DeepSeek V3.2 for reasoning outperforms lighter models on competitive analysis tasks.
 - **Latency optimization:** Smaller models respond faster for simple tasks.
 
@@ -441,7 +441,7 @@ ORDER BY result_opportunity_score DESC;
    ┌────────┐           ┌────────┐ ┌────────┐ ┌────────────────┐
    │DynamoDB│           │   S3   │ │ Stripe │ │ Amazon Bedrock  │
    │(reports│           │(exports│ │  API   │ │                 │
-   │ users) │           │  .csv) │ │        │ │ Nova 2 Lite     │
+   │ users) │           │  .csv) │ │        │ │ Nova Micro      │
    └────────┘           └────────┘ └────────┘ │ DeepSeek V3.2   │
                                                │ Nova 2 Lite     │
        ┌───────────────────────────────────────┘

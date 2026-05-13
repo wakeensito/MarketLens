@@ -484,7 +484,7 @@ if (messageCount >= limit) {
 
 | Model | Input $/1M | Output $/1M | Speed | Quality | Best For |
 |---|---|---|---|---|---|
-| **Amazon Nova 2 Lite** | sync AWS | sync AWS | Fast | Strong | Pro tier default (aligned with report pipeline) |
+| **Amazon Nova 2 Lite** | sync AWS | sync AWS | Fast | Strong | Pro tier default (same tier as report Summarise) |
 | **Amazon Nova Lite** | $0.06 | $0.24 | Fast | Good | Legacy reference only |
 | **Claude 3 Haiku** | $0.25 | $1.25 | Fast | Excellent | Optional / legacy |
 | **DeepSeek V3** | $0.62 | $1.85 | Medium | Excellent | Max tier (reasoning-heavy) |
