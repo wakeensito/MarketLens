@@ -523,6 +523,269 @@ Resources:
         SSEEnabled: true
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
+      # NEW_IMAGE is the only view the analytics forwarder needs — chat rows
+      # are immutable post-write so OLD_IMAGE has no analytical value, and
+      # KEYS_ONLY would force the forwarder to do a separate GetItem per row.
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+
+  # ─── Muse analytics pipeline ───
+  # DynamoDB Stream → Forwarder Lambda → Firehose (JSON→Parquet) → S3 → Athena.
+  # See docs/MUSE-ANALYTICS-PIPELINE.md for architecture, schema, runbook, and
+  # query examples. Resources below are ordered: bucket → DLQ → Glue catalog →
+  # Firehose role → Firehose stream → forwarder Lambda.
+
+  MuseAnalyticsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub marketlens-muse-raw-${Stage}-${AWS::AccountId}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          # Raw chat-row Parquet: keep a year for trend analysis, then expire.
+          # Adjust if compliance requires longer retention.
+          - Id: ExpireOldParquet
+            Status: Enabled
+            Prefix: muse/raw/
+            ExpirationInDays: 365
+          # Firehose error records — keep 90 days so a backlog of malformed
+          # rows is debuggable but doesn't accumulate forever.
+          - Id: ExpireFirehoseErrors
+            Status: Enabled
+            Prefix: muse/errors/
+            ExpirationInDays: 90
+
+  MuseForwarderDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub plinths-muse-forwarder-dlq-${Stage}
+      # 14-day retention gives ample window to alarm + investigate before the
+      # failure record itself expires. The underlying DDB Stream events are
+      # only retained 24h though, so replay must happen within that window.
+      MessageRetentionPeriod: 1209600
+      KmsMasterKeyId: alias/aws/sqs
+
+  MuseAnalyticsGlueDatabase:
+    Type: AWS::Glue::Database
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Name: !Sub plinths_muse_${Stage}
+        Description: Muse chat analytics — Parquet rows landed by Firehose
+
+  MuseAnalyticsGlueTable:
+    Type: AWS::Glue::Table
+    Properties:
+      CatalogId: !Ref AWS::AccountId
+      DatabaseName: !Ref MuseAnalyticsGlueDatabase
+      TableInput:
+        Name: muse_messages
+        Description: One row per chat message (user or assistant), Parquet via Firehose
+        TableType: EXTERNAL_TABLE
+        # Partition projection keeps Athena from needing MSCK REPAIR or
+        # explicit partition registration as new days roll over.
+        Parameters:
+          classification: parquet
+          "projection.enabled": "true"
+          "projection.dt.type": "date"
+          "projection.dt.format": "yyyy-MM-dd"
+          "projection.dt.range": "2026-01-01,NOW"
+          "projection.dt.interval": "1"
+          "projection.dt.interval.unit": "DAYS"
+          "storage.location.template": !Sub "s3://${MuseAnalyticsBucket}/muse/raw/dt=${!dt}/"
+        PartitionKeys:
+          - Name: dt
+            Type: string
+        StorageDescriptor:
+          Location: !Sub s3://${MuseAnalyticsBucket}/muse/raw/
+          InputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetInputFormat
+          OutputFormat: org.apache.hadoop.hive.ql.io.parquet.MapredParquetOutputFormat
+          SerdeInfo:
+            SerializationLibrary: org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe
+          Columns:
+            - Name: report_id
+              Type: string
+            - Name: org_id
+              Type: string
+            - Name: conversation_id
+              Type: string
+            - Name: message_id
+              Type: string
+            - Name: role
+              Type: string
+            - Name: content
+              Type: string
+            - Name: created_at
+              Type: string
+            - Name: sources
+              Type: array<struct<kind:string,target:string,label:string>>
+            - Name: follow_ups
+              Type: array<string>
+            - Name: tokens_in
+              Type: bigint
+            - Name: tokens_out
+              Type: bigint
+            - Name: model_id
+              Type: string
+
+  # Firehose runs as its own service principal, so it needs its own role with
+  # narrowly-scoped grants: write Parquet to the bucket, read the Glue table
+  # for schema lookups, and write its own delivery logs.
+  MuseAnalyticsFirehoseRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub plinths-muse-firehose-${Stage}
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: firehose.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref AWS::AccountId
+      Policies:
+        - PolicyName: WriteParquetToBucket
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:AbortMultipartUpload
+                  - s3:GetBucketLocation
+                  - s3:GetObject
+                  - s3:ListBucket
+                  - s3:ListBucketMultipartUploads
+                  - s3:PutObject
+                Resource:
+                  - !GetAtt MuseAnalyticsBucket.Arn
+                  - !Sub "${MuseAnalyticsBucket.Arn}/*"
+        - PolicyName: ReadGlueSchema
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - glue:GetTable
+                  - glue:GetTableVersion
+                  - glue:GetTableVersions
+                Resource:
+                  - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog"
+                  - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/${MuseAnalyticsGlueDatabase}"
+                  - !Sub "arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/${MuseAnalyticsGlueDatabase}/${MuseAnalyticsGlueTable}"
+        - PolicyName: WriteDeliveryLogs
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: logs:PutLogEvents
+                Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/kinesisfirehose/plinths-muse-${Stage}:log-stream:*"
+
+  MuseAnalyticsFirehoseLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/kinesisfirehose/plinths-muse-${Stage}
+      RetentionInDays: 90
+
+  MuseAnalyticsFirehose:
+    Type: AWS::KinesisFirehose::DeliveryStream
+    Properties:
+      DeliveryStreamName: !Sub plinths-muse-${Stage}
+      DeliveryStreamType: DirectPut
+      ExtendedS3DestinationConfiguration:
+        BucketARN: !GetAtt MuseAnalyticsBucket.Arn
+        RoleARN: !GetAtt MuseAnalyticsFirehoseRole.Arn
+        # 64 MiB or 60s — whichever hits first. Larger buffers produce fewer,
+        # bigger Parquet files which Athena scans faster, but delay arrival
+        # in the lake. 60s is the sweet spot for chat: data is queryable
+        # within a minute and files stay analytics-friendly.
+        BufferingHints:
+          IntervalInSeconds: 60
+          SizeInMBs: 64
+        CompressionFormat: UNCOMPRESSED  # Parquet handles its own compression
+        Prefix: "muse/raw/dt=!{timestamp:yyyy-MM-dd}/"
+        ErrorOutputPrefix: "muse/errors/!{firehose:error-output-type}/dt=!{timestamp:yyyy-MM-dd}/"
+        CloudWatchLoggingOptions:
+          Enabled: true
+          LogGroupName: !Sub /aws/kinesisfirehose/plinths-muse-${Stage}
+          LogStreamName: S3Delivery
+        DataFormatConversionConfiguration:
+          Enabled: true
+          SchemaConfiguration:
+            CatalogId: !Ref AWS::AccountId
+            DatabaseName: !Ref MuseAnalyticsGlueDatabase
+            TableName: !Ref MuseAnalyticsGlueTable
+            Region: !Ref AWS::Region
+            RoleARN: !GetAtt MuseAnalyticsFirehoseRole.Arn
+            VersionId: LATEST
+          InputFormatConfiguration:
+            Deserializer:
+              OpenXJsonSerDe: {}
+          OutputFormatConfiguration:
+            Serializer:
+              ParquetSerDe:
+                Compression: SNAPPY
+
+  # Lambda: Muse Analytics Forwarder (DDB Stream → Firehose).
+  MuseForwarderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.lambda_handler
+      CodeUri: infrastructure/lambda/muse-forwarder/
+      Description: Forwards Muse chat rows from DynamoDB Streams to Firehose for Parquet analytics
+      MemorySize: 256
+      Timeout: 60
+      # Override Globals to drop REPORTS_TABLE — this Lambda doesn't read
+      # reports, only forwards conversation rows.
+      Environment:
+        Variables:
+          FIREHOSE_STREAM_NAME: !Ref MuseAnalyticsFirehose
+          POWERTOOLS_METRICS_NAMESPACE: PlinthsMuse
+          POWERTOOLS_SERVICE_NAME: muse-forwarder
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - firehose:PutRecord
+                - firehose:PutRecordBatch
+              Resource: !GetAtt MuseAnalyticsFirehose.Arn
+            - Effect: Allow
+              Action: sqs:SendMessage
+              Resource: !GetAtt MuseForwarderDLQ.Arn
+      Events:
+        ConversationStream:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt MuseConversationsTable.StreamArn
+            StartingPosition: LATEST
+            BatchSize: 100
+            MaximumBatchingWindowInSeconds: 5
+            MaximumRetryAttempts: 3
+            # On a function error, bisect the batch and retry — narrows down
+            # which specific record(s) are bad before they hit the DLQ.
+            BisectBatchOnFunctionError: true
+            # Honor `batchItemFailures` from the handler so only the failed
+            # records are retried, not the whole batch.
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+            DestinationConfig:
+              OnFailure:
+                Destination: !GetAtt MuseForwarderDLQ.Arn
+
+  MuseForwarderFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${MuseForwarderFunction}
+      RetentionInDays: 90
 
   # ─── Lambda Layer: shared cookie JWT verification ───
   # Used by the Authorizer Lambda (for API Gateway) and the Muse Stream Lambda
@@ -1135,3 +1398,23 @@ Outputs:
   MuseStreamFunctionUrl:
     Description: Lambda Function URL for Muse SSE streaming (proxied by CloudFront /api/muse/stream*)
     Value: !GetAtt MuseStreamFunctionUrl.FunctionUrl
+
+  MuseAnalyticsBucketName:
+    Description: S3 bucket holding Parquet chat-message rows (queried by Athena)
+    Value: !Ref MuseAnalyticsBucket
+
+  MuseAnalyticsFirehoseName:
+    Description: Firehose delivery stream that converts JSON → Parquet for chat analytics
+    Value: !Ref MuseAnalyticsFirehose
+
+  MuseAnalyticsGlueDatabaseName:
+    Description: Glue Data Catalog database — point Athena at this database to query chat rows
+    Value: !Ref MuseAnalyticsGlueDatabase
+
+  MuseAnalyticsGlueTableName:
+    Description: Glue Data Catalog table for muse_messages (Parquet, partitioned by dt)
+    Value: !Ref MuseAnalyticsGlueTable
+
+  MuseForwarderDLQUrl:
+    Description: SQS DLQ for forwarder ESM failures — alarm on ApproximateNumberOfMessagesVisible > 0
+    Value: !Ref MuseForwarderDLQ

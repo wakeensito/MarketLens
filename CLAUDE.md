@@ -262,6 +262,7 @@ applied as `data-theme` attribute on `<html>`.
 - **Bedrock**: 3-model pipeline — **Nova Micro** (Parse/Search), **DeepSeek V3.2** (Analyse), **Nova 2 Lite** (Summarise). See `docs/BEDROCK-MODEL-CONFIG.md`.
 - **Brave Search API**: Real web search for competitor/market data (key in SSM Parameter Store)
 - **Lambda Durable Functions**: AI pipeline with automatic checkpointing per stage
+- **Muse analytics**: Chat rows flow `MuseConversationsTable` → DynamoDB Streams → forwarder Lambda → Firehose (JSON→Parquet via Glue schema) → `marketlens-muse-raw-${Stage}` S3 → Athena (`plinths_muse_${Stage}.muse_messages`). See `docs/MUSE-ANALYTICS-PIPELINE.md` for schema, runbook, and Athena queries.
 
 ## IAM & Least Privilege
 

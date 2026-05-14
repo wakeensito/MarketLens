@@ -1,0 +1,3 @@
+# Muse analytics forwarder — DDB Stream → Firehose.
+# boto3 is included in Lambda runtime — do not add here.
+# aws-lambda-powertools is provided via layer — do not add here.
