@@ -5,10 +5,10 @@ Stages: sanitize → parse → search → analyse → score → summarise → as
 Each stage is a durable step with automatic checkpointing and retry.
 
 Models (per stage):
-  - Parse:     Amazon Nova 2 Lite  (see _MODEL_COST_PER_1M; sync with AWS pricing)
-  - Search:    Brave Search API    ($5/1K requests) + Nova 2 Lite (structuring)
+  - Parse:     Amazon Nova Micro   ($0.035/$0.14 per 1M tokens)
+  - Search:    Brave Search API    ($5/1K requests) + Nova Micro (structuring)
   - Analyse:   DeepSeek V3.2       ($0.62/$1.85 per 1M tokens)
-  - Summarise: Amazon Nova 2 Lite  (replaces Claude 3 Haiku; same ID family as Parse)
+  - Summarise: Amazon Nova 2 Lite  (replaces Claude 3 Haiku; see _MODEL_COST_PER_1M)
 """
 
 import os
@@ -617,7 +617,7 @@ def sanitize(idea_text: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Stage 2: Parse  (Amazon Nova 2 Lite — structured extraction)
+# Stage 2: Parse  (Amazon Nova Micro — cheap structured extraction)
 # ---------------------------------------------------------------------------
 def parse(cleaned_idea: str) -> dict:
     """Extract industry, geography, business model, complexity via LLM."""
@@ -653,12 +653,12 @@ Business idea: <<<{cleaned_idea}>>>"""
 
 
 # ---------------------------------------------------------------------------
-# Stage 3: Search  (Brave Search API + Nova 2 Lite for structuring)
+# Stage 3: Search  (Brave Search API + Nova Micro for structuring)
 # ---------------------------------------------------------------------------
 def search(parsed: dict) -> dict:
     """Search for competitors, market size, and trends via Brave Search API.
 
-    Runs 6 targeted searches across high-quality sources, then uses Nova 2 Lite
+    Runs 6 targeted searches across high-quality sources, then uses Nova Micro
     to structure the raw results into the schema the pipeline expects.
     Falls back to pure LLM search if Brave API is unavailable.
     """
@@ -869,7 +869,7 @@ RULES:
 
 
 def _search_fallback_llm(parsed: dict) -> dict:
-    """Fallback: use Nova 2 Lite to generate search results when Brave is unavailable."""
+    """Fallback: use Nova Micro to generate search results when Brave is unavailable."""
     keywords = parsed.get("keywords", [])
     industry = parsed.get("industry", "")
     sub_industry = parsed.get("sub_industry", "")
@@ -1486,11 +1486,11 @@ def handler(event: dict, context: DurableContext) -> dict:
         sanitized = context.step(lambda _: sanitize(idea_text), name="sanitize")
         _set_stage(report_id, "sanitize", org_id)
 
-        # Stage 2: Parse  (Nova 2 Lite)
+        # Stage 2: Parse  (Nova Micro)
         parsed = context.step(lambda _: parse(sanitized["cleaned_idea"]), name="parse")
         _set_stage(report_id, "parse", org_id)
 
-        # Stage 3: Search  (Brave Search API + Nova 2 Lite)
+        # Stage 3: Search  (Brave Search API + Nova Micro)
         search_results = context.step(lambda _: search(parsed), name="search")
         _set_stage(report_id, "search", org_id)
 

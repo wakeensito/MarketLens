@@ -1,4 +1,4 @@
-# Lambda Authorizer — JWT validation
+# Muse Lambdas — chat agent (sync + streaming)
 # boto3 is included in Lambda runtime — do not add here
 # aws-lambda-powertools is provided via layer — do not add here
 # PyJWT + cryptography come from the PlinthsAuthLayer — do not add here

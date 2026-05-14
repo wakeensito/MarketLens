@@ -75,7 +75,7 @@ Base URL: `https://amcgahmo7i.execute-api.us-east-1.amazonaws.com/dev`
 
 ## Actual Backend Response Schema
 
-**IMPORTANT**: The backend returns a FLAT structure, NOT the nested schema described in `docs/03-ai-pipeline.md` §9. The docs describe the target schema; the current implementation returns this:
+**IMPORTANT**: The backend returns a FLAT structure, NOT the nested schema described in `docs/architecture/03-ai-pipeline.md` §9. The docs describe the target schema; the current implementation returns this:
 
 When `status: "pending"` or `"running"`:
 ```json
@@ -173,13 +173,13 @@ Plinths is solo-only. The plan axis is power, not audience.
 
 **Max differentiators vs Pro**: unlimited reports, cross-report memory in Muse, Muse model selection (Claude, GPT, Gemini, Perplexity vs. Pro's default model). Stripe price IDs live in the SAM template (`STRIPE_PRICE_ID_PRO`, `STRIPE_PRICE_ID_PRO_ANNUAL`, `STRIPE_PRICE_ID_MAX`, `STRIPE_PRICE_ID_MAX_ANNUAL`).
 
-**Things on the pricing page that are NOT plan-gated yet**: Brave Search + Wikipedia + Wikidata enrichment runs on every report regardless of plan (`infrastructure/lambda/ai-orchestration/app.py:133–246`). Model selection is unimplemented — every plan uses the same Bedrock pipeline (**Nova 2 Lite** on Parse/Search + Summarise, **DeepSeek V3.2** on Analyse). Canonical IDs and deploy notes: `docs/BEDROCK-MODEL-CONFIG.md`. If a future feature claims to gate either, verify the backend actually checks the plan before adding the row to PricingSection.
+**Things on the pricing page that are NOT plan-gated yet**: Brave Search + Wikipedia + Wikidata enrichment runs on every report regardless of plan (`infrastructure/lambda/ai-orchestration/app.py:133–246`). Model selection is unimplemented — every plan uses the same Bedrock pipeline (**Nova Micro** on Parse/Search, **DeepSeek V3.2** on Analyse, **Nova 2 Lite** on Summarise). Canonical IDs and deploy notes: `docs/operations/BEDROCK-MODEL-CONFIG.md`. If a future feature claims to gate either, verify the backend actually checks the plan before adding the row to PricingSection.
 
 There is no Team plan and no multi-seat workflow. Teams considering plinths are routed to a "Contact us" affordance (not built yet). If a future feature implies team usage, push back rather than scope-creeping it.
 
 ## Muse — Chat Agent (backlogged)
 
-Conversational agent that lets authenticated users ask questions about a generated report and run general market-research Q&A. **Muse** is the brand/UI name; older docs (`docs/BACKLOG.md`, `docs/05-milestones-and-sprints.md`) still call it "chat" — both refer to the same surface.
+Conversational agent that lets authenticated users ask questions about a generated report and run general market-research Q&A. **Muse** is the brand/UI name; older docs (`docs/planning/BACKLOG.md`, `docs/planning/05-milestones-and-sprints.md`) still call it "chat" — both refer to the same surface.
 
 **Status:** design direction locked, build deferred until after the Free/Pro/Max launch is settled. Do not scaffold backend code without a fresh shape pass; the design below is the persisted decision but technical details (transport, schema) still need work.
 
@@ -259,9 +259,10 @@ applied as `data-theme` attribute on `<html>`.
 
 - **SAM**: Lambdas, API Gateway, S3, CloudFront, DynamoDB
 - **Terraform**: IAM roles (CD role with GitHub OIDC)
-- **Bedrock**: 3-model pipeline — **Nova 2 Lite** (Parse/Search + Summarise), **DeepSeek V3.2** (Analyse). See `docs/BEDROCK-MODEL-CONFIG.md`.
+- **Bedrock**: 3-model pipeline — **Nova Micro** (Parse/Search), **DeepSeek V3.2** (Analyse), **Nova 2 Lite** (Summarise). See `docs/operations/BEDROCK-MODEL-CONFIG.md`.
 - **Brave Search API**: Real web search for competitor/market data (key in SSM Parameter Store)
 - **Lambda Durable Functions**: AI pipeline with automatic checkpointing per stage
+- **Muse analytics**: Chat rows flow `MuseConversationsTable` → DynamoDB Streams → forwarder Lambda → Firehose (JSON→Parquet via Glue schema) → `marketlens-muse-raw-${Stage}` S3 → Athena (`plinths_muse_${Stage}.muse_messages`). See `docs/muse/MUSE-ANALYTICS-PIPELINE.md` for schema, runbook, and Athena queries.
 
 ## IAM & Least Privilege
 

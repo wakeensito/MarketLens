@@ -6,12 +6,12 @@
 
 | Stage | Model | Bedrock model ID (parameter default) |
 |-------|--------|--------------------------------------|
-| Parse | **Amazon Nova 2 Lite** | `amazon.nova-2-lite-v1:0` |
+| Parse | **Amazon Nova Micro** | `amazon.nova-micro-v1:0` |
 | Search (structuring) | Same as Parse | Uses `BEDROCK_MODEL_ID_PARSE` |
 | Analyse | **DeepSeek V3.2** | `deepseek.v3.2` |
 | Summarise | **Amazon Nova 2 Lite** | `amazon.nova-2-lite-v1:0` |
 
-**Change from prior docs:** stages that used **Amazon Nova 1 Micro** (parse/search) and **Claude 3 Haiku** (summarise) now use **Nova 2 Lite** for a single fast, cost‑effective Amazon model on those slots. **Analyse** remains **DeepSeek** for competitive reasoning.
+**Rationale:** **Nova Micro** is enough for bounded JSON extraction and search structuring (low cost, low latency). **Nova 2 Lite** is reserved for **Summarise** (and optional Muse default) where founder-facing prose and richer JSON benefit from a stronger model; using Nova 2 Lite on Parse would be overkill. **Analyse** stays **DeepSeek** for competitive reasoning.
 
 ## SAM parameters
 
@@ -26,4 +26,4 @@ Override at deploy time if AWS renames an ID or you use inference profiles.
 
 ## Muse (future)
 
-Default chat model on Bedrock is documented alongside the report pipeline in `CLAUDE.md` (Muse section). When Muse ships, default **Pro** Bedrock chat to **Nova 2 Lite** unless product specifies otherwise; **Max** may still offer Claude / DeepSeek / Sonnet per plan.
+Default chat model on Bedrock is documented alongside the report pipeline in `CLAUDE.md` (Muse section). When Muse ships, default **Pro** Bedrock chat to **Nova 2 Lite** (same family as **Summarise**, not Parse) unless product specifies otherwise; **Max** may still offer Claude / DeepSeek / Sonnet per plan.

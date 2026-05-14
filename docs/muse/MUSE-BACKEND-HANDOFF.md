@@ -1,0 +1,292 @@
+# Muse Backend — Handoff Contract
+
+> **Audience:** the backend Claude session implementing Muse.
+> **Author:** the frontend lane Claude (UI/UX only — does not touch `template.yaml`, `infrastructure/lambda/`, `infra/`, or `samconfig.toml`).
+> **Goal:** give you everything you need in one file so the backend can be built without ambiguity.
+
+## Stack guardrail (non-negotiable)
+
+**This repo is Python + AWS SAM** (`template.yaml`, `sam build` / `sam deploy`). New Muse Lambdas live under `infrastructure/lambda/` with the same style as `api/`, `ai-orchestration/`, etc.
+
+General-purpose **AWS Lambda** or **serverless deployment** guidance often defaults to **TypeScript + CDK** when the stack is unspecified. **Ignore that here.** Do not introduce CDK or Node Lambdas for Muse unless the project explicitly migrates. If an agent skill suggests TS/CDK snippets, translate the intent into **Python + SAM** to match this repository.
+
+## Related references
+
+- `docs/muse/MUSE-IMPLEMENTATION-PLAN.md` — the original product/architecture plan. Treat as background; this handoff supersedes it on transport, contract, and frontend behavior.
+- `docs/operations/BEDROCK-MODEL-CONFIG.md` — report-pipeline Bedrock model IDs (Nova Micro / DeepSeek / Nova 2 Lite). Muse streaming uses **Nova 2 Lite** for chat; do not confuse with Parse's Nova Micro.
+- `docs/muse-streaming-architecture.drawio` — the AWS architecture diagram for this design.
+- `CLAUDE.md` > **Muse** section — locked structural decisions and the IAM/secrets rules you must follow.
+- `frontend/src/hooks/useMuse.ts`, `frontend/src/components/muse/MuseThread.tsx`, `frontend/src/components/muse/museTypes.ts` — the frontend that will consume this backend.
+
+## TL;DR architecture
+
+REST API Gateway buffers Lambda responses end-to-end, so it cannot deliver token streaming. The chosen route:
+
+- **Streaming endpoint** (`POST /api/muse/stream`) → **Lambda Function URL** with `InvokeMode: RESPONSE_STREAM`, fronted by a new CloudFront behavior using OAC. Native SSE.
+- **Sync endpoints** (`GET`/`DELETE /api/muse/conversations/{report_id}`) → the **existing REST API Gateway + cookie Authorizer**, no changes to that path.
+- **Inference:** Bedrock `InvokeModelWithResponseStream`. Pro tier uses **Amazon Nova 2 Lite** (`amazon.nova-2-lite-v1:0`) as the Muse chat model. This is separate from the **report** pipeline in `docs/operations/BEDROCK-MODEL-CONFIG.md`: **Nova Micro** (parse/search) + **DeepSeek V3.2** (analyse) + **Nova 2 Lite** (summarise only).
+- **Persistence:** new DynamoDB table `MuseConversationsTable`. Existing `ReportsTable` is read-only from Muse.
+
+## Endpoint contract
+
+Base path: `/api/muse`. CloudFront forwards `/api/muse/stream*` to the Function URL origin; everything else under `/api/muse/*` falls through to the existing API Gateway origin.
+
+| Method | Path | Auth | Origin | Description |
+|---|---|---|---|---|
+| POST | `/api/muse/stream` | cookie (verified inside Lambda) | Function URL | Send a turn, receive `text/event-stream`. |
+| GET | `/api/muse/conversations/{report_id}` | cookie (existing Authorizer) | API Gateway | List thread for a report. |
+| DELETE | `/api/muse/conversations/{report_id}` | cookie (existing Authorizer) | API Gateway | Delete a thread. |
+
+### `POST /api/muse/stream`
+
+**Request body:** JSON with `report_id` (uuid), `message` (user prompt text), `conversation_id` (uuid or null — null starts a new thread).
+
+**Response:** `Content-Type: text/event-stream`. The frontend reads this with `fetch` + `getReader()`. Event types:
+
+- **`event: token`** — `data: {"delta": "..."}` for each text chunk from the model.
+- **`event: sentence_boundary`** — `data: {}` after sentence-final punctuation (`.`, `!`, `?`). The frontend uses this for a 60ms settle pause. Do not emit inside parenthesized punctuation or mid-citation tokens.
+- **`event: done`** — `data: {...}` with `conversation_id`, `message_id`, `tokens_in`, `tokens_out`, `sources` (array of `{kind, target, label}`), `follow_ups` (array of plain strings). Always fires (except on error), even with empty arrays.
+- **`event: error`** — `data: {"code": "...", "message": "..."}` then close the stream. Recognized codes: `plan_locked`, `limit_reached`, `report_not_found`, `auth_failed`, `model_error`, `validation`, `timeout`.
+- **`: keep-alive`** — SSE comment line every ~15s if the model is slow to first token, so CloudFront doesn't idle-disconnect.
+
+**Citation tokens in `delta` strings** use the format `[[target|Label]]` (e.g. `[[gap-2|Gap 2]]`). The frontend's `MuseThread.tsx` already parses this — keep the format.
+
+**`sources` and `follow_ups` go inside `event: done`**, not as separate event types.
+
+### `GET /api/muse/conversations/{report_id}`
+
+Returns the full thread for a report, ordered oldest-first. Response contains `conversation_id` and `messages` array. Each message has `role`, `content`, `created_at`; assistant messages also include `sources`, `follow_ups`, `tokens_in`, `tokens_out`.
+
+Empty thread: return `200` with `{"conversation_id": null, "messages": []}`. Never 404 on an empty thread — the frontend renders an empty state.
+
+### `DELETE /api/muse/conversations/{report_id}`
+
+Delete every row in the conversation for this report+user. Return `200` with `{"deleted": true}` regardless of whether a thread existed.
+
+## DynamoDB schema — new table
+
+Resource name: `MuseConversationsTable`. Table name pattern: `marketlens-muse-conversations-${Stage}`.
+
+**Table definition:**
+- Billing: `PAY_PER_REQUEST`
+- Keys: `pk` (HASH, S), `sk` (RANGE, S)
+- GSI1: `gsi1pk` (HASH, S), `gsi1sk` (RANGE, S), `ProjectionType: ALL` — reserved for Max-tier cross-report memory (out of scope now, but provisioning up front avoids a table rebuild later)
+- TTL attribute: `ttl` (enabled)
+- SSE: enabled
+- Point-in-time recovery: enabled
+
+**Item shape per message:**
+
+| Field | Value | Notes |
+|---|---|---|
+| `pk` | `REPORT#{report_id}` | Partition key |
+| `sk` | `MSG#{iso_timestamp}#{message_id}` | Sort key |
+| `gsi1pk` | `ORG#{org_id}` | For future cross-report memory |
+| `gsi1sk` | `{iso_timestamp}#{report_id}` | |
+| `conversation_id` | uuid | |
+| `message_id` | uuid | |
+| `role` | `user` or `assistant` | |
+| `content` | full text including citation tokens | |
+| `sources` | array | Assistant rows only |
+| `follow_ups` | array | Assistant rows only |
+| `tokens_in` | integer | Assistant rows only |
+| `tokens_out` | integer | |
+| `model_id` | `amazon.nova-2-lite-v1:0` | |
+| `created_at` | ISO8601 | |
+| `ttl` | epoch int or None | See retention below |
+
+**Retention (TTL):**
+- **Free** users: `now + 30 days` epoch seconds.
+- **Pro** users: `None` (no TTL — kept indefinitely).
+- **Max** users: `None` (follow the same rule when it ships).
+
+## Auth approach — shared module
+
+Function URL `AuthType` only supports `NONE` or `AWS_IAM`; neither composes with the existing HttpOnly auth cookie. The Muse Stream Lambda **must verify the cookie JWT itself**. Since the existing `infrastructure/lambda/authorizer/app.py` already does this for the REST API path, extract the verification into a shared Lambda Layer rather than duplicating:
+
+- **Create** `infrastructure/layers/plinths-auth-shared/` exporting `verify_session_cookie(cookie_header) -> AuthContext | None`.
+- **Returns** `AuthContext` (user_id, org_id, plan, email) on valid JWT, or `None` if the cookie is missing/invalid/expired.
+- **Always-Deny on uncertainty** — never raise, never return partial. Missing cookie, JWT validation failure, user record not found, DynamoDB lookup throws, wrong `token_use` all return `None`.
+- **Both** the existing `authorizer/app.py` and the new `muse/` Lambdas import from this layer.
+- **Caches** Cognito JWKs at module scope (cold-start fetch, refresh on signature failure once).
+
+## New AWS resources to add to `template.yaml`
+
+### 1. MuseStreamFunction
+
+- **Type:** `AWS::Serverless::Function`
+- **CodeUri:** `infrastructure/lambda/muse/`
+- **MemorySize:** 1024 (bigger heap for Bedrock streaming buffers)
+- **Timeout:** 120 (match CloudFront idle timeout ceiling)
+- **Function URL:** defined as a separate `AWS::Lambda::Url` resource (`RESPONSE_STREAM`), `AuthType: AWS_IAM` so CloudFront's OAC SigV4 signature is validated
+- **Environment:** `MUSE_CONVERSATIONS_TABLE`, `REPORTS_TABLE`, `COGNITO_USER_POOL_ID`, `COGNITO_CLIENT_ID`, `CHAT_MODEL_ID` (from `!Ref BedrockModelIdMuseChat`)
+- **IAM policies:** `DynamoDBCrudPolicy` (conversations table), `DynamoDBReadPolicy` (reports table), `bedrock:InvokeModelWithResponseStream` scoped to exact model ARN (`!Sub arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockModelIdMuseChat}`)
+
+### 2. Function URL → CloudFront integration
+
+- Create an **Origin Access Control (OAC)** for Lambda Function URLs.
+- Add a CloudFront origin pointing at the Function URL domain (parse via `!Select`/`!Split`).
+- Add a behavior with `PathPattern: /api/muse/stream*` mapped to that origin:
+  - `AllowedMethods: [POST, OPTIONS]`
+  - `CachePolicyId`: managed `CachingDisabled` (`4135ea2d-6df8-44a3-9df3-4b5a84be39ad`)
+  - `OriginRequestPolicyId`: managed `AllViewerExceptHostHeader` (`b689b0a8-53d0-40ab-baf2-68738e2966ac`) — forwards cookies.
+  - `ResponseHeadersPolicyId`: managed CORS-with-preflight-and-credentials or a custom one allowing your origin.
+- Grant CloudFront permission to invoke the Function URL via a `Lambda::Permission` resource with `FunctionUrlAuthType: AWS_IAM` and `SourceArn` scoped to the distribution.
+- **The new behavior's PathPattern must be ordered ABOVE the existing `/api/*` behavior** so CloudFront matches `/api/muse/stream*` first.
+
+### 3. MuseSyncFunction (Option A — recommended)
+
+Separate Lambda for `GET`/`DELETE /api/muse/conversations/{report_id}`, mounted on the existing `ApiGatewayApi` with the cookie Authorizer. Keeps streaming and sync deployments independent. The streaming Lambda has a 1024MB / 120s footprint; the sync handlers don't need that.
+
+### 4. CORS on the existing API Gateway
+
+The existing `ApiGatewayApi.Cors` already allows the `Cookie` header (see `template.yaml:379`). No change needed for the sync routes.
+
+## Frontend integration — what it expects from you
+
+The frontend hook `useMuse` currently uses a mock simulator. The backend swap will replace `sendMessage` with a real `fetch` against `/api/muse/stream`, parse SSE events, and call the appropriate state setters for token/boundary/done/error events.
+
+**What this means for you:**
+
+1. **Citation tokens in the model output must be in the `[[target|Label]]` format.** The frontend parser at `MuseThread.tsx:33-78` is wired for this. Instruct the model in the system prompt to use `[[target|Label]]` when referencing report cells. Allowed targets: `gap-{N}`, `competitor-{N}`, `roadmap-phase-{N}`, `key-stat-{slug}`. Labels are short and human (e.g. "Gap 2", "Competitor 3", "Roadmap · Phase 1").
+
+2. **Sources** in `event: done` use `kind: "inline"` for Pro tier (always). `kind: "cross"` is Max-tier only and out of scope.
+
+3. **Follow-ups** are plain strings; frontend renders them as buttons that re-trigger `sendMessage` when clicked.
+
+## Plan-tier behavior
+
+Per CLAUDE.md > Plans:
+
+- **Free:** Muse is **locked**. Reject with `event: error` code `plan_locked` and close the stream. Do not bill any tokens.
+- **Pro:** 30 messages per `report_id`. Count `role: "user"` rows. On the 31st request, emit `event: error` code `limit_reached` with `{limit: 30, used: 30}` before any token is generated.
+- **Max:** out of scope. Treat identically to Pro for v1 (single default model = **Amazon Nova 2 Lite**, no message cap — `limit_reached` never fires for Max users). Max-tier features (cross-report memory, model selection) are deliberately deferred.
+
+The exact display pattern for the Pro limit on the frontend is **deferred** — see `docs/planning/BACKLOG.md` > "Muse Pro limit indicator — display pattern" — but the backend contract for `limit_reached` is fixed.
+
+## Things explicitly out of scope for v1
+
+Do not build any of these — they're documented as decided-but-deferred:
+
+1. **Max-tier model picker** (Claude / GPT / Gemini / Perplexity) — no third-party API integrations, no extra SSM params.
+2. **Cross-report memory** (Max only). GSI1 keys are provisioned so adding it later doesn't require a table rebuild, but no code paths should use GSI1 yet.
+3. **Custom token-based caps.** Current cap is strictly 30 user messages per `report_id` for Pro.
+4. **Conversation branching, regenerate-from-mid-thread, etc.** Frontend's `regenerate` just resends the same prompt; backend treats it as a fresh turn.
+
+## Validation checklist
+
+Before declaring done, walk through:
+
+- [ ] `sam validate --lint` passes.
+- [ ] `ruff format --check infrastructure/lambda/ scripts/` passes.
+- [ ] New SSM parameters (if any) are populated manually post-deploy and documented. (None expected for v1.)
+- [ ] All IAM resources are exact ARNs, not `*` — Bedrock model ARN, DynamoDB table ARN, Reports table ARN.
+- [ ] Function URL CORS `AllowOrigins` matches the production CloudFront domain — **not** `*`.
+- [ ] CloudFront behavior precedence: `/api/muse/stream*` is ordered above `/api/*`.
+- [ ] `cookie` header is forwarded on the streaming behavior (Origin Request Policy `AllViewerExceptHostHeader` does this).
+- [ ] Heartbeat keep-alive emits at least every 15s if the model is slow.
+- [ ] `event: error` with `plan_locked` fires for Free, `limit_reached` fires for Pro at >30 user messages.
+- [ ] `event: done` payload includes `sources` and `follow_ups` (even if empty arrays).
+- [ ] Conversations Lambda (sync path) is wired to the existing `CookieAuthorizer` on `ApiGatewayApi`, not a new authorizer.
+
+## Quick sequence for implementation
+
+Suggested order if you're starting from zero:
+
+1. **Sync path first** — easier, no streaming surprises. Wire `GET`/`DELETE /api/muse/conversations/{id}` to `MuseConversationsTable`. Validate against a hand-written test thread.
+2. **Streaming Lambda skeleton** — handler that just emits a hardcoded `token` then `done`. Wire the Function URL + CloudFront behavior. Get the SSE plumbing right end-to-end before touching Bedrock.
+3. **Bedrock streaming** — swap the hardcoded tokens for `invoke_model_with_response_stream` against **Amazon Nova 2 Lite** (`amazon.nova-2-lite-v1:0`; env `CHAT_MODEL_ID`). Confirm request/response JSON matches Bedrock docs for this model (same Nova family conventions as `ai-orchestration` unless AWS documents otherwise). Implement the sentence-boundary detector. Inject the report `result_json` from `ReportsTable` into the system prompt.
+4. **Persistence** — write user + assistant rows after the stream completes. One batch write at end-of-stream is fine.
+5. **Plan gates** — implement `plan_locked` (Free) and `limit_reached` (Pro) error paths.
+6. **Polish** — heartbeat keep-alive, error handling for `report_not_found`, retry semantics on the frontend side (handled by the frontend Claude — not your concern).
+
+## When you're done
+
+Drop a line in this file or in `CLAUDE.md` confirming what got built so the frontend Claude knows to flip `useMuse` from mock-mode to real-fetch mode.
+
+## Backend implementation status
+
+**Status:** v1 backend landed in-tree on 2026-05-12 (commit pending). All endpoints, the conversations table, the function URL, the OAC, and the CloudFront behavior are wired in `template.yaml`. **Awaiting `sam deploy`** — the resources do not exist in AWS yet. The frontend can begin migrating `useMuse` from mock-mode to real fetch against `/api/muse/stream` and `/api/muse/conversations/{report_id}` as soon as a deploy lands; until then, target the dev stack for integration testing.
+
+### What got built
+
+| Layer | Resource | Path |
+|---|---|---|
+| Layer | `PlinthsAuthLayer` (`plinths_auth.verify_session_cookie`) | `infrastructure/layers/plinths-auth-shared/` |
+| Lambda | `MuseSyncFunction` — `GET`/`DELETE /api/muse/conversations/{report_id}` | `infrastructure/lambda/muse/sync.py` |
+| Lambda | `MuseStreamFunction` — SSE via Function URL | `infrastructure/lambda/muse/stream.py` |
+| DDB | `MuseConversationsTable` (PAY_PER_REQUEST, GSI1, TTL, PITR) | `template.yaml` |
+| OAC | `MuseStreamLambdaOAC` (`OriginAccessControlOriginType: lambda`) | `template.yaml` |
+| URL | `MuseStreamFunctionUrl` (`AWS::Lambda::Url`, `RESPONSE_STREAM`) | `template.yaml` |
+| CF | `/api/muse/stream*` behavior, ordered above `/api/*` | `template.yaml` |
+
+The existing `AuthorizerFunction` was refactored to call `verify_session_cookie` from the shared layer — the duplicated PyJWT logic in `infrastructure/lambda/authorizer/app.py` is gone, and `authorizer/requirements.txt` no longer pins PyJWT/cryptography (the layer provides them).
+
+### Contract conformance
+
+Every event in the handoff contract is implemented as specified:
+
+- `event: token` carries `{"delta": "..."}`. Char-by-char from Bedrock `contentBlockDelta`.
+- `event: sentence_boundary` fires after sentence-final `.`, `!`, `?` **only when outside a `[[…]]` citation token**. Detection lives in `citations.detect_sentence_boundary`.
+- `event: done` carries `conversation_id`, `message_id`, `tokens_in`, `tokens_out`, `sources` (always inline kind in v1), `follow_ups` (always 3-element list, or empty if the model failed to emit the sentinel).
+- `event: error` codes: `plan_locked` (Free), `limit_reached` (Pro >=30 user messages), `auth_failed` (cookie invalid), `report_not_found`, `model_error`, `validation`. `timeout` is not actively emitted — the CloudFront 60s idle ceiling will close the connection if the model is hung; the keep-alive heartbeat prevents that.
+- `: keep-alive` SSE comment emitted every 15s while waiting on the first Bedrock chunk (worker-thread + queue pattern in `stream._stream_response`).
+
+### Sources / follow-ups extraction
+
+- **Sources** are parsed from `[[target|Label]]` tokens in the assembled prose. Deduped by `(target, label)` in order of first appearance.
+- **Follow-ups** come from a `<<MUSE_META>>{"follow_ups": [...]}<<END>>` envelope the system prompt instructs the model to append. The streaming layer (`citations.MetaStripper`) strips that envelope from the live stream so the user never sees it, then parses the JSON for the `done` payload. Cross-chunk-boundary splits handled. Malformed/missing = empty `follow_ups: []`.
+
+### Report ownership
+
+`GET /api/muse/conversations/{report_id}` and the stream both confirm the caller's `org_id` matches the report's `org_id` before reading or invoking Bedrock. A guess at someone else's `report_id` returns an empty thread (sync) or `report_not_found` (stream) — never leaks existence.
+
+### Plan tier behavior
+
+- **Free:** stream emits `event: error` with `plan_locked` before any Bedrock call. Zero billed tokens.
+- **Pro:** counts `role: "user"` rows in the conversation. On the 31st request, emits `limit_reached` with `{limit: 30, used: <count>}` before invoking Bedrock.
+- **Max:** treated identically to Pro for v1 — no cap, single default model (`amazon.nova-2-lite-v1:0`). Cross-report memory + model picker explicitly deferred.
+
+### Retention (TTL)
+
+- Free: `now + 30 days` on every row.
+- Pro & Max: no `ttl` field written — rows kept indefinitely.
+
+### Validation results
+
+- `sam validate --lint` — **passes**.
+- `ruff format --check infrastructure/lambda/` — **skipped locally** (ruff not installed); CI will run it on commit.
+
+### Things the frontend should know
+
+1. **Endpoints are at `/api/muse/stream` and `/api/muse/conversations/{report_id}`** under the same CloudFront origin. No new base URL — `VITE_API_BASE_URL` works unchanged.
+2. **The streaming endpoint is `fetch` + `getReader()`-friendly**, but only on the production CloudFront domain. SAM local can't reproduce the function-URL-via-CloudFront topology; preview/dev against the deployed dev stack instead.
+3. **CORS `AllowOrigins` is set to `https://${CognitoCallbackDomain}`** — the production CloudFront domain. Local dev hitting the function URL directly from a different origin will fail CORS preflight. Route through CloudFront.
+4. **Empty thread = 200 with `{"conversation_id": null, "messages": []}`**. Frontend should not interpret that as an error.
+5. **`event: done` always fires** (except on `error`), even with empty `sources` and `follow_ups` arrays.
+6. **Authoritative model ID** is the `BedrockModelIdMuseChat` CFN parameter (default `amazon.nova-2-lite-v1:0`). If the model changes, the frontend doesn't need to do anything — the contract is model-agnostic.
+
+### Post-deploy steps
+
+After `sam deploy`:
+
+1. No SSM SecureString parameters need manual population for v1. (Max-tier provider keys are out of scope.)
+2. Confirm the new CloudFront behavior order in the AWS console — `/api/muse/stream*` MUST be ordered above `/api/*`.
+3. Smoke-test the sync path first (curl with cookie against `/api/muse/conversations/<report_id>` should return an empty thread).
+4. Smoke-test the stream path with a POST including the cookie; you should see `event: token` lines arriving as soon as Bedrock starts.
+5. The first deploy will create `MuseConversationsTable` — point-in-time recovery is enabled from creation.
+
+### Things deliberately not built (out of scope per CLAUDE.md + handoff)
+
+- Max-tier model picker (Claude / GPT / Gemini / Perplexity) — no third-party API code, no extra SSM params.
+- Cross-report memory — GSI1 keys are written (`ORG#{org_id}`) so the index can be queried later without a table rebuild, but no read path uses GSI1 yet.
+- `regenerate` semantics with `regenerate_message_id` — frontend's `regenerate` just resends the same prompt; the backend treats it as a fresh turn.
+- Token-cap pivot for Pro — current cap is strictly 30 user messages per report.
+
+### Post-v1 follow-ups (separate PR, don't block on these)
+
+- [ ] `MusePersistenceFailed` CloudWatch metric (alert when DynamoDB writes fail after stream completes).
+- [ ] Sentence-boundary refinement: lookahead before emitting + handle multi-fire edge cases (e.g. `"..."`).
+- [ ] `_serialize_message` always-include keys — ensure every field is present (even if `None`) so downstream consumers don't need `dict.get` everywhere.
+- [ ] Repo-wide `.pyc` cleanup + add `__pycache__/` and `*.pyc` to `.gitignore` if missing.
+- [ ] Pytest harness for `MetaStripper` and `citations.extract_citations` (unit tests, not integration).
