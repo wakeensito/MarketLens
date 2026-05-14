@@ -768,9 +768,12 @@ Resources:
       RetentionInDays: 90
 
   # ─── Lambda: Muse Stream (SSE via Function URL) ───
-  # Function URL AuthType is NONE because it doesn't compose with the existing
-  # HttpOnly cookie session; the Lambda verifies the cookie itself via the
-  # PlinthsAuthLayer. CloudFront-only access is enforced by:
+  # Function URL AuthType is AWS_IAM (see MuseStreamFunctionUrl below) so the
+  # OAC's SigV4 signature is enforced; with NONE the URL would be reachable by
+  # anyone who learned it. End-user identity (the HttpOnly cookie session) is
+  # verified inside the Lambda via the PlinthsAuthLayer — IAM auth on the URL
+  # only proves "CloudFront signed this request", not "user X is logged in."
+  # CloudFront-only access is then locked down by:
   #   1. OAC on the function URL (MuseStreamLambdaOAC, type=lambda).
   #   2. Lambda permission below scoped to cloudfront.amazonaws.com + the
   #      distribution ARN as SourceArn.

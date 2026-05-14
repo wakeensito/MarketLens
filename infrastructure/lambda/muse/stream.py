@@ -85,6 +85,36 @@ def _sse_error(code: str, message: str, **extra: Any) -> bytes:
     return _sse_event("error", {"code": code, "message": message, **extra})
 
 
+# ─── Lambda Function URL streaming prelude ───
+#
+# When a Function URL is configured with InvokeMode=RESPONSE_STREAM and the
+# Python handler is a generator, the runtime treats the FIRST yielded chunk as
+# an HTTP-response prelude: a JSON object describing the response line + headers
+# + cookies, followed by 8 NULL bytes as a separator, after which every
+# subsequent yield is appended to the response body verbatim. Without the
+# prelude the response defaults to `application/octet-stream`, which CloudFront
+# and some intermediaries may treat as opaque bytes (compression decisions,
+# buffering thresholds) rather than as a live event stream.
+_STREAM_PRELUDE_HEADERS: dict[str, str] = {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache, no-transform",
+    # Disable proxy-side response buffering. Honored by nginx and ignored
+    # everywhere else; harmless either way.
+    "X-Accel-Buffering": "no",
+}
+
+
+def _stream_prelude() -> bytes:
+    metadata = json.dumps(
+        {
+            "statusCode": 200,
+            "headers": _STREAM_PRELUDE_HEADERS,
+            "cookies": [],
+        }
+    ).encode("utf-8")
+    return metadata + b"\x00" * 8
+
+
 # ─── Cookie extraction from a Function URL event ───
 
 
@@ -102,21 +132,24 @@ def _cookie_header_from_function_url_event(event: dict) -> str:
 # ─── Plan gates ───
 
 
-def _check_plan_gate(plan: str, report_id: str) -> tuple[bool, bytes | None]:
-    """Returns (allowed, error_event_or_None)."""
+def _check_plan_gate(plan: str, user_message_count: int) -> tuple[bool, bytes | None]:
+    """Returns (allowed, error_event_or_None).
+
+    `user_message_count` is computed once by the caller from the already-loaded
+    history rows so we don't pay for a second DynamoDB Query per turn.
+    """
     if plan == "free":
         return False, _sse_error(
             "plan_locked",
             "Upgrade to Pro to chat with Muse.",
         )
     if plan == "pro":
-        used = persistence.count_user_messages(report_id)
-        if used >= _MAX_USER_MESSAGES_PRO:
+        if user_message_count >= _MAX_USER_MESSAGES_PRO:
             return False, _sse_error(
                 "limit_reached",
                 "You've reached the Pro chat limit for this report.",
                 limit=_MAX_USER_MESSAGES_PRO,
-                used=used,
+                used=user_message_count,
             )
         return True, None
     if plan in ("max", "admin"):
@@ -256,15 +289,20 @@ def _stream_response(auth: AuthContext, body: dict) -> Generator[bytes, None, No
         )
         return
 
-    # 2. Plan gate (early reject — no Bedrock call billed).
-    allowed, gate_event = _check_plan_gate(auth.plan, report_id)
+    # 2. Load history once. Used for the plan gate (user-message count for the
+    # Pro cap), the conversation_id resolution, and the model context window.
+    # Doing this here means the Pro gate doesn't pay for a second Query.
+    history_rows = persistence.list_messages(report_id)
+    user_message_count = sum(1 for r in history_rows if r.get("role") == "user")
+
+    # 3. Plan gate (early reject — no Bedrock call billed).
+    allowed, gate_event = _check_plan_gate(auth.plan, user_message_count)
     if not allowed:
         assert gate_event is not None
         yield gate_event
         return
 
-    # 3. Load history and resolve conversation_id.
-    history_rows = persistence.list_messages(report_id)
+    # 4. Resolve conversation_id.
     if history_rows:
         stored_conversation_id = history_rows[0].get("conversation_id")
         if conversation_id is not None and conversation_id != stored_conversation_id:
@@ -278,7 +316,7 @@ def _stream_response(auth: AuthContext, body: dict) -> Generator[bytes, None, No
         conversation_id = persistence.new_id()
     history = persistence.messages_to_history(history_rows, limit=_HISTORY_TURN_LIMIT)
 
-    # 4. Build prompt + invoke Bedrock in a worker thread so we can interleave
+    # 5. Build prompt + invoke Bedrock in a worker thread so we can interleave
     # keep-alives while waiting for the first delta.
     result_json = report.get("result_json") if isinstance(report, dict) else None
     system_prompt = prompts.build_system_prompt(result_json)
@@ -345,7 +383,7 @@ def _stream_response(auth: AuthContext, body: dict) -> Generator[bytes, None, No
         yield _sse_error(code, msg)
         return
 
-    # 5. Build the final assembled prose and meta payload.
+    # 6. Build the final assembled prose and meta payload.
     full_text = visible_text_buffer.strip()
     sources = [c.as_dict() for c in citations.extract_citations(full_text)]
     meta = stripper.meta()
@@ -356,7 +394,7 @@ def _stream_response(auth: AuthContext, body: dict) -> Generator[bytes, None, No
             if isinstance(item, str) and item.strip():
                 follow_ups.append(item.strip())
 
-    # 6. Persist the turn (best-effort — even on persistence failure we still
+    # 7. Persist the turn (best-effort — even on persistence failure we still
     # send `done` so the user sees the response). Done after `done` would mean
     # the assistant text is wasted if Lambda is killed mid-shutdown.
     try:
@@ -380,7 +418,7 @@ def _stream_response(auth: AuthContext, body: dict) -> Generator[bytes, None, No
     except Exception:
         logger.exception("Muse persistence failed (turn already streamed)")
 
-    # 7. Emit `done`.
+    # 8. Emit `done`.
     yield _sse_event(
         "done",
         {
@@ -420,7 +458,15 @@ def _parse_body(event: dict) -> dict | None:
 
 def handler(event: dict, context) -> Generator[bytes, None, None]:
     """Function URL streaming handler. The runtime stitches yielded bytes into
-    the chunked HTTP response body."""
+    the chunked HTTP response body.
+
+    The first yield is the response prelude (status + headers + 8 NULL bytes);
+    every subsequent yield is appended to the response body verbatim. We always
+    yield the prelude, even on errors, so the response is `text/event-stream`
+    end-to-end and CloudFront/clients never see a stray octet-stream default.
+    """
+    yield _stream_prelude()
+
     # Reject non-POST early. Function URL's CORS preflight (OPTIONS) is
     # handled by AWS automatically when CORS is configured on the URL.
     method = event.get("requestContext", {}).get("http", {}).get("method", "POST")

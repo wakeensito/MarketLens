@@ -127,12 +127,6 @@ def list_messages(report_id: str) -> list[dict]:
     return [_strip_decimals(it) for it in items]
 
 
-def count_user_messages(report_id: str) -> int:
-    """Count `role: "user"` rows for a report. Used for the Pro 30-message cap."""
-    rows = list_messages(report_id)
-    return sum(1 for r in rows if r.get("role") == "user")
-
-
 # ─── Conversation writes ───
 
 
