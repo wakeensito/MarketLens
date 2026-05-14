@@ -115,6 +115,7 @@ def list_messages(report_id: str) -> list[dict]:
             "KeyConditionExpression": Key("pk").eq(f"REPORT#{report_id}")
             & Key("sk").begins_with("MSG#"),
             "ScanIndexForward": True,
+            "ConsistentRead": True,
         }
         if last_key:
             query_kwargs["ExclusiveStartKey"] = last_key

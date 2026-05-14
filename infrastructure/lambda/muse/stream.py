@@ -118,8 +118,14 @@ def _check_plan_gate(plan: str, report_id: str) -> tuple[bool, bytes | None]:
                 limit=_MAX_USER_MESSAGES_PRO,
                 used=used,
             )
-    # `max` and `admin`: no cap.
-    return True, None
+        return True, None
+    if plan in ("max", "admin"):
+        return True, None
+    # Fail closed: any unrecognized plan value is treated as not allowed.
+    return False, _sse_error(
+        "plan_locked",
+        "Your account plan is not recognized. Contact support.",
+    )
 
 
 # ─── Bedrock streaming ───
@@ -196,8 +202,9 @@ def _stream_bedrock_async(payload: str, out: Queue) -> None:
             accept="application/json",
             body=payload,
         )
-    except (ClientError, BotoCoreError) as e:
-        out.put(("error", ("model_error", f"Bedrock invocation failed: {e}")))
+    except (ClientError, BotoCoreError):
+        logger.exception("Bedrock invocation failed")
+        out.put(("error", ("model_error", "Bedrock invocation failed")))
         out.put(("end", None))
         return
 
@@ -213,8 +220,9 @@ def _stream_bedrock_async(payload: str, out: Queue) -> None:
                 out.put(("delta", text))
             elif in_tok is not None or out_tok is not None:
                 out.put(("usage", (in_tok or 0, out_tok or 0)))
-    except Exception as e:  # defensive — Bedrock streams sometimes raise mid-iter
-        out.put(("error", ("model_error", f"Bedrock stream interrupted: {e}")))
+    except Exception:
+        logger.exception("Bedrock stream interrupted mid-iteration")
+        out.put(("error", ("model_error", "Bedrock stream interrupted")))
     finally:
         out.put(("end", None))
 
@@ -257,12 +265,17 @@ def _stream_response(auth: AuthContext, body: dict) -> Generator[bytes, None, No
 
     # 3. Load history and resolve conversation_id.
     history_rows = persistence.list_messages(report_id)
-    if conversation_id is None:
-        conversation_id = (
-            history_rows[0].get("conversation_id")
-            if history_rows
-            else persistence.new_id()
-        )
+    if history_rows:
+        stored_conversation_id = history_rows[0].get("conversation_id")
+        if conversation_id is not None and conversation_id != stored_conversation_id:
+            yield _sse_error(
+                "validation",
+                "conversation_id does not match the existing thread for this report.",
+            )
+            return
+        conversation_id = stored_conversation_id
+    elif conversation_id is None:
+        conversation_id = persistence.new_id()
     history = persistence.messages_to_history(history_rows, limit=_HISTORY_TURN_LIMIT)
 
     # 4. Build prompt + invoke Bedrock in a worker thread so we can interleave
