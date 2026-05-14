@@ -45,7 +45,7 @@ This plan starts with the simplest possible AWS deployment — Lambda Durable Fu
 
 All items completed. See [Phase 0 checklist in v1.0](docs/05-milestones-and-sprints.md at tag `v1.0-poc`) for the full task list.
 
-**Result:** Full 7-stage AI pipeline (sanitize → parse → search → analyse → score → summarise → assemble) running on Lambda Durable Functions with multi-model setup (**Nova Micro** on Parse/Search, **DeepSeek V3.2** on Analyse, **Nova 2 Lite** on Summarise). Per-report cost: re-benchmark after model change; see `docs/BEDROCK-MODEL-CONFIG.md`.
+**Result:** Full 7-stage AI pipeline (sanitize → parse → search → analyse → score → summarise → assemble) running on Lambda Durable Functions with multi-model setup (**Nova Micro** on Parse/Search, **DeepSeek V3.2** on Analyse, **Nova 2 Lite** on Summarise). Per-report cost: re-benchmark after model change; see `docs/operations/BEDROCK-MODEL-CONFIG.md`.
 
 ---
 

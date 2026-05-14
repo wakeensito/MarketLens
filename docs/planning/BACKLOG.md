@@ -8,7 +8,7 @@
 
 **Status:** Done — April 2026
 
-Replaced single-model pipeline (Claude 3 Haiku for everything) with a 3-model setup optimized for cost and quality. **As of May 2026:** Parse + Search use **Amazon Nova Micro** (`amazon.nova-micro-v1:0`); Analyse uses **DeepSeek V3.2**; Summarise uses **Amazon Nova 2 Lite** (`amazon.nova-2-lite-v1:0`, replaces Haiku). Canonical reference: `docs/BEDROCK-MODEL-CONFIG.md`.
+Replaced single-model pipeline (Claude 3 Haiku for everything) with a 3-model setup optimized for cost and quality. **As of May 2026:** Parse + Search use **Amazon Nova Micro** (`amazon.nova-micro-v1:0`); Analyse uses **DeepSeek V3.2**; Summarise uses **Amazon Nova 2 Lite** (`amazon.nova-2-lite-v1:0`, replaces Haiku). Canonical reference: `docs/operations/BEDROCK-MODEL-CONFIG.md`.
 
 | Stage | Model | Role | Cost/1M tokens (in/out) |
 |---|---|---|---|

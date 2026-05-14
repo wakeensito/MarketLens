@@ -102,7 +102,7 @@ Amazon Bedrock Agents with function calling (can query DynamoDB, call APIs, etc.
 
 ### Phase 1: Backend (Chat Lambda + DynamoDB)
 
-- [ ] DynamoDB schema: `MuseConversationsTable` with pk/sk, GSI1 for cross-report memory (reserved), TTL. See `docs/MUSE-BACKEND-HANDOFF.md` for exact item shape.
+- [ ] DynamoDB schema: `MuseConversationsTable` with pk/sk, GSI1 for cross-report memory (reserved), TTL. See `docs/muse/MUSE-BACKEND-HANDOFF.md` for exact item shape.
 - [ ] Muse Stream Lambda: `infrastructure/lambda/muse/` with Function URL (`InvokeMode: RESPONSE_STREAM`), cookie-based auth (Lambda Layer or duplicated helper), Bedrock `InvokeModelWithResponseStream` against `CHAT_MODEL_ID` env var.
 - [ ] Muse Sync Lambda (Option A): separate function for `GET`/`DELETE /api/muse/conversations/{report_id}` on existing API Gateway + cookie Authorizer.
 - [ ] SAM template additions: `MuseStreamFunction`, `MuseSyncFunction`, `MuseConversationsTable`, CloudFront behavior for `/api/muse/stream*` via OAC, `BedrockModelIdMuseChat` parameter.

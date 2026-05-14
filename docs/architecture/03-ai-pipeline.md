@@ -9,7 +9,7 @@
 > - **Analyse:** DeepSeek V3.2 ($0.62/$1.85 per 1M tokens) — strong reasoning at mid-tier price
 > - **Summarise:** Amazon Nova 2 Lite — natural prose generation (`amazon.nova-2-lite-v1:0`; replaces Claude 3 Haiku on this stage only)
 >
-> Per-report LLM cost: re-benchmark after cutover. Canonical deploy defaults: `docs/BEDROCK-MODEL-CONFIG.md`. The design-doc models (Haiku for Parse, Sonnet for Analyse/Summarise) remain a reference for future paid-tier upgrades.
+> Per-report LLM cost: re-benchmark after cutover. Canonical deploy defaults: `docs/operations/BEDROCK-MODEL-CONFIG.md`. The design-doc models (Haiku for Parse, Sonnet for Analyse/Summarise) remain a reference for future paid-tier upgrades.
 
 > 📖 **Prerequisites:** Read [02 — Microservices Design](./02-microservices-design.md) §7 (AI Orchestration Service) for high-level context.
 

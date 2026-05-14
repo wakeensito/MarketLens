@@ -302,7 +302,7 @@ WHERE role = 'assistant'
 Real per-tier unit economics. **Update the price constants** when AWS publishes Nova 2 Lite pricing or when you add other models.
 
 ```sql
--- Per-million-token pricing. Maintain alongside docs/BEDROCK-MODEL-CONFIG.md.
+-- Per-million-token pricing. Maintain alongside docs/operations/BEDROCK-MODEL-CONFIG.md.
 WITH prices AS (
   SELECT
     'amazon.nova-2-lite-v1:0' AS model_id,

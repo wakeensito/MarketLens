@@ -13,6 +13,7 @@ frontend/.env
 
 # IDE / Editor
 .claude/
+.interface-design/
 .vscode/
 .idea/
 *.sw?
@@ -20,6 +21,12 @@ frontend/.env
 # OS
 .DS_Store
 Thumbs.db
+
+# Python
+.mypy_cache/
+.ruff_cache/
+__pycache__/
+*.pyc
 
 # Node
 node_modules/

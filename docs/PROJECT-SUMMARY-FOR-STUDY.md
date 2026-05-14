@@ -96,11 +96,11 @@ The pipeline uses **3 different foundation models** via Amazon Bedrock, each cho
 | Analyse | DeepSeek V3.2 | Strong reasoning at mid-tier price | $0.62 / $1.85 |
 | Summarise | Amazon Nova 2 Lite | Natural prose JSON (replaces Claude 3 Haiku) | sync AWS pricing |
 
-**Per-report total LLM cost:** re-benchmark after Nova 2 Lite on Summarise only (prior ~$0.007 with Nova Micro + DeepSeek + Haiku). See `docs/BEDROCK-MODEL-CONFIG.md`.
+**Per-report total LLM cost:** re-benchmark after Nova 2 Lite on Summarise only (prior ~$0.007 with Nova Micro + DeepSeek + Haiku). See `docs/operations/BEDROCK-MODEL-CONFIG.md`.
 
 ### Why Multi-Model?
 
-- **Cost optimization:** **Nova Micro** for Parse and Search structuring (minimal task); **Nova 2 Lite** only where prose quality matters (Summarise). See `docs/BEDROCK-MODEL-CONFIG.md`.
+- **Cost optimization:** **Nova Micro** for Parse and Search structuring (minimal task); **Nova 2 Lite** only where prose quality matters (Summarise). See `docs/operations/BEDROCK-MODEL-CONFIG.md`.
 - **Quality optimization:** DeepSeek V3.2 for reasoning outperforms lighter models on competitive analysis tasks.
 - **Latency optimization:** Smaller models respond faster for simple tasks.
 

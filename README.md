@@ -178,11 +178,11 @@ Browser → CloudFront → BFF Lambda (/auth/*) → Cognito
 
 | # | Document | What's in it |
 |---|---|---|
-| 01 | [Technical Specification](./docs/01-technical-spec.md) | Architecture, access control, RBAC, audit logging, AWS infrastructure, IaC, security, CI/CD, DR |
-| 02 | [Microservices Design](./docs/02-microservices-design.md) | Every service: responsibilities, APIs, boundaries, scaling, ownership |
-| 03 | [AI Pipeline Architecture](./docs/03-ai-pipeline.md) | Durable Function pipeline, prompt design, web search, saturation scoring, cost tracking |
-| 04 | [Data Model](./docs/04-data-model.md) | Full ERD, every table, every index, RLS policies, retention rules, GDPR deletion |
-| 05 | [Milestones & Sprints](./docs/05-milestones-and-sprints.md) | Phase plan, sprint breakdown, delivery timeline |
+| 01 | [Technical Specification](./docs/architecture/01-technical-spec.md) | Architecture, access control, RBAC, audit logging, AWS infrastructure, IaC, security, CI/CD, DR |
+| 02 | [Microservices Design](./docs/architecture/02-microservices-design.md) | Every service: responsibilities, APIs, boundaries, scaling, ownership |
+| 03 | [AI Pipeline Architecture](./docs/architecture/03-ai-pipeline.md) | Durable Function pipeline, prompt design, web search, saturation scoring, cost tracking |
+| 04 | [Data Model](./docs/architecture/04-data-model.md) | Full ERD, every table, every index, RLS policies, retention rules, GDPR deletion |
+| 05 | [Milestones & Sprints](./docs/planning/05-milestones-and-sprints.md) | Phase plan, sprint breakdown, delivery timeline |
 
 ---
 

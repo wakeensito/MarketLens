@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any
 
 import boto3
 from boto3.dynamodb.types import TypeDeserializer
@@ -46,7 +45,7 @@ _deserialize = TypeDeserializer().deserialize
 
 
 def _strip_prefix(value: str, prefix: str) -> str:
-    return value[len(prefix):] if value.startswith(prefix) else value
+    return value[len(prefix) :] if value.startswith(prefix) else value
 
 
 def _project_row(image: dict) -> dict | None:

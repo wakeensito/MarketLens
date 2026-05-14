@@ -12,8 +12,8 @@ General-purpose **AWS Lambda** or **serverless deployment** guidance often defau
 
 ## Related references
 
-- `docs/MUSE-IMPLEMENTATION-PLAN.md` — the original product/architecture plan. Treat as background; this handoff supersedes it on transport, contract, and frontend behavior.
-- `docs/BEDROCK-MODEL-CONFIG.md` — report-pipeline Bedrock model IDs (Nova Micro / DeepSeek / Nova 2 Lite). Muse streaming uses **Nova 2 Lite** for chat; do not confuse with Parse's Nova Micro.
+- `docs/muse/MUSE-IMPLEMENTATION-PLAN.md` — the original product/architecture plan. Treat as background; this handoff supersedes it on transport, contract, and frontend behavior.
+- `docs/operations/BEDROCK-MODEL-CONFIG.md` — report-pipeline Bedrock model IDs (Nova Micro / DeepSeek / Nova 2 Lite). Muse streaming uses **Nova 2 Lite** for chat; do not confuse with Parse's Nova Micro.
 - `docs/muse-streaming-architecture.drawio` — the AWS architecture diagram for this design.
 - `CLAUDE.md` > **Muse** section — locked structural decisions and the IAM/secrets rules you must follow.
 - `frontend/src/hooks/useMuse.ts`, `frontend/src/components/muse/MuseThread.tsx`, `frontend/src/components/muse/museTypes.ts` — the frontend that will consume this backend.
@@ -24,7 +24,7 @@ REST API Gateway buffers Lambda responses end-to-end, so it cannot deliver token
 
 - **Streaming endpoint** (`POST /api/muse/stream`) → **Lambda Function URL** with `InvokeMode: RESPONSE_STREAM`, fronted by a new CloudFront behavior using OAC. Native SSE.
 - **Sync endpoints** (`GET`/`DELETE /api/muse/conversations/{report_id}`) → the **existing REST API Gateway + cookie Authorizer**, no changes to that path.
-- **Inference:** Bedrock `InvokeModelWithResponseStream`. Pro tier uses **Amazon Nova 2 Lite** (`amazon.nova-2-lite-v1:0`) as the Muse chat model. This is separate from the **report** pipeline in `docs/BEDROCK-MODEL-CONFIG.md`: **Nova Micro** (parse/search) + **DeepSeek V3.2** (analyse) + **Nova 2 Lite** (summarise only).
+- **Inference:** Bedrock `InvokeModelWithResponseStream`. Pro tier uses **Amazon Nova 2 Lite** (`amazon.nova-2-lite-v1:0`) as the Muse chat model. This is separate from the **report** pipeline in `docs/operations/BEDROCK-MODEL-CONFIG.md`: **Nova Micro** (parse/search) + **DeepSeek V3.2** (analyse) + **Nova 2 Lite** (summarise only).
 - **Persistence:** new DynamoDB table `MuseConversationsTable`. Existing `ReportsTable` is read-only from Muse.
 
 ## Endpoint contract
@@ -162,7 +162,7 @@ Per CLAUDE.md > Plans:
 - **Pro:** 30 messages per `report_id`. Count `role: "user"` rows. On the 31st request, emit `event: error` code `limit_reached` with `{limit: 30, used: 30}` before any token is generated.
 - **Max:** out of scope. Treat identically to Pro for v1 (single default model = **Amazon Nova 2 Lite**, no message cap — `limit_reached` never fires for Max users). Max-tier features (cross-report memory, model selection) are deliberately deferred.
 
-The exact display pattern for the Pro limit on the frontend is **deferred** — see `docs/BACKLOG.md` > "Muse Pro limit indicator — display pattern" — but the backend contract for `limit_reached` is fixed.
+The exact display pattern for the Pro limit on the frontend is **deferred** — see `docs/planning/BACKLOG.md` > "Muse Pro limit indicator — display pattern" — but the backend contract for `limit_reached` is fixed.
 
 ## Things explicitly out of scope for v1
 
