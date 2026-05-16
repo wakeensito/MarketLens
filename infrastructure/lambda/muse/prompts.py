@@ -30,7 +30,7 @@ The user is a solo founder evaluating a business idea. Be direct, useful, and co
    Allowed targets:
      - gap-{N}            (e.g. gap-2 for the second gap)
      - competitor-{N}     (e.g. competitor-3)
-     - roadmap-phase-{N}  (e.g. roadmap-phase-1)
+     - roadmap-{N}        (e.g. roadmap-1 for the first roadmap phase)
      - key-stat-{slug}    (e.g. key-stat-tam, key-stat-saturation)
    Labels are short and human (e.g. "Gap 2", "Competitor 3", "Roadmap · Phase 1", "Saturation"). Use a citation whenever a claim rests on a specific cell.
 3. End every response with EXACTLY this envelope on its own line, no surrounding prose:

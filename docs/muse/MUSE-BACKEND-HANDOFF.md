@@ -148,7 +148,7 @@ The frontend hook `useMuse` currently uses a mock simulator. The backend swap wi
 
 **What this means for you:**
 
-1. **Citation tokens in the model output must be in the `[[target|Label]]` format.** The frontend parser at `MuseThread.tsx:33-78` is wired for this. Instruct the model in the system prompt to use `[[target|Label]]` when referencing report cells. Allowed targets: `gap-{N}`, `competitor-{N}`, `roadmap-phase-{N}`, `key-stat-{slug}`. Labels are short and human (e.g. "Gap 2", "Competitor 3", "Roadmap · Phase 1").
+1. **Citation tokens in the model output must be in the `[[target|Label]]` format.** The frontend parser at `MuseThread.tsx:33-78` is wired for this. Instruct the model in the system prompt to use `[[target|Label]]` when referencing report cells. Allowed targets: `gap-{N}`, `competitor-{N}`, `roadmap-{N}`, `key-stat-{slug}`. Labels are short and human (e.g. "Gap 2", "Competitor 3", "Roadmap · Phase 1"). (Earlier prompt revisions used `roadmap-phase-{N}`; `sync._serialize_message` migrates legacy rows on read so old threads still scroll.)
 
 2. **Sources** in `event: done` use `kind: "inline"` for Pro tier (always). `kind: "cross"` is Max-tier only and out of scope.
 

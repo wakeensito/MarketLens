@@ -204,6 +204,46 @@ def delete_thread(report_id: str) -> int:
     return len(rows)
 
 
+def set_message_feedback(
+    report_id: str, message_id: str, feedback: str | None
+) -> dict | None:
+    """Set thumbs feedback on a single assistant message row.
+
+    Returns the updated row, or None if no matching assistant message exists.
+    Pass feedback=None to clear (REMOVE the attribute).
+    """
+    # We don't know the row's sk timestamp prefix from (report_id, message_id) alone,
+    # so query the partition with a filter on message_id. Threads are small (≤ ~60 rows
+    # for Pro), so the cost is bounded.
+    table = _conversations()
+    result = table.query(
+        KeyConditionExpression=Key("pk").eq(f"REPORT#{report_id}")
+        & Key("sk").begins_with("MSG#"),
+        FilterExpression="message_id = :mid AND #r = :role",
+        ExpressionAttributeNames={"#r": "role"},
+        ExpressionAttributeValues={":mid": message_id, ":role": "assistant"},
+        ConsistentRead=True,
+    )
+    items = result.get("Items") or []
+    if not items:
+        return None
+    row = items[0]
+    if feedback is None:
+        update = table.update_item(
+            Key={"pk": row["pk"], "sk": row["sk"]},
+            UpdateExpression="REMOVE feedback",
+            ReturnValues="ALL_NEW",
+        )
+    else:
+        update = table.update_item(
+            Key={"pk": row["pk"], "sk": row["sk"]},
+            UpdateExpression="SET feedback = :f",
+            ExpressionAttributeValues={":f": feedback},
+            ReturnValues="ALL_NEW",
+        )
+    return _strip_decimals(update.get("Attributes") or {})
+
+
 # ─── Report context (read-only) ───
 
 
