@@ -140,10 +140,14 @@ export default function App() {
   useEffect(() => {
     if (billing.activation.kind !== 'done') return;
     void auth.refresh();
+    // auth.refresh is stable; depending on the whole auth object would refire on every login/logout state change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [billing.activation.kind, auth.refresh]);
 
   const onActivationComplete = useCallback(() => {
     billing.cancelActivationPoll();
+    // billing.cancelActivationPoll is stable; depending on the whole billing object would invalidate this callback on every billing tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [billing.cancelActivationPoll]);
 
   const onActivationRefresh = useCallback(() => {

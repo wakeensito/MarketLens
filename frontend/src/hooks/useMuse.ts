@@ -234,8 +234,9 @@ export function useMuse({
           t => t.speaker === 'user' && t.pendingId === pendingId,
         );
         if (userIdx !== -1) {
-          const { pendingId: _drop, ...rest } = copy[userIdx];
-          copy[userIdx] = rest;
+          const cleaned: MuseTurn = { ...copy[userIdx] };
+          delete cleaned.pendingId;
+          copy[userIdx] = cleaned;
         }
         return copy;
       });

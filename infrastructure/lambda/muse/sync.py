@@ -75,7 +75,10 @@ def _serialize_message(row: dict) -> dict:
             if val is not None:
                 if field == "sources" and isinstance(val, list):
                     val = [
-                        {**s, "target": s["target"].replace("roadmap-phase-", "roadmap-")}
+                        {
+                            **s,
+                            "target": s["target"].replace("roadmap-phase-", "roadmap-"),
+                        }
                         if isinstance(s, dict) and isinstance(s.get("target"), str)
                         else s
                         for s in val
@@ -145,6 +148,9 @@ def set_feedback(report_id: str, message_id: str):
         body = app.current_event.json_body or {}
     except (json.JSONDecodeError, ValueError):
         return {"error": "Invalid JSON body", "code": "validation"}, 400
+    # A list or scalar JSON value is still parseable; guard before .get().
+    if not isinstance(body, dict):
+        return {"error": "Invalid JSON body", "code": "validation"}, 400
     raw = body.get("feedback", "missing")
     if raw not in ("up", "down", None):
         return {
@@ -163,9 +169,7 @@ def set_feedback(report_id: str, message_id: str):
     if updated is None:
         return {"error": "not_found", "code": "message_not_found"}, 404
 
-    metrics.add_metric(
-        name="MuseFeedbackRecorded", unit=MetricUnit.Count, value=1
-    )
+    metrics.add_metric(name="MuseFeedbackRecorded", unit=MetricUnit.Count, value=1)
     return {"ok": True, "feedback": raw}
 
 

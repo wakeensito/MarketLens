@@ -228,19 +228,31 @@ def set_message_feedback(
     if not items:
         return None
     row = items[0]
-    if feedback is None:
-        update = table.update_item(
-            Key={"pk": row["pk"], "sk": row["sk"]},
-            UpdateExpression="REMOVE feedback",
-            ReturnValues="ALL_NEW",
-        )
-    else:
-        update = table.update_item(
-            Key={"pk": row["pk"], "sk": row["sk"]},
-            UpdateExpression="SET feedback = :f",
-            ExpressionAttributeValues={":f": feedback},
-            ReturnValues="ALL_NEW",
-        )
+    # Guard against the row being deleted between the query and the update
+    # (e.g. the user cleared their thread). Without this, UpdateItem would
+    # happily create a sparse item containing only pk, sk, and feedback —
+    # leaving an orphaned row that breaks list_messages assumptions.
+    common = {
+        "Key": {"pk": row["pk"], "sk": row["sk"]},
+        "ConditionExpression": "attribute_exists(pk) AND attribute_exists(sk)",
+        "ReturnValues": "ALL_NEW",
+    }
+    try:
+        if feedback is None:
+            update = table.update_item(
+                **common,
+                UpdateExpression="REMOVE feedback",
+            )
+        else:
+            update = table.update_item(
+                **common,
+                UpdateExpression="SET feedback = :f",
+                ExpressionAttributeValues={":f": feedback},
+            )
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+            return None
+        raise
     return _strip_decimals(update.get("Attributes") or {})
 
 
