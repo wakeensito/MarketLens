@@ -13,6 +13,9 @@ Per the handoff:
 
 from __future__ import annotations
 
+import json
+import re
+
 from aws_lambda_powertools import Logger, Metrics, Tracer
 from aws_lambda_powertools.event_handler import APIGatewayRestResolver
 from aws_lambda_powertools.logging import correlation_paths
@@ -39,22 +42,48 @@ def _auth() -> dict:
     }
 
 
+_ASSISTANT_FIELDS = (
+    # message_id is needed by the client to target feedback POST calls.
+    "message_id",
+    "sources",
+    "follow_ups",
+    "tokens_in",
+    "tokens_out",
+    "feedback",
+)
+
+# Tokens emitted by an earlier prompt revision. The DOM uses `roadmap-{N}`
+# now; without this rewrite, any historical citation pill silently fails to
+# scroll because no `[data-muse-cell]` matches `roadmap-phase-N`.
+_LEGACY_ROADMAP_RE = re.compile(r"\[\[roadmap-phase-(\d+)\|")
+
+
+def _migrate_legacy_citations(content: str) -> str:
+    return _LEGACY_ROADMAP_RE.sub(r"[[roadmap-\1|", content)
+
+
 def _serialize_message(row: dict) -> dict:
     """Strip DDB-internal keys; expose only the contract fields."""
     out: dict = {
         "role": row.get("role", "user"),
-        "content": row.get("content", ""),
+        "content": _migrate_legacy_citations(row.get("content", "")),
         "created_at": row.get("created_at", ""),
     }
     if row.get("role") == "assistant":
-        if row.get("sources") is not None:
-            out["sources"] = row.get("sources")
-        if row.get("follow_ups") is not None:
-            out["follow_ups"] = row.get("follow_ups")
-        if row.get("tokens_in") is not None:
-            out["tokens_in"] = row.get("tokens_in")
-        if row.get("tokens_out") is not None:
-            out["tokens_out"] = row.get("tokens_out")
+        for field in _ASSISTANT_FIELDS:
+            val = row.get(field)
+            if val is not None:
+                if field == "sources" and isinstance(val, list):
+                    val = [
+                        {
+                            **s,
+                            "target": s["target"].replace("roadmap-phase-", "roadmap-"),
+                        }
+                        if isinstance(s, dict) and isinstance(s.get("target"), str)
+                        else s
+                        for s in val
+                    ]
+                out[field] = val
     return out
 
 
@@ -106,6 +135,42 @@ def delete_conversation(report_id: str):
             },
         )
     return {"deleted": True}
+
+
+@app.post("/muse/conversations/<report_id>/messages/<message_id>/feedback")
+@tracer.capture_method
+def set_feedback(report_id: str, message_id: str):
+    auth = _auth()
+    if not auth["is_authenticated"]:
+        return {"error": "Authentication required"}, 401
+
+    try:
+        body = app.current_event.json_body or {}
+    except (json.JSONDecodeError, ValueError):
+        return {"error": "Invalid JSON body", "code": "validation"}, 400
+    # A list or scalar JSON value is still parseable; guard before .get().
+    if not isinstance(body, dict):
+        return {"error": "Invalid JSON body", "code": "validation"}, 400
+    raw = body.get("feedback", "missing")
+    if raw not in ("up", "down", None):
+        return {
+            "error": "feedback must be 'up', 'down', or null",
+            "code": "validation",
+        }, 400
+
+    # Ownership check — without it a caller could write feedback against a
+    # message id they don't own (low blast radius, but it would still pollute
+    # the analytics stream with attributable rows).
+    report = persistence.get_report_for_user(report_id, auth["user_id"], auth["org_id"])
+    if report is None:
+        return {"error": "not_found", "code": "report_not_found"}, 404
+
+    updated = persistence.set_message_feedback(report_id, message_id, raw)
+    if updated is None:
+        return {"error": "not_found", "code": "message_not_found"}, 404
+
+    metrics.add_metric(name="MuseFeedbackRecorded", unit=MetricUnit.Count, value=1)
+    return {"ok": True, "feedback": raw}
 
 
 @logger.inject_lambda_context(correlation_id_path=correlation_paths.API_GATEWAY_REST)

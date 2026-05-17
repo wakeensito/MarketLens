@@ -58,7 +58,14 @@ export default function App() {
   });
 
   const billing = useBilling();
-  const muse = useMuse(reportId);
+
+  // Muse activation is plan-driven, not flag-driven. Pro / Max / admin get the
+  // live chat surface; Free users see a locked empty line that opens pricing.
+  const userPlan = (auth.user?.plan ?? 'free').trim().toLowerCase();
+  const museEligible =
+    auth.isAuthenticated &&
+    (userPlan === 'pro' || userPlan === 'max' || userPlan === 'admin');
+  const muse = useMuse({ reportId, enabled: museEligible });
 
   // When a citation routes the user to report-open with a target cell, scroll
   // smoothly to the matching `[data-muse-cell]` element and pulse it once.
@@ -133,10 +140,14 @@ export default function App() {
   useEffect(() => {
     if (billing.activation.kind !== 'done') return;
     void auth.refresh();
+    // auth.refresh is stable; depending on the whole auth object would refire on every login/logout state change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [billing.activation.kind, auth.refresh]);
 
   const onActivationComplete = useCallback(() => {
     billing.cancelActivationPoll();
+    // billing.cancelActivationPoll is stable; depending on the whole billing object would invalidate this callback on every billing tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [billing.cancelActivationPoll]);
 
   const onActivationRefresh = useCallback(() => {
@@ -238,8 +249,9 @@ export default function App() {
   const onSubmit = useCallback((val: string) => {
     if (val.trim().length <= 4) return;
 
-    // Muse hijack: when the preview is enabled and we're sitting on a finished
-    // report, the bottom input talks to Muse instead of starting a new analysis.
+    // Muse hijack: when chat is live (Pro/Max signed-in) and we're sitting on
+    // a finished report, the bottom input talks to Muse instead of starting a
+    // new analysis. Free users fall through and create a new report.
     if (muse.enabled && screen === 'report' && report && reportId) {
       muse.sendMessage(val.trim());
       setInputValue('');
@@ -658,7 +670,23 @@ export default function App() {
                         />
                       );
 
-                      if (!muse.enabled) return reportEl;
+                      // Anonymous users see the report only — Muse is sign-in-gated.
+                      if (!auth.isAuthenticated) return reportEl;
+
+                      // Free signed-in users see the report + a locked Muse line
+                      // that opens pricing. Chat itself is server-gated, but
+                      // surfacing the affordance is the upgrade path.
+                      if (!museEligible) {
+                        return (
+                          <>
+                            {reportEl}
+                            <MuseEmptyLine
+                              locked
+                              onUpgrade={() => setShowPricing(true)}
+                            />
+                          </>
+                        );
+                      }
 
                       return (
                         <>
@@ -702,6 +730,18 @@ export default function App() {
                               onFeedback={muse.setFeedback}
                             />
                           )}
+
+                          {muse.lastError && (
+                            <div className="muse-error" role="alert">
+                              <span>{muse.lastError}</span>
+                              <button
+                                type="button"
+                                className="muse-error__dismiss"
+                                onClick={muse.dismissError}
+                                aria-label="Dismiss error"
+                              >×</button>
+                            </div>
+                          )}
                         </>
                       );
                     })()}
@@ -739,18 +779,6 @@ export default function App() {
               </motion.div>
             )}
 
-            {/* Dev chip — visible only while muse preview is enabled. Informational
-                only; destructive actions (delete report + its thread) live in the sidebar. */}
-            {muse.enabled && (
-              <div className="muse-dev-chip">
-                <span className="muse-dev-chip__dot" aria-hidden />
-                <span>
-                  muse · {muse.view}
-                  {reportId ? ` · #${reportId.slice(-6)}` : ' · no report'}
-                  {muse.thread.length > 0 ? ` · ${muse.thread.length}` : ''}
-                </span>
-              </div>
-            )}
           </div>
         </>
       )}

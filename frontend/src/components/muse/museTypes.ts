@@ -24,7 +24,16 @@ export interface MuseTurn {
   content: string;
   sources?: MuseCitation[];
   followUps?: string[];
-  /** Per-response feedback. Persists with the thread; backend wiring TBD. */
+  /** Per-response feedback. Persisted server-side on assistant rows via
+   *  POST /api/muse/conversations/{report_id}/messages/{message_id}/feedback. */
   feedback?: MuseFeedback;
+  /** Server-assigned id for assistant turns. Present once the `done` event
+   *  has fired (or after a thread hydration from GET). User turns don't need it. */
+  messageId?: string;
+  /** Tags the optimistic user+placeholder pair while a stream is in flight so
+   *  rollback / finalize can find them by id rather than by positional index
+   *  (indices can shift under concurrent regenerate / hydration). Removed once
+   *  the assistant turn is finalized. */
+  pendingId?: string;
 }
 

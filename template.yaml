@@ -1023,6 +1023,12 @@ Resources:
             Path: /api/muse/conversations/{report_id}
             Method: DELETE
             RestApiId: !Ref ApiGatewayApi
+        SetMessageFeedback:
+          Type: Api
+          Properties:
+            Path: /api/muse/conversations/{report_id}/messages/{message_id}/feedback
+            Method: POST
+            RestApiId: !Ref ApiGatewayApi
 
   MuseSyncFunctionLogGroup:
     Type: AWS::Logs::LogGroup
