@@ -7,18 +7,22 @@ s3_prefix = "marketlens-dev"
 region = "us-east-1"
 confirm_changeset = false
 capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
-# Secrets must be passed at deploy time — never commit them here.
-# Deploy with:
-#   sam deploy --parameter-overrides \
-#     "ApiKeyValue=$ML_API_KEY" \
-#     "SenderEmail=$ML_SENDER_EMAIL" \
-#     "GoogleClientId=$ML_GOOGLE_CLIENT_ID" \
-#     "GoogleClientSecret=$ML_GOOGLE_CLIENT_SECRET"
+# IMPORTANT — secret parameters are NOT listed here.
 #
-# Or set them in environment variables and use:
-#   sam deploy --parameter-overrides \
-#     "ApiKeyValue=$(aws ssm get-parameter --name /marketlens/dev/api-key --with-decryption --query Parameter.Value --output text)"
-parameter_overrides = "Stage=\"dev\" GoogleClientId=\"placeholder-not-configured\" GoogleClientSecret=\"placeholder-not-configured\" CognitoCallbackDomain=\"plinths.net\""
+# `{{resolve:ssm-secure:...}}` dynamic references are NOT supported for
+# Cognito's UserPoolIdentityProvider client_id/client_secret (CloudFormation
+# rejects the changeset). So Google credentials cannot be auto-resolved in
+# this template.
+#
+# By omitting GoogleClientId / GoogleClientSecret here, a bare `sam deploy`
+# leaves the existing CloudFormation parameter values in place — fail-safe
+# against the placeholder-clobber bug. Same for ApiKeyValue / SenderEmail.
+#
+# For FRESH deploys (or when a secret rotates), use the wrapper:
+#   bin/deploy
+# which fetches the current SSM values and passes them via
+# `--parameter-overrides`.
+parameter_overrides = "Stage=\"dev\" CognitoCallbackDomain=\"plinths.net\""
 image_repositories = []
 
 [default.global.parameters]

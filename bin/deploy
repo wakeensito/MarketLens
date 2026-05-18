@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+#
+# bin/deploy — Safe `sam deploy` wrapper.
+#
+# Why this exists:
+#   The SAM template requires GoogleClientId / GoogleClientSecret for the
+#   Cognito Google identity provider. CloudFormation does NOT support
+#   `{{resolve:ssm-secure:...}}` references for Cognito IdP properties, so
+#   the secrets can't be auto-resolved from the template. This script reads
+#   them from SSM at deploy time and passes them via `--parameter-overrides`.
+#
+# Safe usage:
+#   - For routine deploys after the secrets are already in CloudFormation:
+#     a bare `sam deploy` works — samconfig.toml omits the secrets, so
+#     CloudFormation preserves the existing values. Fail-safe.
+#   - For FRESH stack creation OR after rotating Google credentials in SSM:
+#     run `bin/deploy` so the new values are pushed into CloudFormation.
+#     On a fresh stack (stack not found), also fetches ApiKeyValue and
+#     SenderEmail from SSM — both are required template parameters with no default.
+#
+# Optional positional arg: stage name. Defaults to `dev`.
+
+set -euo pipefail
+
+STAGE="${1:-dev}"
+SSM_PREFIX="/marketlens/${STAGE}"
+# Must match [default.deploy.parameters] stack_name in samconfig.toml (marketlens-${STAGE}).
+STACK_NAME="marketlens-${STAGE}"
+AWS_REGION="${AWS_REGION:-us-east-1}"
+
+echo "→ Fetching Google OAuth credentials from SSM (${SSM_PREFIX}/google-client-*)..."
+GOOGLE_CLIENT_ID=$(aws ssm get-parameter \
+    --name "${SSM_PREFIX}/google-client-id" \
+    --with-decryption \
+    --query 'Parameter.Value' \
+    --output text)
+GOOGLE_CLIENT_SECRET=$(aws ssm get-parameter \
+    --name "${SSM_PREFIX}/google-client-secret" \
+    --with-decryption \
+    --query 'Parameter.Value' \
+    --output text)
+
+if [[ -z "${GOOGLE_CLIENT_ID}" || -z "${GOOGLE_CLIENT_SECRET}" ]]; then
+    echo "✗ Empty SSM value(s) — refusing to deploy." >&2
+    exit 1
+fi
+
+PARAM_OVERRIDES=(
+    "Stage=${STAGE}"
+    "CognitoCallbackDomain=plinths.net"
+    "GoogleClientId=${GOOGLE_CLIENT_ID}"
+    "GoogleClientSecret=${GOOGLE_CLIENT_SECRET}"
+)
+
+if aws cloudformation describe-stacks \
+    --stack-name "${STACK_NAME}" \
+    --region "${AWS_REGION}" \
+    --query 'Stacks[0].StackName' \
+    --output text >/dev/null 2>&1; then
+    echo "→ Stack ${STACK_NAME} exists — preserving ApiKeyValue/SenderEmail in CloudFormation."
+else
+    echo "→ Fresh stack (${STACK_NAME} not found) — fetching ApiKeyValue + SenderEmail from SSM..."
+    API_KEY_VALUE=$(aws ssm get-parameter \
+        --name "${SSM_PREFIX}/api-key" \
+        --with-decryption \
+        --query 'Parameter.Value' \
+        --output text \
+        --region "${AWS_REGION}")
+    SENDER_EMAIL=$(aws ssm get-parameter \
+        --name "${SSM_PREFIX}/sender-email" \
+        --query 'Parameter.Value' \
+        --output text \
+        --region "${AWS_REGION}")
+    if [[ -z "${API_KEY_VALUE}" || -z "${SENDER_EMAIL}" ]]; then
+        echo "✗ Empty SSM value(s) for api-key or sender-email — refusing to deploy." >&2
+        exit 1
+    fi
+    PARAM_OVERRIDES+=("ApiKeyValue=${API_KEY_VALUE}" "SenderEmail=${SENDER_EMAIL}")
+fi
+
+echo "→ sam build..."
+sam build
+
+echo "→ sam deploy (stage: ${STAGE}, stack: ${STACK_NAME})..."
+sam deploy --no-confirm-changeset --no-fail-on-empty-changeset \
+    --parameter-overrides "${PARAM_OVERRIDES[@]}"
