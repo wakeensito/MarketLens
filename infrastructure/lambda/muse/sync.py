@@ -14,6 +14,7 @@ Per the handoff:
 from __future__ import annotations
 
 import json
+import os
 import re
 
 from aws_lambda_powertools import Logger, Metrics, Tracer
@@ -29,10 +30,10 @@ tracer = Tracer()
 metrics = Metrics()
 app = APIGatewayRestResolver(strip_prefixes=["/api"])
 
-# Mirror of the stream-side limit. Surfaced to the frontend so a Free user
-# who has used 3/3 today sees the locked banner immediately on report load,
-# not only after attempting (and being rejected on) a 4th message.
-_MAX_FREE_DAILY = 3
+# Shared env var with `stream.py` so an override (e.g. raising the cap during
+# a campaign) lands consistently in both the enforcement path and the value
+# surfaced to the frontend. Default kept in sync with stream.py.
+_MAX_FREE_DAILY = int(os.environ.get("MUSE_FREE_DAILY_LIMIT", "3"))
 
 
 def _auth() -> dict:

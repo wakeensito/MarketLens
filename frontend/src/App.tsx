@@ -64,7 +64,13 @@ export default function App() {
   // The locked banner appears when the Free counter is exhausted (cap reached).
   const museEligible = auth.isAuthenticated;
   const muse = useMuse({ reportId, enabled: museEligible });
+  // Plan-aware cap check — without the `userPlan === 'free'` guard, a stale
+  // free-tier counter left over from before an upgrade could lock a Pro user
+  // until the next hydration cycle. The backend only sends dailyLimit for
+  // Free, so this is belt-and-suspenders against in-session plan changes.
+  const userPlan = (auth.user?.plan ?? 'free').trim().toLowerCase();
   const museCapped =
+    userPlan === 'free' &&
     muse.dailyLimit != null &&
     muse.dailyUsed != null &&
     muse.dailyUsed >= muse.dailyLimit;

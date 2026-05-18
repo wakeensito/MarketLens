@@ -7,6 +7,7 @@ import {
   streamMuseMessage,
   type MuseStreamDone,
   type MuseStreamError,
+  type MuseStreamErrorCode,
   type MuseSyncMessage,
 } from '../museApi';
 
@@ -179,6 +180,7 @@ export function useMuse({
       let assembledText = '';
       let doneData: MuseStreamDone | null = null;
       let streamError: string | null = null;
+      let streamErrorCode: MuseStreamErrorCode | null = null;
 
       try {
         for await (const event of streamMuseMessage(
@@ -198,6 +200,7 @@ export function useMuse({
             doneData = event.data;
           } else if (event.type === 'error') {
             streamError = errorMessage(event.data);
+            streamErrorCode = event.data.code;
             break;
           }
         }
@@ -221,9 +224,10 @@ export function useMuse({
         setStreamingText(null);
         setThread(prev => prev.filter(t => t.pendingId !== pendingId));
         setLastError(streamError);
-        // If the server told us they're at cap, snap the local counter so the
-        // UI locks immediately even before the next /api/me read.
-        if (dailyLimit != null) {
+        // Only snap the counter when the server confirmed a quota hit.
+        // Transient errors (model_error, validation, network) shouldn't burn
+        // the user's daily allowance from the UI's perspective.
+        if (streamErrorCode === 'limit_reached' && dailyLimit != null) {
           setDailyUsed(dailyLimit);
         }
         return;
