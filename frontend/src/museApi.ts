@@ -173,13 +173,47 @@ export interface MuseStreamRequest {
   conversationId: string | null;
 }
 
+/** Lambda Function URL RESPONSE_STREAM prelude: JSON metadata + 8 NUL bytes. */
+const LAMBDA_STREAM_PRELUDE_SEP = '\0\0\0\0\0\0\0\0';
+
+/**
+ * Strip the Function URL streaming prelude when present. CloudFront proxies the
+ * raw stream, so the browser sees prelude bytes before the SSE body — unlike
+ * API Gateway, which does not apply here.
+ */
+function stripLambdaStreamPrelude(buffer: string): { rest: string; ready: boolean } {
+  const sepIdx = buffer.indexOf(LAMBDA_STREAM_PRELUDE_SEP);
+  if (sepIdx !== -1) {
+    return { rest: buffer.slice(sepIdx + LAMBDA_STREAM_PRELUDE_SEP.length), ready: true };
+  }
+  const trimmed = buffer.trimStart();
+  if (trimmed.startsWith('event:') || trimmed.startsWith(':')) {
+    return { rest: buffer, ready: true };
+  }
+  return { rest: buffer, ready: false };
+}
+
+function* parseSseBuffer(buffer: string): Generator<MuseStreamEvent, string> {
+  let rest = buffer;
+  let sep = rest.indexOf('\n\n');
+  while (sep !== -1) {
+    const block = rest.slice(0, sep);
+    rest = rest.slice(sep + 2);
+    const parsed = parseSseBlock(block);
+    if (parsed) {
+      const ev = toMuseEvent(parsed);
+      if (ev) yield ev;
+    }
+    sep = rest.indexOf('\n\n');
+  }
+  return rest;
+}
+
 /**
  * Open the SSE stream and yield typed events as they arrive.
  *
- * The backend's prelude is consumed by the Lambda runtime — what we read here
- * is plain `text/event-stream`. Events are separated by `\n\n`; we hold a
- * trailing buffer across reads so partial frames at chunk boundaries don't
- * get parsed as broken events.
+ * Events are separated by `\n\n`; we hold a trailing buffer across reads so
+ * partial frames at chunk boundaries don't get parsed as broken events.
  */
 export async function* streamMuseMessage(
   req: MuseStreamRequest,
@@ -203,32 +237,29 @@ export async function* streamMuseMessage(
   const reader = res.body.getReader();
   const decoder = new TextDecoder('utf-8');
   let buffer = '';
+  let preludeStripped = false;
   try {
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
-      let sep = buffer.indexOf('\n\n');
-      while (sep !== -1) {
-        const block = buffer.slice(0, sep);
-        buffer = buffer.slice(sep + 2);
-        const parsed = parseSseBlock(block);
-        if (parsed) {
-          const ev = toMuseEvent(parsed);
-          if (ev) yield ev;
-        }
-        sep = buffer.indexOf('\n\n');
+      if (!preludeStripped) {
+        const { rest, ready } = stripLambdaStreamPrelude(buffer);
+        buffer = rest;
+        if (!ready) continue;
+        preludeStripped = true;
       }
+      buffer = yield* parseSseBuffer(buffer);
     }
-    // Flush decoder + any trailing event without a final \n\n.
     buffer += decoder.decode();
+    if (!preludeStripped) {
+      const { rest, ready } = stripLambdaStreamPrelude(buffer);
+      buffer = rest;
+      if (ready) preludeStripped = true;
+    }
     const tail = buffer.trim();
     if (tail) {
-      const parsed = parseSseBlock(tail);
-      if (parsed) {
-        const ev = toMuseEvent(parsed);
-        if (ev) yield ev;
-      }
+      for (const ev of parseSseBuffer(tail)) yield ev;
     }
   } finally {
     try { reader.releaseLock(); } catch { /* already released */ }
