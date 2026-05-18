@@ -300,11 +300,13 @@ def get_report_for_user(report_id: str, user_id: str, org_id: str) -> dict | Non
     if not item:
         return None
     # Defense in depth: even though the org-namespaced pk already scopes the
-    # read to this org, verify the row's user_id matches if present. Legacy
-    # rows under the org pk but with no user_id field still pass — they were
-    # created by this org and the partition is the trust boundary.
-    item_user_id = item.get("user_id")
-    if item_user_id and item_user_id != user_id:
+    # read to this org, verify the row's user_id matches when the field is
+    # present. Use a presence check (`in item`) rather than truthiness so a
+    # malformed row with `user_id=""` or `user_id=None` can't slip past the
+    # check by looking like a legacy field-absent row. Only rows that truly
+    # lack the field entirely are treated as legacy (partition is the trust
+    # boundary in that case).
+    if "user_id" in item and item["user_id"] != user_id:
         return None
     return _strip_decimals(item)
 
