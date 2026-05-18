@@ -1,46 +1,51 @@
-"""Muse Stream Lambda — SSE response streaming via Function URL.
+"""Muse Chat Lambda — buffered request/response via API Gateway.
 
 Wiring:
-  Browser → CloudFront /api/muse/stream* (OAC, AllViewerExceptHostHeader)
-         → Lambda Function URL (AuthType: AWS_IAM, InvokeMode: RESPONSE_STREAM)
-         → this handler
+  Browser → CloudFront /api/muse/chat → API Gateway → CookieAuthorizer → here
 
-The Function URL is `AuthType: AWS_IAM` so the OAC's SigV4 signature is
-actually validated and the resource policy (only `cloudfront.amazonaws.com` on
-this distribution can invoke) takes effect. Application-level user auth still
-happens inside this Lambda using the shared `plinths_auth` layer because IAM
-auth on the URL only proves "CloudFront signed this request" — it doesn't
-identify the end user; that identity lives in the `ml_access` cookie.
+Previously this was a Function URL response-streaming handler. Native Python
+response streaming via Function URL isn't supported the way the original PR
+assumed (the runtime tries to JSON-serialize the generator return and crashes
+with `MarshalError`). So this is now a regular buffered handler: it collects
+the entire Bedrock response, persists the turn, and returns JSON. The frontend
+simulates char-by-char streaming locally so the craft is preserved.
 
-Output: `text/event-stream`. Event types emitted, in order:
-  - `token` (multiple): {"delta": "..."}
-  - `sentence_boundary` (multiple): {}
-  - `done` (exactly one): {conversation_id, message_id, tokens_in, tokens_out,
-                           sources, follow_ups}
-  - `error` (at most one — terminates the stream): {code, message, ...}
+See `docs/planning/BACKLOG.md` for the proper-streaming follow-up (AWS Lambda
+Web Adapter or Node.js port).
 
-A `: keep-alive` SSE comment is emitted every ~15s while waiting on the first
-Bedrock chunk so CloudFront doesn't idle-disconnect.
+Response shape on success (HTTP 200):
+  {
+    "conversation_id": "...",
+    "message_id": "...",
+    "content": "...",
+    "sources": [{kind, target, label}, ...],
+    "follow_ups": ["...", "...", "..."],
+    "tokens_in": N,
+    "tokens_out": N
+  }
 
-Per the handoff: response streaming for Python Lambda on Function URLs uses
-the generator-yielding handler — the runtime stitches yielded bytes into the
-chunked HTTP body. No `awslambda.streamifyResponse` shim required.
+Errors (HTTP 4xx/5xx) — body shape: {"code": "...", "message": "...", ...}
+Codes: validation, report_not_found, limit_reached, plan_locked, model_error.
+
+The file name is `stream.py` for historical reasons; the handler is now plain
+buffered. Renaming the file would force a CloudFormation rename of the function
+logical id without functional gain. Worth tidying in a separate cleanup PR.
 """
 
 from __future__ import annotations
 
 import json
-import logging
 import os
-import threading
-import time
-from queue import Empty, Queue
-from typing import Any, Generator, Iterable
+from typing import Any, Iterable
 
 import boto3
+from aws_lambda_powertools import Logger, Metrics, Tracer
+from aws_lambda_powertools.event_handler import APIGatewayRestResolver
+from aws_lambda_powertools.event_handler.exceptions import ServiceError
+from aws_lambda_powertools.logging import correlation_paths
+from aws_lambda_powertools.metrics import MetricUnit
+from aws_lambda_powertools.utilities.typing import LambdaContext
 from botocore.exceptions import BotoCoreError, ClientError
-
-from plinths_auth import AuthContext, verify_session_cookie
 
 import citations
 import persistence
@@ -55,10 +60,11 @@ _MAX_FREE_DAILY = int(os.environ.get("MUSE_FREE_DAILY_LIMIT", "3"))
 _HISTORY_TURN_LIMIT = int(os.environ.get("MUSE_HISTORY_TURN_LIMIT", "12"))
 _MAX_OUTPUT_TOKENS = int(os.environ.get("MUSE_MAX_OUTPUT_TOKENS", "1024"))
 _TEMPERATURE = float(os.environ.get("MUSE_TEMPERATURE", "0.4"))
-_HEARTBEAT_INTERVAL_SEC = 15.0
 
-logger = logging.getLogger()
-logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
+logger = Logger()
+tracer = Tracer()
+metrics = Metrics()
+app = APIGatewayRestResolver(strip_prefixes=["/api"])
 
 _bedrock = None
 
@@ -70,120 +76,65 @@ def _bedrock_client():
     return _bedrock
 
 
-# ─── SSE framing ───
+# ─── Auth context (from API Gateway authorizer) ───
 
 
-def _sse_event(event: str, data: dict | None = None) -> bytes:
-    payload = json.dumps(data or {}, ensure_ascii=False)
-    return f"event: {event}\ndata: {payload}\n\n".encode("utf-8")
-
-
-def _sse_keepalive() -> bytes:
-    return b": keep-alive\n\n"
-
-
-def _sse_error(code: str, message: str, **extra: Any) -> bytes:
-    return _sse_event("error", {"code": code, "message": message, **extra})
-
-
-# ─── Lambda Function URL streaming prelude ───
-#
-# When a Function URL is configured with InvokeMode=RESPONSE_STREAM and the
-# Python handler is a generator, the runtime treats the FIRST yielded chunk as
-# an HTTP-response prelude: a JSON object describing the response line + headers
-# + cookies, followed by 8 NULL bytes as a separator, after which every
-# subsequent yield is appended to the response body verbatim. Without the
-# prelude the response defaults to `application/octet-stream`, which CloudFront
-# and some intermediaries may treat as opaque bytes (compression decisions,
-# buffering thresholds) rather than as a live event stream.
-_STREAM_PRELUDE_HEADERS: dict[str, str] = {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache, no-transform",
-    # Disable proxy-side response buffering. Honored by nginx and ignored
-    # everywhere else; harmless either way.
-    "X-Accel-Buffering": "no",
-}
-
-
-def _stream_prelude() -> bytes:
-    metadata = json.dumps(
-        {
-            "statusCode": 200,
-            "headers": _STREAM_PRELUDE_HEADERS,
-            "cookies": [],
-        }
-    ).encode("utf-8")
-    return metadata + b"\x00" * 8
-
-
-# ─── Cookie extraction from a Function URL event ───
-
-
-def _cookie_header_from_function_url_event(event: dict) -> str:
-    """Function URL events expose cookies in two places: `headers.cookie` and
-    `cookies: ["k=v", ...]`. Try both."""
-    headers = event.get("headers") or {}
-    header_cookie = headers.get("cookie") or headers.get("Cookie") or ""
-    if header_cookie:
-        return header_cookie
-    cookie_list = event.get("cookies") or []
-    return "; ".join(cookie_list) if cookie_list else ""
+def _auth() -> dict:
+    """Extract the auth context that CookieAuthorizer injects."""
+    raw = app.current_event.raw_event
+    authorizer = raw.get("requestContext", {}).get("authorizer", {}) or {}
+    return {
+        "user_id": authorizer.get("user_id", "anonymous"),
+        "org_id": authorizer.get("org_id", "anonymous"),
+        "is_authenticated": authorizer.get("is_authenticated", "false") == "true",
+        "plan": authorizer.get("plan", "free"),
+    }
 
 
 # ─── Plan gates ───
 
 
-def _check_plan_gate(
-    plan: str, user_id: str, user_message_count: int
-) -> tuple[bool, bytes | None]:
-    """Returns (allowed, error_event_or_None).
+def _check_plan_gate(plan: str, user_id: str, user_message_count: int) -> dict | None:
+    """Return an error payload dict if the gate denies; None if allowed.
 
-    `user_message_count` is computed once by the caller from the already-loaded
-    history rows so we don't pay for a second DynamoDB Query per turn.
-
-    For Free users, applies a 3-per-day cap across all reports. The counter
-    lives on the Users row (`muse_count_today` / `muse_count_date`) and is
-    incremented only after a turn fully streams — see `_stream_response`.
+    Mirrors the same Free/Pro/Max semantics as before; only the response shape
+    changes (dict for JSON response instead of SSE-framed bytes).
     """
     if plan == "free":
         used = persistence.get_muse_daily_used(user_id)
         if used >= _MAX_FREE_DAILY:
-            return False, _sse_error(
-                "limit_reached",
-                "You've used today's free Muse chats.",
-                limit=_MAX_FREE_DAILY,
-                used=used,
-            )
-        return True, None
+            return {
+                "code": "limit_reached",
+                "message": "You've used today's free Muse chats.",
+                "limit": _MAX_FREE_DAILY,
+                "used": used,
+            }
+        return None
     if plan == "pro":
         if user_message_count >= _MAX_USER_MESSAGES_PRO:
-            return False, _sse_error(
-                "limit_reached",
-                "You've reached the Pro chat limit for this report.",
-                limit=_MAX_USER_MESSAGES_PRO,
-                used=user_message_count,
-            )
-        return True, None
+            return {
+                "code": "limit_reached",
+                "message": "You've reached the Pro chat limit for this report.",
+                "limit": _MAX_USER_MESSAGES_PRO,
+                "used": user_message_count,
+            }
+        return None
     if plan in ("max", "admin"):
-        return True, None
+        return None
     # Fail closed: any unrecognized plan value is treated as not allowed.
-    return False, _sse_error(
-        "plan_locked",
-        "Your account plan is not recognized. Contact support.",
-    )
+    return {
+        "code": "plan_locked",
+        "message": "Your account plan is not recognized. Contact support.",
+    }
 
 
-# ─── Bedrock streaming ───
+# ─── Bedrock invocation ───
 
 
 def _build_nova_payload(
     system_prompt: str, history: list[dict], user_message: str
 ) -> str:
-    """Amazon Nova / Bedrock Converse-compatible payload.
-
-    System prompt goes in the dedicated `system` field; conversation turns go
-    in `messages` (each message wraps content blocks).
-    """
+    """Amazon Nova / Bedrock Converse-compatible payload."""
     messages = [
         {"role": h["role"], "content": [{"text": h["content"]}]} for h in history
     ]
@@ -199,49 +150,35 @@ def _build_nova_payload(
     return json.dumps(payload)
 
 
-def _iter_bedrock_deltas(
-    response_body: Iterable[dict],
-) -> Generator[tuple[str | None, int | None, int | None], None, None]:
-    """Yield (text_delta, input_tokens, output_tokens) tuples.
+def _extract_nova_response(raw_body: bytes) -> tuple[str, int, int]:
+    """Pull (text, input_tokens, output_tokens) out of a Nova InvokeModel response.
 
-    For Nova:
-      - `contentBlockDelta`: payload `{delta: {text: "..."}}` → yield text
-      - `metadata`: payload `{usage: {inputTokens, outputTokens}}` → yield usage
-      - other events (messageStart/Stop, contentBlockStart/Stop) → skipped
+    Shape: {output: {message: {content: [{text: "..."}]}}, usage: {inputTokens, outputTokens}}
     """
-    for raw_event in response_body:
-        chunk = raw_event.get("chunk")
-        if not chunk or "bytes" not in chunk:
-            continue
-        try:
-            payload = json.loads(chunk["bytes"])
-        except (json.JSONDecodeError, ValueError):
-            continue
-        if "contentBlockDelta" in payload:
-            delta = payload["contentBlockDelta"].get("delta") or {}
-            text = delta.get("text")
-            if text:
-                yield (text, None, None)
-        elif "metadata" in payload:
-            usage = payload["metadata"].get("usage") or {}
-            yield (
-                None,
-                int(usage.get("inputTokens", 0)),
-                int(usage.get("outputTokens", 0)),
-            )
+    payload = json.loads(raw_body)
+    output = payload.get("output") or {}
+    message = output.get("message") or {}
+    content_blocks: Iterable[dict] = message.get("content") or []
+    text_parts = [
+        block.get("text", "") for block in content_blocks if isinstance(block, dict)
+    ]
+    text = "".join(text_parts)
+    usage = payload.get("usage") or {}
+    return (
+        text,
+        int(usage.get("inputTokens", 0)),
+        int(usage.get("outputTokens", 0)),
+    )
 
 
-def _stream_bedrock_async(payload: str, out: Queue) -> None:
-    """Run Bedrock streaming in a worker thread; push events onto `out`.
+def _invoke_bedrock(payload: str) -> tuple[str, int, int]:
+    """Synchronous Bedrock invocation. Returns (full_text, tokens_in, tokens_out).
 
-    Events:
-      ("delta", str)
-      ("usage", (int, int))
-      ("error", (code, message))
-      ("end", None)
+    Raises `ServiceError` on Bedrock failures so the route handler maps it to a
+    clean 502 with our `model_error` code.
     """
     try:
-        response = _bedrock_client().invoke_model_with_response_stream(
+        response = _bedrock_client().invoke_model(
             modelId=_CHAT_MODEL_ID,
             contentType="application/json",
             accept="application/json",
@@ -249,154 +186,101 @@ def _stream_bedrock_async(payload: str, out: Queue) -> None:
         )
     except (ClientError, BotoCoreError):
         logger.exception("Bedrock invocation failed")
-        out.put(("error", ("model_error", "Bedrock invocation failed")))
-        out.put(("end", None))
-        return
+        raise ServiceError(502, "Bedrock invocation failed")
 
     body = response.get("body")
     if body is None:
-        out.put(("error", ("model_error", "Bedrock returned no body")))
-        out.put(("end", None))
-        return
+        logger.error("Bedrock returned no body")
+        raise ServiceError(502, "Bedrock returned no body")
 
     try:
-        for text, in_tok, out_tok in _iter_bedrock_deltas(body):
-            if text is not None:
-                out.put(("delta", text))
-            elif in_tok is not None or out_tok is not None:
-                out.put(("usage", (in_tok or 0, out_tok or 0)))
+        return _extract_nova_response(body.read())
     except Exception:
-        logger.exception("Bedrock stream interrupted mid-iteration")
-        out.put(("error", ("model_error", "Bedrock stream interrupted")))
-    finally:
-        out.put(("end", None))
+        logger.exception("Failed to parse Bedrock response")
+        raise ServiceError(502, "Bedrock response malformed")
 
 
-# ─── Main streaming loop ───
+# ─── Chat route ───
 
 
-def _stream_response(auth: AuthContext, body: dict) -> Generator[bytes, None, None]:
-    """Yield SSE-framed bytes for the entire turn lifecycle."""
+@app.post("/muse/chat")
+@tracer.capture_method
+def chat():
+    auth = _auth()
+    if not auth["is_authenticated"]:
+        return {"code": "auth_failed", "message": "Sign in to chat with Muse."}, 401
+
+    body = app.current_event.json_body
+    if not isinstance(body, dict):
+        return {
+            "code": "validation",
+            "message": "Request body must be a JSON object.",
+        }, 400
+
     report_id = (body.get("report_id") or "").strip()
     message = (body.get("message") or "").strip()
-    conversation_id = body.get("conversation_id") or None
+    conversation_id_in = body.get("conversation_id") or None
 
     if not report_id or not message:
-        yield _sse_error(
-            "validation",
-            "Both `report_id` and `message` are required.",
-        )
-        return
+        return {
+            "code": "validation",
+            "message": "Both `report_id` and `message` are required.",
+        }, 400
 
-    # 1. Confirm the report exists and is owned by the caller. Ownership is
-    # verified BEFORE the plan gate so that a Free user POSTing an arbitrary
-    # `report_id` gets `report_not_found` (truthful) rather than `plan_locked`
-    # (which would confirm both that the caller is on Free AND that they're
-    # at least authenticated — a minor info leak via error-code timing).
-    report = persistence.get_report_for_user(report_id, auth.user_id, auth.org_id)
+    # 1. Ownership check first — a Free user POSTing an arbitrary report_id
+    # gets `report_not_found` (truthful) rather than `plan_locked`.
+    report = persistence.get_report_for_user(report_id, auth["user_id"], auth["org_id"])
     if report is None:
-        yield _sse_error(
-            "report_not_found",
-            "That report doesn't exist or isn't yours.",
-        )
-        return
+        return {
+            "code": "report_not_found",
+            "message": "That report doesn't exist or isn't yours.",
+        }, 404
 
-    # 2. Load history once. Used for the plan gate (user-message count for the
-    # Pro cap), the conversation_id resolution, and the model context window.
-    # Doing this here means the Pro gate doesn't pay for a second Query.
+    # 2. Load history once — used by plan gate, conversation_id resolution, and
+    # the model context window.
     history_rows = persistence.list_messages(report_id)
     user_message_count = sum(1 for r in history_rows if r.get("role") == "user")
 
-    # 3. Plan gate (early reject — no Bedrock call billed).
-    allowed, gate_event = _check_plan_gate(auth.plan, auth.user_id, user_message_count)
-    if not allowed:
-        assert gate_event is not None
-        yield gate_event
-        return
+    # 3. Plan gate (early reject — no Bedrock spend).
+    gate_error = _check_plan_gate(auth["plan"], auth["user_id"], user_message_count)
+    if gate_error is not None:
+        status = 429 if gate_error["code"] == "limit_reached" else 403
+        return gate_error, status
 
     # 4. Resolve conversation_id.
     if history_rows:
         stored_conversation_id = history_rows[0].get("conversation_id")
-        if conversation_id is not None and conversation_id != stored_conversation_id:
-            yield _sse_error(
-                "validation",
-                "conversation_id does not match the existing thread for this report.",
-            )
-            return
+        if (
+            conversation_id_in is not None
+            and conversation_id_in != stored_conversation_id
+        ):
+            return {
+                "code": "validation",
+                "message": "conversation_id does not match the existing thread.",
+            }, 400
         conversation_id = stored_conversation_id
-    elif conversation_id is None:
-        conversation_id = persistence.new_id()
+    else:
+        conversation_id = conversation_id_in or persistence.new_id()
     history = persistence.messages_to_history(history_rows, limit=_HISTORY_TURN_LIMIT)
 
-    # 5. Build prompt + invoke Bedrock in a worker thread so we can interleave
-    # keep-alives while waiting for the first delta.
+    # 5. Build prompt + call Bedrock (synchronous, buffered).
     result_json = report.get("result_json") if isinstance(report, dict) else None
     system_prompt = prompts.build_system_prompt(result_json)
     payload = _build_nova_payload(system_prompt, history, message)
-
-    queue: Queue = Queue()
-    worker = threading.Thread(
-        target=_stream_bedrock_async, args=(payload, queue), daemon=True
-    )
-    worker.start()
 
     user_message_id = persistence.new_id()
     user_created_at = persistence.now_iso()
     assistant_message_id = persistence.new_id()
 
+    raw_text, tokens_in, tokens_out = _invoke_bedrock(payload)
+
+    # 6. Strip the `<<MUSE_META>>{...}<<END>>` envelope from the model output
+    # and extract follow-ups + the visible prose.
     stripper = citations.MetaStripper()
-    visible_text_buffer = ""
-    tokens_in = 0
-    tokens_out = 0
-    last_activity = time.time()
-    error_emitted: tuple[str, str] | None = None
+    visible = stripper.feed(raw_text)
+    visible += stripper.finish()
+    full_text = visible.strip()
 
-    while True:
-        try:
-            event = queue.get(timeout=1.0)
-        except Empty:
-            if time.time() - last_activity >= _HEARTBEAT_INTERVAL_SEC:
-                yield _sse_keepalive()
-                last_activity = time.time()
-            continue
-
-        kind, payload_val = event
-        if kind == "delta":
-            last_activity = time.time()
-            visible = stripper.feed(payload_val)
-            if visible:
-                # Emit sentence-boundary BEFORE we extend the buffer so the
-                # boundary marker arrives in lockstep with the punctuation.
-                if citations.detect_sentence_boundary(visible_text_buffer, visible):
-                    yield _sse_event("token", {"delta": visible})
-                    visible_text_buffer += visible
-                    yield _sse_event("sentence_boundary", {})
-                else:
-                    yield _sse_event("token", {"delta": visible})
-                    visible_text_buffer += visible
-        elif kind == "usage":
-            tokens_in, tokens_out = payload_val
-        elif kind == "error":
-            error_emitted = payload_val
-            # Continue draining the queue until "end" — the worker thread will
-            # always push "end" after "error".
-        elif kind == "end":
-            break
-
-    # Flush any held tail (handles a stream that ended without ever reaching
-    # the META_START sentinel — unlikely but possible if the model misbehaved).
-    tail = stripper.finish()
-    if tail:
-        yield _sse_event("token", {"delta": tail})
-        visible_text_buffer += tail
-
-    if error_emitted is not None:
-        code, msg = error_emitted
-        yield _sse_error(code, msg)
-        return
-
-    # 6. Build the final assembled prose and meta payload.
-    full_text = visible_text_buffer.strip()
     sources = [c.as_dict() for c in citations.extract_citations(full_text)]
     meta = stripper.meta()
     follow_ups_raw = meta.get("follow_ups") if isinstance(meta, dict) else None
@@ -406,13 +290,12 @@ def _stream_response(auth: AuthContext, body: dict) -> Generator[bytes, None, No
             if isinstance(item, str) and item.strip():
                 follow_ups.append(item.strip())
 
-    # 7. Persist the turn (best-effort — even on persistence failure we still
-    # send `done` so the user sees the response). Done after `done` would mean
-    # the assistant text is wasted if Lambda is killed mid-shutdown.
+    # 7. Persist the turn (best-effort — return 200 even if write fails so the
+    # user still sees their answer; we log loudly so ops notices).
     try:
         persistence.write_pair(
             report_id=report_id,
-            org_id=auth.org_id,
+            org_id=auth["org_id"],
             conversation_id=conversation_id,
             user_message_id=user_message_id,
             user_content=message,
@@ -425,85 +308,37 @@ def _stream_response(auth: AuthContext, body: dict) -> Generator[bytes, None, No
             tokens_in=tokens_in,
             tokens_out=tokens_out,
             model_id=_CHAT_MODEL_ID,
-            plan=auth.plan,
+            plan=auth["plan"],
         )
     except Exception:
-        logger.exception("Muse persistence failed (turn already streamed)")
+        logger.exception(
+            "Muse persistence failed (response already produced)",
+            extra={"report_id": report_id, "user_id": auth["user_id"]},
+        )
 
-    # 7b. Free tier: bump the daily counter ONLY now that the turn streamed
-    # successfully. A model error or upstream timeout doesn't burn quota.
-    if auth.plan == "free":
-        persistence.increment_muse_daily_count(auth.user_id)
+    # 8. Free tier: bump the daily counter only after a successful turn so
+    # model errors don't burn quota.
+    if auth["plan"] == "free":
+        persistence.increment_muse_daily_count(auth["user_id"])
 
-    # 8. Emit `done`.
-    yield _sse_event(
-        "done",
-        {
-            "conversation_id": conversation_id,
-            "message_id": assistant_message_id,
-            "tokens_in": tokens_in,
-            "tokens_out": tokens_out,
-            "sources": sources,
-            "follow_ups": follow_ups,
-        },
-    )
+    metrics.add_metric(name="MuseChatTurn", unit=MetricUnit.Count, value=1)
+
+    return {
+        "conversation_id": conversation_id,
+        "message_id": assistant_message_id,
+        "content": full_text,
+        "sources": sources,
+        "follow_ups": follow_ups,
+        "tokens_in": tokens_in,
+        "tokens_out": tokens_out,
+    }
 
 
 # ─── Lambda entry point ───
 
 
-def _parse_body(event: dict) -> dict | None:
-    """Parse JSON body from a Function URL event (base64 or plain)."""
-    raw = event.get("body")
-    if raw is None:
-        return None
-    if event.get("isBase64Encoded"):
-        import base64
-
-        try:
-            raw = base64.b64decode(raw).decode("utf-8")
-        except Exception:
-            return None
-    if isinstance(raw, bytes):
-        raw = raw.decode("utf-8", errors="replace")
-    try:
-        parsed = json.loads(raw)
-    except (json.JSONDecodeError, ValueError):
-        return None
-    return parsed if isinstance(parsed, dict) else None
-
-
-def handler(event: dict, context) -> Generator[bytes, None, None]:
-    """Function URL streaming handler. The runtime stitches yielded bytes into
-    the chunked HTTP response body.
-
-    The first yield is the response prelude (status + headers + 8 NULL bytes);
-    every subsequent yield is appended to the response body verbatim. We always
-    yield the prelude, even on errors, so the response is `text/event-stream`
-    end-to-end and CloudFront/clients never see a stray octet-stream default.
-    """
-    yield _stream_prelude()
-
-    # Reject non-POST early. Function URL's CORS preflight (OPTIONS) is
-    # handled by AWS automatically when CORS is configured on the URL.
-    method = event.get("requestContext", {}).get("http", {}).get("method", "POST")
-    if method != "POST":
-        yield _sse_error("validation", f"Method {method} not allowed.")
-        return
-
-    cookie_header = _cookie_header_from_function_url_event(event)
-    auth = verify_session_cookie(cookie_header)
-    if auth is None:
-        yield _sse_error("auth_failed", "Sign in to chat with Muse.")
-        return
-
-    body = _parse_body(event)
-    if body is None:
-        yield _sse_error("validation", "Request body must be valid JSON.")
-        return
-
-    try:
-        yield from _stream_response(auth, body)
-    except Exception:
-        logger.exception("Muse stream crashed")
-        yield _sse_error("model_error", "Muse hit an unexpected error.")
+@logger.inject_lambda_context(correlation_id_path=correlation_paths.API_GATEWAY_REST)
+@tracer.capture_lambda_handler
+@metrics.log_metrics(capture_cold_start_metric=True)
+def handler(event: dict, context: LambdaContext) -> Any:
+    return app.resolve(event, context)

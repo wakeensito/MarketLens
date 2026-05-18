@@ -1,17 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MuseFeedback, MuseTurn, MuseView } from '../components/muse/museTypes';
 import {
+  asMuseChatError,
   deleteMuseConversation,
   getMuseConversation,
+  sendMuseMessage,
   setMuseFeedback,
-  streamMuseMessage,
-  type MuseStreamDone,
-  type MuseStreamError,
-  type MuseStreamErrorCode,
+  type MuseChatError,
   type MuseSyncMessage,
 } from '../museApi';
 
-const SENTENCE_PAUSE_MS = 240;
+/** Char-pacing constants for the local streaming simulation. The server is
+ *  buffered, so we already have the full text — we just paint it gradually
+ *  so the cursor + per-char rhythm still feel right. Numbers picked to land
+ *  a typical 200-char answer at ~3s of paint time. */
+const LOCAL_STREAM_CHAR_MS = 12;
+const LOCAL_STREAM_JITTER_MS = 14;
+const LOCAL_STREAM_SENTENCE_PAUSE_MS = 220;
 
 function syncMessagesToTurns(messages: MuseSyncMessage[]): MuseTurn[] {
   return messages.map((m): MuseTurn => {
@@ -29,13 +34,13 @@ function syncMessagesToTurns(messages: MuseSyncMessage[]): MuseTurn[] {
   });
 }
 
-function errorMessage(err: MuseStreamError): string {
+function museErrorToString(err: MuseChatError): string {
   if (
     err.code === 'limit_reached' &&
     typeof err.used === 'number' &&
     typeof err.limit === 'number'
   ) {
-    return `You've used ${err.used} of ${err.limit} messages on this report.`;
+    return `You've used ${err.used} of ${err.limit} messages.`;
   }
   return err.message || 'Something went wrong.';
 }
@@ -44,10 +49,11 @@ export interface UseMuseResult {
   enabled: boolean;
   view: MuseView;
   thread: MuseTurn[];
-  /** Partial assistant text during streaming; null when no stream is active. */
+  /** Partial assistant text during the local streaming simulation; null when
+   *  no chat is in flight. */
   streamingText: string | null;
   highlightTarget: string | null;
-  /** Last user-facing error (stream errors, hydration failure, feedback save fail). */
+  /** Last user-facing error (chat errors, hydration failure, feedback save fail). */
   lastError: string | null;
   hydrating: boolean;
   /** Free-tier daily counter snapshot. Both fields are null for Pro/Max
@@ -69,18 +75,23 @@ export interface UseMuseResult {
 }
 
 /**
- * Owns Muse view + per-report thread state, backed by the real Muse Lambda.
+ * Owns Muse view + per-report thread state, backed by the (buffered) Muse Lambda.
  *
- * `enabled` is plan-gated by the caller (Pro/Max → true, Free → false). When
- * disabled, the hook still runs (so React's hook order stays stable), but it
- * never touches the network and `sendMessage` is a no-op.
+ * `enabled` is auth-gated by the caller. When disabled, the hook still runs (so
+ * React's hook order stays stable) but it never touches the network and
+ * `sendMessage` is a no-op.
  *
- * The streaming model:
- *  - `token` deltas append to `streamingText` (the last muse turn renders it).
- *  - `sentence_boundary` events insert a small visual pause for cadence.
- *  - `done` finalizes the placeholder turn with sources, follow-ups, message_id.
- *  - `error` rolls back both the user and placeholder turns and surfaces a
- *    `lastError`, so the user can re-try without their question hanging unanswered.
+ * Chat lifecycle for a single turn:
+ *  1. Append a user turn + empty placeholder muse turn, tagged with a
+ *     `pendingId` so we can finalize / roll back precisely.
+ *  2. POST /api/muse/chat and await the JSON response (the server does Bedrock
+ *     synchronously and returns the full answer).
+ *  3. Paint the answer char-by-char into `streamingText` so the cursor + rhythm
+ *     match the original streaming craft. Sentence boundaries get a brief
+ *     settle. Cancellation (abort, regenerate, reportId change) drops the
+ *     paint loop immediately.
+ *  4. On error: roll back both optimistic turns by pendingId and surface
+ *     `lastError`. On `limit_reached`, snap the daily counter to the cap.
  */
 export function useMuse({
   reportId,
@@ -99,21 +110,22 @@ export function useMuse({
   const [dailyLimit, setDailyLimit] = useState<number | null>(null);
 
   const conversationIdRef = useRef<string | null>(null);
-  const streamingAbortRef = useRef<AbortController | null>(null);
+  const inflightAbortRef = useRef<AbortController | null>(null);
+  /** Bumps on every cancel; the local paint loop checks this and bails. */
+  const paintGenerationRef = useRef(0);
 
-  const cancelStream = useCallback(() => {
-    if (streamingAbortRef.current) {
-      streamingAbortRef.current.abort();
-      streamingAbortRef.current = null;
+  const cancelInflight = useCallback(() => {
+    if (inflightAbortRef.current) {
+      inflightAbortRef.current.abort();
+      inflightAbortRef.current = null;
     }
+    paintGenerationRef.current += 1;
   }, []);
 
-  // Hydrate thread on reportId / enabled change. Disabling clears state so a
-  // Free-plan user toggling to a report that previously had a thread (eg. their
-  // plan downgraded) doesn't see stale messages.
+  // Hydrate thread on reportId / enabled change.
   /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
-    cancelStream();
+    cancelInflight();
     setStreamingText(null);
     setHighlightTarget(null);
     setLastError(null);
@@ -156,13 +168,45 @@ export function useMuse({
     return () => {
       cancelled = true;
     };
-  }, [reportId, enabled, cancelStream]);
+  }, [reportId, enabled, cancelInflight]);
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  /** Paint `fullText` into `streamingText` over time. Bails immediately if
+   *  `cancelInflight` (or anything else that bumps the generation) is called. */
+  const paintLocally = useCallback((fullText: string): Promise<void> => {
+    const gen = ++paintGenerationRef.current;
+    setStreamingText('');
+    return new Promise<void>(resolve => {
+      let i = 0;
+      const tick = () => {
+        // Cancelled — drop the paint silently. Caller decides what to render.
+        if (paintGenerationRef.current !== gen) {
+          resolve();
+          return;
+        }
+        if (i >= fullText.length) {
+          resolve();
+          return;
+        }
+        const ch = fullText[i];
+        i += 1;
+        setStreamingText(fullText.slice(0, i));
+        const insideToken =
+          fullText.lastIndexOf('[[', i - 1) > fullText.lastIndexOf(']]', i - 1);
+        const isBoundary = (ch === '.' || ch === '?' || ch === '!') && !insideToken;
+        const delay = isBoundary
+          ? LOCAL_STREAM_SENTENCE_PAUSE_MS
+          : LOCAL_STREAM_CHAR_MS + Math.random() * LOCAL_STREAM_JITTER_MS;
+        window.setTimeout(tick, delay);
+      };
+      tick();
+    });
+  }, []);
 
   const sendInternal = useCallback(
     async (userText: string) => {
       if (!reportId || !enabled) return;
-      cancelStream();
+      cancelInflight();
       setLastError(null);
 
       const pendingId =
@@ -176,100 +220,78 @@ export function useMuse({
       setStreamingText('');
 
       const controller = new AbortController();
-      streamingAbortRef.current = controller;
-      let assembledText = '';
-      let doneData: MuseStreamDone | null = null;
-      let streamError: string | null = null;
-      let streamErrorCode: MuseStreamErrorCode | null = null;
+      inflightAbortRef.current = controller;
 
       try {
-        for await (const event of streamMuseMessage(
+        const res = await sendMuseMessage(
           {
             reportId,
             message: userText,
             conversationId: conversationIdRef.current,
           },
           { signal: controller.signal },
-        )) {
-          if (event.type === 'token') {
-            assembledText += event.delta;
-            setStreamingText(assembledText);
-          } else if (event.type === 'sentence_boundary') {
-            await new Promise(r => setTimeout(r, SENTENCE_PAUSE_MS));
-          } else if (event.type === 'done') {
-            doneData = event.data;
-          } else if (event.type === 'error') {
-            streamError = errorMessage(event.data);
-            streamErrorCode = event.data.code;
-            break;
+        );
+
+        // Paint locally for the streaming craft, then finalize.
+        await paintLocally(res.content);
+        // If a cancel landed during the paint, don't finalize — the cancel
+        // path (hydrate / regenerate / unmount) already handles the thread.
+        if (controller.signal.aborted) return;
+
+        setStreamingText(null);
+        setThread(prev => {
+          const placeholderIdx = prev.findIndex(
+            t => t.speaker === 'muse' && t.pendingId === pendingId,
+          );
+          if (placeholderIdx === -1) return prev;
+          const copy = [...prev];
+          copy[placeholderIdx] = {
+            speaker: 'muse',
+            content: res.content,
+            sources: res.sources,
+            followUps: res.follow_ups,
+            messageId: res.message_id,
+            feedback: null,
+          };
+          const userIdx = copy.findIndex(
+            t => t.speaker === 'user' && t.pendingId === pendingId,
+          );
+          if (userIdx !== -1) {
+            const cleaned: MuseTurn = { ...copy[userIdx] };
+            delete cleaned.pendingId;
+            copy[userIdx] = cleaned;
           }
+          return copy;
+        });
+        if (res.conversation_id) {
+          conversationIdRef.current = res.conversation_id;
+        }
+        // Free users: bump the local counter so the cap reflects immediately.
+        if (dailyLimit != null) {
+          setDailyUsed(prev => (prev ?? 0) + 1);
         }
       } catch (e) {
         if ((e as Error).name === 'AbortError') {
-          // Hook unmounted or reportId changed; caller initiated cancellation.
+          // Caller cancelled (reportId change, regenerate, unmount); their
+          // code already cleaned up the thread, so just bail silently.
           return;
         }
-        streamError = "Muse couldn't reach the server.";
-      } finally {
-        if (streamingAbortRef.current === controller) {
-          streamingAbortRef.current = null;
-        }
-      }
-
-      if (streamError) {
-        // Roll back: drop both optimistic turns by their pendingId tag so the
-        // user can retry without their question hanging unanswered. Filtering
-        // by tag (not by trailing index) survives concurrent regenerate /
-        // hydration that may have already changed the thread shape.
+        const chatErr = asMuseChatError(e);
+        const message = chatErr ? museErrorToString(chatErr) : "Muse couldn't reach the server.";
+        // Roll back: drop both optimistic turns by their pendingId tag.
         setStreamingText(null);
         setThread(prev => prev.filter(t => t.pendingId !== pendingId));
-        setLastError(streamError);
-        // Only snap the counter when the server confirmed a quota hit.
-        // Transient errors (model_error, validation, network) shouldn't burn
-        // the user's daily allowance from the UI's perspective.
-        if (streamErrorCode === 'limit_reached' && dailyLimit != null) {
+        setLastError(message);
+        if (chatErr?.code === 'limit_reached' && dailyLimit != null) {
           setDailyUsed(dailyLimit);
         }
-        return;
-      }
-
-      setStreamingText(null);
-      setThread(prev => {
-        const placeholderIdx = prev.findIndex(
-          t => t.speaker === 'muse' && t.pendingId === pendingId,
-        );
-        if (placeholderIdx === -1) return prev;
-        const copy = [...prev];
-        copy[placeholderIdx] = {
-          speaker: 'muse',
-          content: assembledText,
-          sources: doneData?.sources,
-          followUps: doneData?.follow_ups,
-          messageId: doneData?.message_id,
-          feedback: null,
-        };
-        // Strip the pendingId off the paired user turn so it's not still
-        // marked as "in flight" once we've finalized.
-        const userIdx = copy.findIndex(
-          t => t.speaker === 'user' && t.pendingId === pendingId,
-        );
-        if (userIdx !== -1) {
-          const cleaned: MuseTurn = { ...copy[userIdx] };
-          delete cleaned.pendingId;
-          copy[userIdx] = cleaned;
+      } finally {
+        if (inflightAbortRef.current === controller) {
+          inflightAbortRef.current = null;
         }
-        return copy;
-      });
-      if (doneData?.conversation_id) {
-        conversationIdRef.current = doneData.conversation_id;
-      }
-      // Free users: bump the local counter so the cap reflects immediately.
-      // Pro/Max have null dailyLimit and we leave the counter as-is.
-      if (dailyLimit != null) {
-        setDailyUsed(prev => (prev ?? 0) + 1);
       }
     },
-    [reportId, enabled, cancelStream, dailyLimit],
+    [reportId, enabled, cancelInflight, dailyLimit, paintLocally],
   );
 
   const sendMessage = useCallback(
@@ -288,15 +310,15 @@ export function useMuse({
       if (!target || target.speaker !== 'muse') return;
       const prevUser = thread[turnIndex - 1];
       if (!prevUser || prevUser.speaker !== 'user') return;
-      cancelStream();
+      cancelInflight();
       // Trim back to before the user turn; sendInternal re-appends both.
-      // Note: the original (target) assistant turn stays in DynamoDB; the
-      // backend writes a brand-new pair. Acceptable for v1 — a dedicated
-      // regenerate endpoint can supersede later.
+      // Note: the original assistant turn stays in DynamoDB; the backend
+      // writes a brand-new pair. Acceptable for v1 — a dedicated regenerate
+      // endpoint can supersede later.
       setThread(prev => prev.slice(0, turnIndex - 1));
       void sendInternal(prevUser.content);
     },
-    [reportId, enabled, thread, cancelStream, sendInternal],
+    [reportId, enabled, thread, cancelInflight, sendInternal],
   );
 
   const openReport = useCallback(() => {
@@ -362,7 +384,7 @@ export function useMuse({
   );
 
   const clearThread = useCallback(async () => {
-    cancelStream();
+    cancelInflight();
     setThread([]);
     setView('idle');
     setStreamingText(null);
@@ -378,12 +400,12 @@ export function useMuse({
         setLastError("Couldn't clear your conversation on the server.");
       }
     }
-  }, [reportId, enabled, cancelStream]);
+  }, [reportId, enabled, cancelInflight]);
 
   const dismissError = useCallback(() => setLastError(null), []);
 
-  // Cleanup on unmount: abort any in-flight stream.
-  useEffect(() => () => cancelStream(), [cancelStream]);
+  // Cleanup on unmount: abort any in-flight request + bump paint generation.
+  useEffect(() => () => cancelInflight(), [cancelInflight]);
 
   return {
     enabled,

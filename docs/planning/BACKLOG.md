@@ -4,6 +4,26 @@
 
 ---
 
+## 🔁 Muse: restore true streaming (deferred)
+
+**Status:** Deferred — May 2026
+
+The Muse chat endpoint shipped as a **buffered** API Gateway POST returning a full JSON response; the frontend simulates char-by-char streaming locally. The original PR #37 design used a Lambda Function URL with `InvokeMode=RESPONSE_STREAM` and a generator-returning Python handler — but Python Lambda doesn't natively treat generator returns as streaming responses the way Node.js does with `awslambda.streamifyResponse`. Result: `Runtime.MarshalError: Object of type generator is not JSON serializable` on every invocation, even though the Function URL was correctly configured for RESPONSE_STREAM.
+
+Rolled back to buffered JSON to ship the feature. UX preserved via client-side paint loop (`useMuse.paintLocally`) — looks like streaming, but the server latency is exposed as a "thinking pause" before the paint starts.
+
+**To restore true streaming, pick one:**
+
+1. **AWS Lambda Web Adapter** (recommended) — add the LWA layer, wrap the chat handler as an ASGI app (FastAPI or Starlette), LWA handles SSE streaming over the Function URL. Keeps Python.
+2. **Port stream handler to Node.js** — rewrite `stream.py` in JS with `awslambda.streamifyResponse`. Mixed-runtime stack.
+3. **API Gateway WebSocket** — connection-based model; replaces Function URL entirely. Larger infra shift.
+
+When this lands, also restore the deleted infrastructure (CloudFront `/api/muse/stream*` cache behavior, `muse-stream` origin, `MuseStreamLambdaOAC`, `MuseStreamFunctionUrl`, `MuseStreamFunctionUrlPermission`, related output) — see commit history before this rollback for the working template shape.
+
+Related code: `infrastructure/lambda/muse/stream.py`, `frontend/src/museApi.ts`, `frontend/src/hooks/useMuse.ts` (the `paintLocally` helper would be removed in favor of real per-token rendering).
+
+---
+
 ## ✅ Multi-Model AI Pipeline (Completed)
 
 **Status:** Done — April 2026
