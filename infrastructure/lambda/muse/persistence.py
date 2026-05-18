@@ -262,13 +262,26 @@ def set_message_feedback(
 def get_report_for_user(report_id: str, user_id: str, org_id: str) -> dict | None:
     """Fetch the report row and confirm it belongs to the caller.
 
-    Reports are stored with pk = "REPORT#{report_id}", sk = "REPORT#{report_id}".
-    Authorization model: the report's `user_id` (or `org_id`) field must match
-    the caller. Anything else → return None so the caller emits `report_not_found`.
+    Reports table schema (matches `api/app.py`):
+        pk = "ORG#{org_id}#REPORT#{report_id}"
+        sk = "REPORT#{report_id}"
+
+    Authorization is implicit in the partition key — the only way to read a
+    row is to already know the org_id, which the authorizer provides from the
+    Users table. We still cross-check `user_id` on the row as defense-in-depth
+    in case someone in the same org is impersonated.
+
+    A pre-org-namespacing schema (`pk = REPORT#{report_id}`) existed earlier;
+    those rows are no longer reachable from this lookup and won't be Muse-able.
+    Acceptable — they're legacy rows the user can still view via the report
+    endpoints (which read the same org-namespaced path).
     """
     try:
         result = _reports().get_item(
-            Key={"pk": f"REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
+            Key={
+                "pk": f"ORG#{org_id}#REPORT#{report_id}",
+                "sk": f"REPORT#{report_id}",
+            },
             ConsistentRead=True,
         )
     except ClientError as e:
@@ -286,17 +299,12 @@ def get_report_for_user(report_id: str, user_id: str, org_id: str) -> dict | Non
     item = result.get("Item")
     if not item:
         return None
-    # Authorization is fail-closed: a row missing BOTH ownership attributes is
-    # treated as unknown, not as public. Prefer org_id (matches the rest of the
-    # codebase); fall back to user_id only for legacy rows that predate org_id.
-    item_org_id = item.get("org_id")
+    # Defense in depth: even though the org-namespaced pk already scopes the
+    # read to this org, verify the row's user_id matches if present. Legacy
+    # rows under the org pk but with no user_id field still pass — they were
+    # created by this org and the partition is the trust boundary.
     item_user_id = item.get("user_id")
-    if not item_org_id and not item_user_id:
-        return None
-    if item_org_id:
-        if item_org_id != org_id:
-            return None
-    elif item_user_id != user_id:
+    if item_user_id and item_user_id != user_id:
         return None
     return _strip_decimals(item)
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { ApiError } from '../api';
 import type { MuseFeedback, MuseTurn, MuseView } from '../components/muse/museTypes';
 import {
   asMuseChatError,
@@ -43,6 +44,23 @@ function museErrorToString(err: MuseChatError): string {
     return `You've used ${err.used} of ${err.limit} messages.`;
   }
   return err.message || 'Something went wrong.';
+}
+
+/** Map any thrown error from a chat send into something a user can read.
+ *  Order matters: structured chat-error code first, then any ApiError message
+ *  (e.g. API Gateway's `{"message":"Unauthorized"}` when the authorizer
+ *  denies — no `code` field, but the message itself is informative), then
+ *  a true network-failure fallback. */
+function describeSendError(e: unknown): { message: string; chatErr: MuseChatError | null } {
+  const chatErr = asMuseChatError(e);
+  if (chatErr) return { message: museErrorToString(chatErr), chatErr };
+  if (e instanceof ApiError) {
+    if (e.status === 401 || e.status === 403) {
+      return { message: 'Your session expired. Sign in again to keep chatting.', chatErr: null };
+    }
+    return { message: e.message || `Muse request failed (${e.status}).`, chatErr: null };
+  }
+  return { message: "Muse couldn't reach the server.", chatErr: null };
 }
 
 export interface UseMuseResult {
@@ -276,8 +294,7 @@ export function useMuse({
           // code already cleaned up the thread, so just bail silently.
           return;
         }
-        const chatErr = asMuseChatError(e);
-        const message = chatErr ? museErrorToString(chatErr) : "Muse couldn't reach the server.";
+        const { message, chatErr } = describeSendError(e);
         // Roll back: drop both optimistic turns by their pendingId tag.
         setStreamingText(null);
         setThread(prev => prev.filter(t => t.pendingId !== pendingId));
