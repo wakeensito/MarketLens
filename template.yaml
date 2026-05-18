@@ -306,15 +306,6 @@ Resources:
             OriginCustomHeaders:
               - HeaderName: x-api-key
                 HeaderValue: !Ref ApiKeyValue
-          - Id: muse-stream
-            # FunctionUrl returns the full https URL; split out the domain.
-            DomainName: !Select [2, !Split ["/", !GetAtt MuseStreamFunctionUrl.FunctionUrl]]
-            OriginAccessControlId: !Ref MuseStreamLambdaOAC
-            CustomOriginConfig:
-              HTTPSPort: 443
-              OriginProtocolPolicy: https-only
-              OriginSSLProtocols:
-                - TLSv1.2
         DefaultRootObject: index.html
         PriceClass: PriceClass_100
         Enabled: true
@@ -348,21 +339,14 @@ Resources:
             OriginRequestPolicyId: !Ref CookieForwardingOriginRequestPolicy
             ViewerProtocolPolicy: redirect-to-https
             ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy
-          # /api/muse/stream* — SSE streaming to Lambda Function URL.
-          # MUST be ordered above /api/* so CloudFront matches this first.
-          # Uses managed policies:
-          #   CachePolicy        = CachingDisabled (4135ea2d-...)  — never cache streams
-          #   OriginRequestPolicy= AllViewerExceptHostHeader (b689b0a8-...) — forwards cookies + Origin
-          - AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
-            CachedMethods: [GET, HEAD, OPTIONS]
-            Compress: false
-            PathPattern: "/api/muse/stream*"
-            TargetOriginId: muse-stream
-            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad
-            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac
-            ViewerProtocolPolicy: redirect-to-https
-            ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy
-          # /api/* — API endpoints (cookie forwarding for auth)
+          # /api/* — API endpoints (cookie forwarding for auth). Muse chat is
+          # now a regular API GW route (POST /api/muse/chat) — it lives under
+          # this behavior, no dedicated CloudFront origin needed. Previously a
+          # /api/muse/stream* behavior fanned out to a Lambda Function URL with
+          # RESPONSE_STREAM mode; native Python streaming wasn't supported there
+          # the way the original PR assumed (Runtime.MarshalError on generator
+          # return). See `docs/planning/BACKLOG.md` for the proper-streaming
+          # follow-up (AWS Lambda Web Adapter or Node.js port).
           - AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
             CachedMethods: [HEAD, GET, OPTIONS]
             Compress: false
@@ -808,16 +792,6 @@ Resources:
       # is what broke the authorizer prior to this change.
       BuildMethod: makefile
 
-  # ─── CloudFront: OAC for the Muse Stream Function URL ───
-  MuseStreamLambdaOAC:
-    Type: AWS::CloudFront::OriginAccessControl
-    Properties:
-      OriginAccessControlConfig:
-        Name: !Sub marketlens-muse-stream-oac-${Stage}
-        OriginAccessControlOriginType: lambda
-        SigningBehavior: always
-        SigningProtocol: sigv4
-
   # ─── Lambda: Cognito Auth Triggers (passwordless email OTP) ───
   AuthDefineFunction:
     Type: AWS::Serverless::Function
@@ -1041,27 +1015,25 @@ Resources:
       LogGroupName: !Sub /aws/lambda/${MuseSyncFunction}
       RetentionInDays: 90
 
-  # ─── Lambda: Muse Stream (SSE via Function URL) ───
-  # Function URL AuthType is AWS_IAM (see MuseStreamFunctionUrl below) so the
-  # OAC's SigV4 signature is enforced; with NONE the URL would be reachable by
-  # anyone who learned it. End-user identity (the HttpOnly cookie session) is
-  # verified inside the Lambda via the PlinthsAuthLayer — IAM auth on the URL
-  # only proves "CloudFront signed this request", not "user X is logged in."
-  # CloudFront-only access is then locked down by:
-  #   1. OAC on the function URL (MuseStreamLambdaOAC, type=lambda).
-  #   2. Lambda permission below scoped to cloudfront.amazonaws.com + the
-  #      distribution ARN as SourceArn.
+  # ─── Lambda: Muse Chat (buffered JSON via API Gateway) ───
+  # Previously a Function URL with RESPONSE_STREAM mode; rolled back to a
+  # regular API Gateway POST because native Python response streaming via
+  # Function URLs isn't supported the way the original PR assumed. The
+  # frontend simulates char-by-char streaming locally so the craft is
+  # preserved. Resource logical id kept as `MuseStreamFunction` to avoid
+  # an unnecessary CloudFormation rename; the file is also still `stream.py`.
+  # See `docs/planning/BACKLOG.md` for the proper-streaming follow-up.
   MuseStreamFunction:
     Type: AWS::Serverless::Function
     Properties:
       Handler: stream.handler
       CodeUri: infrastructure/lambda/muse/
-      Description: Muse SSE streaming — Bedrock Nova 2 Lite token stream
+      Description: Muse chat (buffered) — Bedrock Nova 2 Lite full-response
       MemorySize: 1024
-      Timeout: 120
-      Layers:
-        # Powertools layer comes from Globals.Function.Layers.
-        - !Ref PlinthsAuthLayer
+      # Bedrock latency for a typical Muse turn is well under 30s, but bump
+      # the timeout so the Lambda doesn't hard-kill an in-flight response on
+      # slow days. Caller (browser) sees the answer when this returns.
+      Timeout: 60
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref MuseConversationsTable
@@ -1080,58 +1052,25 @@ Resources:
                     - "USER#*"
         - Statement:
             - Effect: Allow
-              Action: bedrock:InvokeModelWithResponseStream
+              Action: bedrock:InvokeModel
               Resource: !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockModelIdMuseChat}"
       Environment:
         Variables:
           MUSE_CONVERSATIONS_TABLE: !Ref MuseConversationsTable
-          COGNITO_CLIENT_ID: !Ref CognitoUserPoolClient
-          COGNITO_USER_POOL_ID: !Ref CognitoUserPool
           CHAT_MODEL_ID: !Ref BedrockModelIdMuseChat
+      Events:
+        Chat:
+          Type: Api
+          Properties:
+            Path: /api/muse/chat
+            Method: POST
+            RestApiId: !Ref ApiGatewayApi
 
   MuseStreamFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub /aws/lambda/${MuseStreamFunction}
       RetentionInDays: 90
-
-  # Explicit Function URL resource (instead of FunctionUrlConfig on the
-  # Serverless::Function) so the URL is referenceable by other resources
-  # without relying on the SAM transform's implicit resource generation.
-  #
-  # AuthType is AWS_IAM (not NONE) so CloudFront's OAC SigV4 signing is actually
-  # enforced — with NONE the OAC signature is ignored and the URL is reachable
-  # by anyone who learns it. The MuseStreamFunctionUrlPermission below grants
-  # only `cloudfront.amazonaws.com` (scoped to this distribution) the right to
-  # invoke; AWS_IAM evaluates that resource policy against the signed request.
-  MuseStreamFunctionUrl:
-    Type: AWS::Lambda::Url
-    Properties:
-      TargetFunctionArn: !GetAtt MuseStreamFunction.Arn
-      AuthType: AWS_IAM
-      InvokeMode: RESPONSE_STREAM
-      Cors:
-        AllowOrigins:
-          - !Sub "https://${CognitoCallbackDomain}"
-        AllowMethods:
-          - POST
-        AllowHeaders:
-          - content-type
-          - cookie
-        AllowCredentials: true
-        MaxAge: 300
-
-  # Allow only this CloudFront distribution to invoke the function URL.
-  # FunctionUrlAuthType matches the URL's AuthType (AWS_IAM) so the grant takes
-  # effect against SigV4-signed requests.
-  MuseStreamFunctionUrlPermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !Ref MuseStreamFunction
-      Action: lambda:InvokeFunctionUrl
-      Principal: cloudfront.amazonaws.com
-      FunctionUrlAuthType: AWS_IAM
-      SourceArn: !Sub "arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}"
 
   # ─── Lambda: API ───
   ApiFunction:
@@ -1416,10 +1355,6 @@ Outputs:
   MuseConversationsTableName:
     Description: DynamoDB table for Muse per-report conversation threads
     Value: !Ref MuseConversationsTable
-
-  MuseStreamFunctionUrl:
-    Description: Lambda Function URL for Muse SSE streaming (proxied by CloudFront /api/muse/stream*)
-    Value: !GetAtt MuseStreamFunctionUrl.FunctionUrl
 
   MuseAnalyticsBucketName:
     Description: S3 bucket holding Parquet chat-message rows (queried by Athena)
