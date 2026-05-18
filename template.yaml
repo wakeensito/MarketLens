@@ -801,7 +801,12 @@ Resources:
         - python3.13
       RetentionPolicy: Delete
     Metadata:
-      BuildMethod: python3.13
+      # Custom build (Makefile target `build-PlinthsAuthLayer`) so the layer
+      # zip contains BOTH the hand-written `plinths_auth` module from source
+      # AND the pip-installed deps. The stock `python3.13` builder only does
+      # pip install — it would publish a layer without `plinths_auth`, which
+      # is what broke the authorizer prior to this change.
+      BuildMethod: makefile
 
   # ─── CloudFront: OAC for the Muse Stream Function URL ───
   MuseStreamLambdaOAC:
