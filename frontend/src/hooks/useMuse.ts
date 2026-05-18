@@ -7,6 +7,7 @@ import {
   streamMuseMessage,
   type MuseStreamDone,
   type MuseStreamError,
+  type MuseStreamErrorCode,
   type MuseSyncMessage,
 } from '../museApi';
 
@@ -49,6 +50,10 @@ export interface UseMuseResult {
   /** Last user-facing error (stream errors, hydration failure, feedback save fail). */
   lastError: string | null;
   hydrating: boolean;
+  /** Free-tier daily counter snapshot. Both fields are null for Pro/Max
+   *  (no daily cap). `dailyLimit` is the cap; `dailyUsed` is today's count. */
+  dailyUsed: number | null;
+  dailyLimit: number | null;
   sendMessage: (text: string) => void;
   openReport: () => void;
   closeReport: () => void;
@@ -90,6 +95,8 @@ export function useMuse({
   const [highlightTarget, setHighlightTarget] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
   const [hydrating, setHydrating] = useState(false);
+  const [dailyUsed, setDailyUsed] = useState<number | null>(null);
+  const [dailyLimit, setDailyLimit] = useState<number | null>(null);
 
   const conversationIdRef = useRef<string | null>(null);
   const streamingAbortRef = useRef<AbortController | null>(null);
@@ -116,6 +123,8 @@ export function useMuse({
       setView('idle');
       conversationIdRef.current = null;
       setHydrating(false);
+      setDailyUsed(null);
+      setDailyLimit(null);
       return;
     }
 
@@ -133,6 +142,9 @@ export function useMuse({
         conversationIdRef.current = res.conversation_id;
         setThread(turns);
         setView(turns.length > 0 ? 'chat' : 'idle');
+        // Free users get muse_daily_used + muse_daily_limit; Pro/Max omit them.
+        setDailyUsed(res.muse_daily_used ?? null);
+        setDailyLimit(res.muse_daily_limit ?? null);
       } catch {
         if (cancelled) return;
         setLastError("Couldn't load your conversation.");
@@ -168,6 +180,7 @@ export function useMuse({
       let assembledText = '';
       let doneData: MuseStreamDone | null = null;
       let streamError: string | null = null;
+      let streamErrorCode: MuseStreamErrorCode | null = null;
 
       try {
         for await (const event of streamMuseMessage(
@@ -187,6 +200,7 @@ export function useMuse({
             doneData = event.data;
           } else if (event.type === 'error') {
             streamError = errorMessage(event.data);
+            streamErrorCode = event.data.code;
             break;
           }
         }
@@ -210,6 +224,12 @@ export function useMuse({
         setStreamingText(null);
         setThread(prev => prev.filter(t => t.pendingId !== pendingId));
         setLastError(streamError);
+        // Only snap the counter when the server confirmed a quota hit.
+        // Transient errors (model_error, validation, network) shouldn't burn
+        // the user's daily allowance from the UI's perspective.
+        if (streamErrorCode === 'limit_reached' && dailyLimit != null) {
+          setDailyUsed(dailyLimit);
+        }
         return;
       }
 
@@ -243,8 +263,13 @@ export function useMuse({
       if (doneData?.conversation_id) {
         conversationIdRef.current = doneData.conversation_id;
       }
+      // Free users: bump the local counter so the cap reflects immediately.
+      // Pro/Max have null dailyLimit and we leave the counter as-is.
+      if (dailyLimit != null) {
+        setDailyUsed(prev => (prev ?? 0) + 1);
+      }
     },
-    [reportId, enabled, cancelStream],
+    [reportId, enabled, cancelStream, dailyLimit],
   );
 
   const sendMessage = useCallback(
@@ -368,6 +393,8 @@ export function useMuse({
     highlightTarget,
     lastError,
     hydrating,
+    dailyUsed,
+    dailyLimit,
     sendMessage,
     openReport,
     closeReport,

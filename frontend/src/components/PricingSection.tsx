@@ -31,6 +31,7 @@ const PLAN_DATA: PlanRow[] = [
     annualMonthlyEquivalent: 0,
     features: [
       '3 reports per day',
+      '3 Muse chats per day',
       '7-day history',
       'Markdown export',
       'Live web search',
@@ -45,9 +46,9 @@ const PLAN_DATA: PlanRow[] = [
     annualMonthlyEquivalent: 16,
     features: [
       '15 reports per day',
+      '30 Muse chats per report',
       'Unlimited history',
       'CSV, PDF, Markdown exports',
-      'Chat included',
       'Live web search',
     ],
   },
@@ -60,10 +61,10 @@ const PLAN_DATA: PlanRow[] = [
     annualMonthlyEquivalent: 80,
     features: [
       'Unlimited reports',
+      'Unlimited Muse chats, with cross-report memory',
+      'Choose your chat model: Claude, GPT, Gemini, Perplexity',
       'Unlimited history',
       'CSV, PDF, Markdown exports',
-      'Unlimited chat, with cross-report memory',
-      'Choose your chat model: Claude, GPT, Gemini, Perplexity',
       'Live web search',
     ],
   },

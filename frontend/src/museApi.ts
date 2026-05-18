@@ -32,6 +32,10 @@ export interface MuseSyncMessage {
 export interface MuseConversationResponse {
   conversation_id: string | null;
   messages: MuseSyncMessage[];
+  /** Free-tier daily counter — present only when the caller is on Free.
+   *  Pro/Max omit these fields entirely (they're not subject to a daily cap). */
+  muse_daily_used?: number;
+  muse_daily_limit?: number;
 }
 
 async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {

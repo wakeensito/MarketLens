@@ -14,6 +14,7 @@ Per the handoff:
 from __future__ import annotations
 
 import json
+import os
 import re
 
 from aws_lambda_powertools import Logger, Metrics, Tracer
@@ -28,6 +29,11 @@ logger = Logger()
 tracer = Tracer()
 metrics = Metrics()
 app = APIGatewayRestResolver(strip_prefixes=["/api"])
+
+# Shared env var with `stream.py` so an override (e.g. raising the cap during
+# a campaign) lands consistently in both the enforcement path and the value
+# surfaced to the frontend. Default kept in sync with stream.py.
+_MAX_FREE_DAILY = int(os.environ.get("MUSE_FREE_DAILY_LIMIT", "3"))
 
 
 def _auth() -> dict:
@@ -87,6 +93,18 @@ def _serialize_message(row: dict) -> dict:
     return out
 
 
+def _free_quota_payload(plan: str, user_id: str) -> dict:
+    """For Free users only, attach today's used/limit so the frontend can
+    render the locked banner on initial load. Omitted for other plans so
+    Pro/Max clients don't accidentally render a daily cap."""
+    if plan != "free":
+        return {}
+    return {
+        "muse_daily_used": persistence.get_muse_daily_used(user_id),
+        "muse_daily_limit": _MAX_FREE_DAILY,
+    }
+
+
 @app.get("/muse/conversations/<report_id>")
 @tracer.capture_method
 def get_conversation(report_id: str):
@@ -99,15 +117,20 @@ def get_conversation(report_id: str):
     # user could attempt to read someone else's thread by guessing report ids.
     report = persistence.get_report_for_user(report_id, auth["user_id"], auth["org_id"])
     if report is None:
-        return {"conversation_id": None, "messages": []}
+        return {
+            "conversation_id": None,
+            "messages": [],
+            **_free_quota_payload(auth["plan"], auth["user_id"]),
+        }
 
     rows = persistence.list_messages(report_id)
+    quota = _free_quota_payload(auth["plan"], auth["user_id"])
     if not rows:
-        return {"conversation_id": None, "messages": []}
+        return {"conversation_id": None, "messages": [], **quota}
 
     conversation_id = rows[0].get("conversation_id")
     messages = [_serialize_message(r) for r in rows]
-    return {"conversation_id": conversation_id, "messages": messages}
+    return {"conversation_id": conversation_id, "messages": messages, **quota}
 
 
 @app.delete("/muse/conversations/<report_id>")

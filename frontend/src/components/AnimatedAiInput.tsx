@@ -87,6 +87,10 @@ export interface AnimatedAiInputProps {
    *  Plain button — no `layoutId` morph; view swap is a clean mount/unmount. */
   museMode?: MuseView | null;
   onMuseToggle?: () => void;
+  /** Greys the send button + locks the textarea. Used when the Free Muse cap
+   *  is reached so the user gets a clear "you can't send" signal instead of
+   *  typing into a black hole that errors on submit. */
+  disabled?: boolean;
 }
 
 const AnimatedAiInput = forwardRef<HTMLTextAreaElement, AnimatedAiInputProps>(
@@ -101,6 +105,7 @@ const AnimatedAiInput = forwardRef<HTMLTextAreaElement, AnimatedAiInputProps>(
       autoFocus: autoFocusProp,
       museMode = null,
       onMuseToggle,
+      disabled = false,
     },
     forwardedRef,
   ) {
@@ -123,7 +128,7 @@ const AnimatedAiInput = forwardRef<HTMLTextAreaElement, AnimatedAiInputProps>(
       [forwardedRef, textareaRef],
     );
 
-    const canSubmit = value.trim().length > minChars;
+    const canSubmit = !disabled && value.trim().length > minChars;
 
     useEffect(() => {
       adjustHeight();
@@ -155,6 +160,7 @@ const AnimatedAiInput = forwardRef<HTMLTextAreaElement, AnimatedAiInputProps>(
             value={value}
             placeholder={placeholder}
             rows={compact ? 1 : 2}
+            disabled={disabled}
             onChange={e => {
               onChange(e.target.value);
               adjustHeight();
