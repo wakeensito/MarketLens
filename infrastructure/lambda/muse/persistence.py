@@ -312,3 +312,102 @@ def messages_to_history(rows: Iterable[dict], limit: int = 12) -> list[dict]:
         for r in trimmed
         if r.get("role") in {"user", "assistant"} and r.get("content")
     ]
+
+
+# ─── Free-tier daily counter (writes to the Reports table USER# row) ───
+#
+# Mirrors the report-counter pattern in `api/app.py` but uses separate columns
+# (`muse_count_today` / `muse_count_date`) so the two limits don't collide.
+# The increment is deferred — only successful turns burn quota — so we don't
+# need check-and-increment atomicity here; we just need a correct counter that
+# rolls over at the UTC date boundary.
+
+
+def _today_utc() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+
+def get_muse_daily_used(user_id: str) -> int:
+    """Return today's Muse chat count for a user, or 0 on a new day / no record."""
+    if not user_id or user_id == "anonymous":
+        return 0
+    try:
+        result = _reports().get_item(
+            Key={"pk": f"USER#{user_id}", "sk": f"USER#{user_id}"},
+            ConsistentRead=True,
+            ProjectionExpression="muse_count_today, muse_count_date",
+        )
+    except ClientError:
+        # Fail open — better to allow a chat than to block on a transient
+        # DDB blip. The post-done increment will still try to write through.
+        logger.exception("Muse daily count read failed", extra={"user_id": user_id})
+        return 0
+    item = result.get("Item") or {}
+    if item.get("muse_count_date") != _today_utc():
+        return 0
+    raw = item.get("muse_count_today", 0)
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return 0
+
+
+def increment_muse_daily_count(user_id: str) -> None:
+    """Bump today's Muse chat count by 1.
+
+    Two cases handled in order: (a) same day → increment; (b) new day (or
+    field missing) → reset to 1 and stamp today's date. Best-effort only:
+    a failure logs but does not raise, because the turn has already been
+    streamed to the user and we should not crash the response.
+    """
+    if not user_id or user_id == "anonymous":
+        return
+    today = _today_utc()
+    key = {"pk": f"USER#{user_id}", "sk": f"USER#{user_id}"}
+    table = _reports()
+    try:
+        # Same-day fast path.
+        table.update_item(
+            Key=key,
+            UpdateExpression="SET muse_count_today = muse_count_today + :one",
+            ConditionExpression="muse_count_date = :today",
+            ExpressionAttributeValues={":one": 1, ":today": today},
+        )
+        return
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+            logger.exception(
+                "Muse daily count increment failed (same-day path)",
+                extra={"user_id": user_id},
+            )
+            return
+    try:
+        # New-day path (or first-ever Muse chat for this user).
+        table.update_item(
+            Key=key,
+            UpdateExpression="SET muse_count_today = :one, muse_count_date = :today",
+            ConditionExpression="attribute_not_exists(muse_count_date) OR muse_count_date <> :today",
+            ExpressionAttributeValues={":one": 1, ":today": today},
+        )
+    except ClientError as e:
+        # Concurrent same-day increment from another tab landed between our
+        # two attempts. Re-try the same-day path once; if it fails again, give
+        # up and log (under-counting favors the user).
+        if e.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+            logger.exception(
+                "Muse daily count increment failed (new-day path)",
+                extra={"user_id": user_id},
+            )
+            return
+        try:
+            table.update_item(
+                Key=key,
+                UpdateExpression="SET muse_count_today = muse_count_today + :one",
+                ConditionExpression="muse_count_date = :today",
+                ExpressionAttributeValues={":one": 1, ":today": today},
+            )
+        except ClientError:
+            logger.exception(
+                "Muse daily count increment failed (retry path)",
+                extra={"user_id": user_id},
+            )

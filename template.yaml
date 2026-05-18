@@ -1062,6 +1062,17 @@ Resources:
             TableName: !Ref MuseConversationsTable
         - DynamoDBReadPolicy:
             TableName: !Ref ReportsTable
+        # Free-tier daily counter writes to USER#{user_id} rows on the
+        # Reports table. Scoped to UpdateItem on USER# partition keys only
+        # — explicitly NOT broad CRUD so a bug here can't trash report rows.
+        - Statement:
+            - Effect: Allow
+              Action: dynamodb:UpdateItem
+              Resource: !GetAtt ReportsTable.Arn
+              Condition:
+                ForAllValues:StringLike:
+                  dynamodb:LeadingKeys:
+                    - "USER#*"
         - Statement:
             - Effect: Allow
               Action: bedrock:InvokeModelWithResponseStream

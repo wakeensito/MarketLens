@@ -59,13 +59,15 @@ export default function App() {
 
   const billing = useBilling();
 
-  // Muse activation is plan-driven, not flag-driven. Pro / Max / admin get the
-  // live chat surface; Free users see a locked empty line that opens pricing.
-  const userPlan = (auth.user?.plan ?? 'free').trim().toLowerCase();
-  const museEligible =
-    auth.isAuthenticated &&
-    (userPlan === 'pro' || userPlan === 'max' || userPlan === 'admin');
+  // Muse is gated on auth, not on plan. Free users get 3 chats/day (counter
+  // enforced server-side); Pro/Max are uncapped within their per-report limit.
+  // The locked banner appears when the Free counter is exhausted (cap reached).
+  const museEligible = auth.isAuthenticated;
   const muse = useMuse({ reportId, enabled: museEligible });
+  const museCapped =
+    muse.dailyLimit != null &&
+    muse.dailyUsed != null &&
+    muse.dailyUsed >= muse.dailyLimit;
 
   // When a citation routes the user to report-open with a target cell, scroll
   // smoothly to the matching `[data-muse-cell]` element and pulse it once.
@@ -249,10 +251,13 @@ export default function App() {
   const onSubmit = useCallback((val: string) => {
     if (val.trim().length <= 4) return;
 
-    // Muse hijack: when chat is live (Pro/Max signed-in) and we're sitting on
-    // a finished report, the bottom input talks to Muse instead of starting a
-    // new analysis. Free users fall through and create a new report.
+    // Muse hijack: when chat is live and we're sitting on a finished report,
+    // the bottom input talks to Muse instead of starting a new analysis.
+    // When the Free daily cap is reached, the input is `disabled` (so this
+    // branch shouldn't fire) — the guard is defensive against keyboard submits
+    // that bypass the button's disabled state.
     if (muse.enabled && screen === 'report' && report && reportId) {
+      if (museCapped) return;
       muse.sendMessage(val.trim());
       setInputValue('');
       return;
@@ -272,7 +277,7 @@ export default function App() {
     startAnalysis(val.trim());
     setInputValue('');
     setShowSavePrompt(false);
-  }, [startAnalysis, auth.isAuthenticated, muse, screen, report, reportId]);
+  }, [startAnalysis, auth.isAuthenticated, muse, screen, report, reportId, museCapped]);
 
   // ── Loading ─────────────────────────────────────────────
   if (auth.loading) {
@@ -671,22 +676,7 @@ export default function App() {
                       );
 
                       // Anonymous users see the report only — Muse is sign-in-gated.
-                      if (!auth.isAuthenticated) return reportEl;
-
-                      // Free signed-in users see the report + a locked Muse line
-                      // that opens pricing. Chat itself is server-gated, but
-                      // surfacing the affordance is the upgrade path.
-                      if (!museEligible) {
-                        return (
-                          <>
-                            {reportEl}
-                            <MuseEmptyLine
-                              locked
-                              onUpgrade={() => setShowPricing(true)}
-                            />
-                          </>
-                        );
-                      }
+                      if (!museEligible) return reportEl;
 
                       return (
                         <>
@@ -716,7 +706,7 @@ export default function App() {
                             </div>
                           )}
 
-                          {muse.view === 'idle' && muse.thread.length === 0 && (
+                          {muse.view === 'idle' && muse.thread.length === 0 && !museCapped && (
                             <MuseEmptyLine />
                           )}
 
@@ -728,6 +718,14 @@ export default function App() {
                               onAsk={muse.sendMessage}
                               onRegenerate={muse.regenerate}
                               onFeedback={muse.setFeedback}
+                            />
+                          )}
+
+                          {museCapped && (
+                            <MuseEmptyLine
+                              locked
+                              lockedReason="you've used today's free chats"
+                              onUpgrade={() => setShowPricing(true)}
                             />
                           )}
 
@@ -764,13 +762,16 @@ export default function App() {
                   onChange={setInputValue}
                   onSubmit={onSubmit}
                   placeholder={
-                    muse.enabled && screen === 'report'
-                      ? muse.view === 'idle'
-                        ? 'Ask about this report…'
-                        : 'Reply…'
-                      : 'Type a new idea to analyse'
+                    muse.enabled && screen === 'report' && museCapped
+                      ? 'Free Muse chats used for today'
+                      : muse.enabled && screen === 'report'
+                        ? muse.view === 'idle'
+                          ? 'Ask about this report…'
+                          : 'Reply…'
+                        : 'Type a new idea to analyse'
                   }
                   compact
+                  disabled={muse.enabled && screen === 'report' && museCapped}
                   museMode={
                     muse.enabled && screen === 'report' ? muse.view : null
                   }

@@ -49,6 +49,10 @@ export interface UseMuseResult {
   /** Last user-facing error (stream errors, hydration failure, feedback save fail). */
   lastError: string | null;
   hydrating: boolean;
+  /** Free-tier daily counter snapshot. Both fields are null for Pro/Max
+   *  (no daily cap). `dailyLimit` is the cap; `dailyUsed` is today's count. */
+  dailyUsed: number | null;
+  dailyLimit: number | null;
   sendMessage: (text: string) => void;
   openReport: () => void;
   closeReport: () => void;
@@ -90,6 +94,8 @@ export function useMuse({
   const [highlightTarget, setHighlightTarget] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
   const [hydrating, setHydrating] = useState(false);
+  const [dailyUsed, setDailyUsed] = useState<number | null>(null);
+  const [dailyLimit, setDailyLimit] = useState<number | null>(null);
 
   const conversationIdRef = useRef<string | null>(null);
   const streamingAbortRef = useRef<AbortController | null>(null);
@@ -116,6 +122,8 @@ export function useMuse({
       setView('idle');
       conversationIdRef.current = null;
       setHydrating(false);
+      setDailyUsed(null);
+      setDailyLimit(null);
       return;
     }
 
@@ -133,6 +141,9 @@ export function useMuse({
         conversationIdRef.current = res.conversation_id;
         setThread(turns);
         setView(turns.length > 0 ? 'chat' : 'idle');
+        // Free users get muse_daily_used + muse_daily_limit; Pro/Max omit them.
+        setDailyUsed(res.muse_daily_used ?? null);
+        setDailyLimit(res.muse_daily_limit ?? null);
       } catch {
         if (cancelled) return;
         setLastError("Couldn't load your conversation.");
@@ -210,6 +221,11 @@ export function useMuse({
         setStreamingText(null);
         setThread(prev => prev.filter(t => t.pendingId !== pendingId));
         setLastError(streamError);
+        // If the server told us they're at cap, snap the local counter so the
+        // UI locks immediately even before the next /api/me read.
+        if (dailyLimit != null) {
+          setDailyUsed(dailyLimit);
+        }
         return;
       }
 
@@ -243,8 +259,13 @@ export function useMuse({
       if (doneData?.conversation_id) {
         conversationIdRef.current = doneData.conversation_id;
       }
+      // Free users: bump the local counter so the cap reflects immediately.
+      // Pro/Max have null dailyLimit and we leave the counter as-is.
+      if (dailyLimit != null) {
+        setDailyUsed(prev => (prev ?? 0) + 1);
+      }
     },
-    [reportId, enabled, cancelStream],
+    [reportId, enabled, cancelStream, dailyLimit],
   );
 
   const sendMessage = useCallback(
@@ -368,6 +389,8 @@ export function useMuse({
     highlightTarget,
     lastError,
     hydrating,
+    dailyUsed,
+    dailyLimit,
     sendMessage,
     openReport,
     closeReport,

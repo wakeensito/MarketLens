@@ -51,6 +51,7 @@ import prompts
 
 _CHAT_MODEL_ID = os.environ.get("CHAT_MODEL_ID", "amazon.nova-2-lite-v1:0")
 _MAX_USER_MESSAGES_PRO = int(os.environ.get("MUSE_PRO_MESSAGE_CAP", "30"))
+_MAX_FREE_DAILY = int(os.environ.get("MUSE_FREE_DAILY_LIMIT", "3"))
 _HISTORY_TURN_LIMIT = int(os.environ.get("MUSE_HISTORY_TURN_LIMIT", "12"))
 _MAX_OUTPUT_TOKENS = int(os.environ.get("MUSE_MAX_OUTPUT_TOKENS", "1024"))
 _TEMPERATURE = float(os.environ.get("MUSE_TEMPERATURE", "0.4"))
@@ -132,17 +133,28 @@ def _cookie_header_from_function_url_event(event: dict) -> str:
 # ─── Plan gates ───
 
 
-def _check_plan_gate(plan: str, user_message_count: int) -> tuple[bool, bytes | None]:
+def _check_plan_gate(
+    plan: str, user_id: str, user_message_count: int
+) -> tuple[bool, bytes | None]:
     """Returns (allowed, error_event_or_None).
 
     `user_message_count` is computed once by the caller from the already-loaded
     history rows so we don't pay for a second DynamoDB Query per turn.
+
+    For Free users, applies a 3-per-day cap across all reports. The counter
+    lives on the Users row (`muse_count_today` / `muse_count_date`) and is
+    incremented only after a turn fully streams — see `_stream_response`.
     """
     if plan == "free":
-        return False, _sse_error(
-            "plan_locked",
-            "Upgrade to Pro to chat with Muse.",
-        )
+        used = persistence.get_muse_daily_used(user_id)
+        if used >= _MAX_FREE_DAILY:
+            return False, _sse_error(
+                "limit_reached",
+                "You've used today's free Muse chats.",
+                limit=_MAX_FREE_DAILY,
+                used=used,
+            )
+        return True, None
     if plan == "pro":
         if user_message_count >= _MAX_USER_MESSAGES_PRO:
             return False, _sse_error(
@@ -296,7 +308,7 @@ def _stream_response(auth: AuthContext, body: dict) -> Generator[bytes, None, No
     user_message_count = sum(1 for r in history_rows if r.get("role") == "user")
 
     # 3. Plan gate (early reject — no Bedrock call billed).
-    allowed, gate_event = _check_plan_gate(auth.plan, user_message_count)
+    allowed, gate_event = _check_plan_gate(auth.plan, auth.user_id, user_message_count)
     if not allowed:
         assert gate_event is not None
         yield gate_event
@@ -417,6 +429,11 @@ def _stream_response(auth: AuthContext, body: dict) -> Generator[bytes, None, No
         )
     except Exception:
         logger.exception("Muse persistence failed (turn already streamed)")
+
+    # 7b. Free tier: bump the daily counter ONLY now that the turn streamed
+    # successfully. A model error or upstream timeout doesn't burn quota.
+    if auth.plan == "free":
+        persistence.increment_muse_daily_count(auth.user_id)
 
     # 8. Emit `done`.
     yield _sse_event(
