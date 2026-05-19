@@ -203,6 +203,8 @@
       "Action": [
         "s3:CreateBucket",
         "s3:DeleteObject",
+        "s3:GetBucketLocation",
+        "s3:GetObject",
         "s3:ListBucket",
         "s3:PutBucketEncryption",
         "s3:PutBucketLifecycleConfiguration",
@@ -217,7 +219,9 @@
       ],
       "Resource": [
         "arn:aws:s3:::marketlens-*",
-        "arn:aws:s3:::marketlens-*/*"
+        "arn:aws:s3:::marketlens-*/*",
+        "arn:aws:s3:::aws-sam-cli-managed-default-*",
+        "arn:aws:s3:::aws-sam-cli-managed-default-*/*"
       ]
     },
     {
@@ -524,7 +528,6 @@
         "cloudformation:DescribeStacks",
         "cloudformation:ExecuteChangeSet",
         "cloudformation:GetTemplate",
-        "cloudformation:ListStacks",
         "cloudformation:SetStackPolicy",
         "cloudformation:TagResource",
         "cloudformation:UpdateStack"
@@ -535,9 +538,13 @@
       ]
     },
     {
-      "Sid": "CloudFormationList",
+      "Sid": "CloudFormationGlobal",
       "Effect": "Allow",
-      "Action": "cloudformation:ListStacks",
+      "Action": [
+        "cloudformation:ListStacks",
+        "cloudformation:GetTemplateSummary",
+        "cloudformation:ValidateTemplate"
+      ],
       "Resource": "*"
     }
   ]
