@@ -2,7 +2,11 @@ version = 0.1
 
 [default.deploy.parameters]
 stack_name = "marketlens-dev"
-resolve_s3 = true
+# Pinned bucket (do NOT use resolve_s3): with resolve_s3, SAM probes/mutates
+# the `aws-sam-cli-managed-default` bootstrap stack on every deploy. The CD
+# role is scoped to `marketlens-*` stacks only and can't touch that bootstrap
+# stack. Pinning the existing bucket bypasses the probe entirely.
+s3_bucket = "aws-sam-cli-managed-default-samclisourcebucket-di1ofvurqhdg"
 s3_prefix = "marketlens-dev"
 region = "us-east-1"
 confirm_changeset = false
