@@ -2,58 +2,7 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "ECSDeployment",
-      "Effect": "Allow",
-      "Action": [
-        "ecs:CreateCluster",
-        "ecs:CreateService",
-        "ecs:DeleteService",
-        "ecs:DescribeServices",
-        "ecs:DescribeTaskDefinition",
-        "ecs:ListTasks",
-        "ecs:RegisterTaskDefinition",
-        "ecs:UpdateService",
-        "ecs:TagResource"
-      ],
-      "Resource": [
-        "arn:aws:ecs:us-east-1:562559071105:cluster/*",
-        "arn:aws:ecs:us-east-1:562559071105:service/*/*",
-        "arn:aws:ecs:us-east-1:562559071105:task-definition/*:*",
-        "arn:aws:ecs:us-east-1:562559071105:container-instance/*/*"
-      ]
-    },
-    {
-      "Sid": "ECSDescribeTaskDef",
-      "Effect": "Allow",
-      "Action": [
-        "ecs:DescribeTaskDefinition",
-        "ecs:TagResource"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "ECRManagement",
-      "Effect": "Allow",
-      "Action": [
-        "ecr:BatchDeleteImage",
-        "ecr:CreateRepository",
-        "ecr:DescribeImages",
-        "ecr:DescribeRepositories",
-        "ecr:GetAuthorizationToken",
-        "ecr:PutImageScanningConfiguration",
-        "ecr:PutLifecyclePolicy",
-        "ecr:TagResource"
-      ],
-      "Resource": "arn:aws:ecr:us-east-1:562559071105:repository/*"
-    },
-    {
-      "Sid": "ECRAuth",
-      "Effect": "Allow",
-      "Action": "ecr:GetAuthorizationToken",
-      "Resource": "*"
-    },
-    {
-      "Sid": "LambdaDeployment",
+      "Sid": "Lambda",
       "Effect": "Allow",
       "Action": [
         "lambda:AddPermission",
@@ -62,10 +11,11 @@
         "lambda:DeleteFunction",
         "lambda:GetFunction",
         "lambda:GetLayerVersion",
-        "lambda:ListFunctions",
         "lambda:ListTags",
+        "lambda:PublishLayerVersion",
         "lambda:PublishVersion",
         "lambda:PutFunctionEventInvokeConfig",
+        "lambda:RemovePermission",
         "lambda:TagResource",
         "lambda:UpdateAlias",
         "lambda:UpdateFunctionCode",
@@ -73,6 +23,7 @@
       ],
       "Resource": [
         "arn:aws:lambda:us-east-1:562559071105:function:*",
+        "arn:aws:lambda:us-east-1:562559071105:layer:*",
         "arn:aws:lambda:us-east-1:562559071105:layer:*:*"
       ]
     },
@@ -80,31 +31,6 @@
       "Sid": "LambdaList",
       "Effect": "Allow",
       "Action": "lambda:ListFunctions",
-      "Resource": "*"
-    },
-    {
-      "Sid": "StepFunctions",
-      "Effect": "Allow",
-      "Action": [
-        "states:CreateStateMachine",
-        "states:DeleteStateMachine",
-        "states:DescribeExecution",
-        "states:DescribeStateMachine",
-        "states:ListStateMachines",
-        "states:PublishStateMachineVersion",
-        "states:StartExecution",
-        "states:TagResource",
-        "states:UpdateStateMachine"
-      ],
-      "Resource": [
-        "arn:aws:states:us-east-1:562559071105:stateMachine:*",
-        "arn:aws:states:us-east-1:562559071105:execution:*:*"
-      ]
-    },
-    {
-      "Sid": "StepFunctionsList",
-      "Effect": "Allow",
-      "Action": "states:ListStateMachines",
       "Resource": "*"
     },
     {
@@ -122,38 +48,14 @@
       "Resource": "*"
     },
     {
-      "Sid": "RDS",
-      "Effect": "Allow",
-      "Action": [
-        "rds:CreateDBInstance",
-        "rds:CreateDBSnapshot",
-        "rds:DescribeDBInstances",
-        "rds:DescribeDBSnapshots",
-        "rds:ModifyDBInstance",
-        "rds:RebootDBInstance",
-        "rds:AddTagsToResource"
-      ],
-      "Resource": [
-        "arn:aws:rds:us-east-1:562559071105:db:*",
-        "arn:aws:rds:us-east-1:562559071105:snapshot:*"
-      ]
-    },
-    {
-      "Sid": "RDSCreate",
-      "Effect": "Allow",
-      "Action": [
-        "rds:CreateDBInstance",
-        "rds:AddTagsToResource"
-      ],
-      "Resource": "*"
-    },
-    {
       "Sid": "DynamoDB",
       "Effect": "Allow",
       "Action": [
         "dynamodb:CreateTable",
         "dynamodb:DeleteTable",
         "dynamodb:DescribeTable",
+        "dynamodb:DescribeContinuousBackups",
+        "dynamodb:DescribeTimeToLive",
         "dynamodb:ListTables",
         "dynamodb:TagResource",
         "dynamodb:UpdateContinuousBackups",
@@ -169,41 +71,14 @@
       "Resource": "*"
     },
     {
-      "Sid": "ElastiCache",
-      "Effect": "Allow",
-      "Action": [
-        "elasticache:AddTagsToResource",
-        "elasticache:CreateReplicationGroup",
-        "elasticache:CreateSnapshot",
-        "elasticache:DeleteReplicationGroup",
-        "elasticache:DescribeReplicationGroups",
-        "elasticache:ModifyReplicationGroup"
-      ],
-      "Resource": [
-        "arn:aws:elasticache:us-east-1:562559071105:replicationgroup:*",
-        "arn:aws:elasticache:us-east-1:562559071105:cluster:*",
-        "arn:aws:elasticache:us-east-1:562559071105:snapshot:*",
-        "arn:aws:elasticache:us-east-1:562559071105:parametergroup:*",
-        "arn:aws:elasticache:us-east-1:562559071105:securitygroup:*",
-        "arn:aws:elasticache:us-east-1:562559071105:usergroup:*"
-      ]
-    },
-    {
-      "Sid": "ElastiCacheCreate",
-      "Effect": "Allow",
-      "Action": [
-        "elasticache:AddTagsToResource",
-        "elasticache:CreateReplicationGroup"
-      ],
-      "Resource": "*"
-    },
-    {
       "Sid": "S3",
       "Effect": "Allow",
       "Action": [
         "s3:CreateBucket",
+        "s3:DeleteBucket",
         "s3:DeleteObject",
         "s3:GetBucketLocation",
+        "s3:GetBucketPolicy",
         "s3:GetObject",
         "s3:ListBucket",
         "s3:PutBucketEncryption",
@@ -212,6 +87,7 @@
         "s3:PutBucketPolicy",
         "s3:PutBucketPublicAccessBlock",
         "s3:PutBucketVersioning",
+        "s3:PutBucketTagging",
         "s3:PutEncryptionConfiguration",
         "s3:PutObject",
         "s3:PutObjectAcl",
@@ -228,49 +104,29 @@
       "Sid": "CloudFront",
       "Effect": "Allow",
       "Action": [
+        "cloudfront:CreateCachePolicy",
         "cloudfront:CreateDistribution",
         "cloudfront:CreateInvalidation",
+        "cloudfront:CreateOriginAccessControl",
+        "cloudfront:CreateOriginRequestPolicy",
+        "cloudfront:CreateResponseHeadersPolicy",
+        "cloudfront:DeleteCachePolicy",
+        "cloudfront:DeleteDistribution",
+        "cloudfront:DeleteOriginAccessControl",
+        "cloudfront:DeleteOriginRequestPolicy",
+        "cloudfront:DeleteResponseHeadersPolicy",
+        "cloudfront:GetCachePolicy",
         "cloudfront:GetDistribution",
+        "cloudfront:GetOriginAccessControl",
+        "cloudfront:GetOriginRequestPolicy",
+        "cloudfront:GetResponseHeadersPolicy",
         "cloudfront:ListDistributions",
-        "cloudfront:UpdateDistribution"
-      ],
-      "Resource": "arn:aws:cloudfront::562559071105:distribution/*"
-    },
-    {
-      "Sid": "CloudFrontList",
-      "Effect": "Allow",
-      "Action": [
-        "cloudfront:CreateDistribution",
-        "cloudfront:ListDistributions"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "WAF",
-      "Effect": "Allow",
-      "Action": [
-        "wafv2:AssociateWebACL",
-        "wafv2:CreateWebACL",
-        "wafv2:TagResource",
-        "wafv2:UpdateWebACL"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "Route53",
-      "Effect": "Allow",
-      "Action": [
-        "route53:ChangeResourceRecordSets",
-        "route53:GetHostedZone"
-      ],
-      "Resource": "arn:aws:route53:::hostedzone/*"
-    },
-    {
-      "Sid": "Route53Global",
-      "Effect": "Allow",
-      "Action": [
-        "route53:CreateHealthCheck",
-        "route53:ListHostedZones"
+        "cloudfront:TagResource",
+        "cloudfront:UpdateCachePolicy",
+        "cloudfront:UpdateDistribution",
+        "cloudfront:UpdateOriginAccessControl",
+        "cloudfront:UpdateOriginRequestPolicy",
+        "cloudfront:UpdateResponseHeadersPolicy"
       ],
       "Resource": "*"
     },
@@ -280,10 +136,22 @@
       "Action": [
         "cognito-idp:CreateUserPool",
         "cognito-idp:CreateUserPoolClient",
+        "cognito-idp:CreateUserPoolDomain",
+        "cognito-idp:CreateIdentityProvider",
+        "cognito-idp:DeleteUserPool",
+        "cognito-idp:DeleteUserPoolClient",
+        "cognito-idp:DeleteUserPoolDomain",
+        "cognito-idp:DeleteIdentityProvider",
         "cognito-idp:DescribeUserPool",
+        "cognito-idp:DescribeUserPoolClient",
+        "cognito-idp:DescribeUserPoolDomain",
+        "cognito-idp:DescribeIdentityProvider",
+        "cognito-idp:SetUserPoolMfaConfig",
         "cognito-idp:TagResource",
         "cognito-idp:UpdateUserPool",
-        "cognito-idp:UpdateUserPoolClient"
+        "cognito-idp:UpdateUserPoolClient",
+        "cognito-idp:UpdateUserPoolDomain",
+        "cognito-idp:UpdateIdentityProvider"
       ],
       "Resource": "arn:aws:cognito-idp:us-east-1:562559071105:userpool/*"
     },
@@ -291,56 +159,6 @@
       "Sid": "CognitoCreate",
       "Effect": "Allow",
       "Action": "cognito-idp:CreateUserPool",
-      "Resource": "*"
-    },
-    {
-      "Sid": "KMS",
-      "Effect": "Allow",
-      "Action": [
-        "kms:CreateAlias",
-        "kms:CreateKey",
-        "kms:Decrypt",
-        "kms:DescribeKey",
-        "kms:EnableKeyRotation",
-        "kms:GenerateDataKey",
-        "kms:ListAliases",
-        "kms:ListKeys",
-        "kms:PutKeyPolicy",
-        "kms:TagResource"
-      ],
-      "Resource": [
-        "arn:aws:kms:us-east-1:562559071105:key/*",
-        "arn:aws:kms:us-east-1:562559071105:alias/*"
-      ]
-    },
-    {
-      "Sid": "KMSGlobal",
-      "Effect": "Allow",
-      "Action": [
-        "kms:CreateKey",
-        "kms:ListAliases",
-        "kms:ListKeys"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "SecretsManager",
-      "Effect": "Allow",
-      "Action": [
-        "secretsmanager:CreateSecret",
-        "secretsmanager:DescribeSecret",
-        "secretsmanager:GetSecretValue",
-        "secretsmanager:ListSecrets",
-        "secretsmanager:RotateSecret",
-        "secretsmanager:TagResource",
-        "secretsmanager:UpdateSecret"
-      ],
-      "Resource": "arn:aws:secretsmanager:us-east-1:562559071105:secret:marketlens/*"
-    },
-    {
-      "Sid": "SecretsManagerList",
-      "Effect": "Allow",
-      "Action": "secretsmanager:ListSecrets",
       "Resource": "*"
     },
     {
@@ -357,64 +175,37 @@
       "Resource": "arn:aws:sqs:us-east-1:562559071105:*"
     },
     {
-      "Sid": "SNS",
+      "Sid": "Firehose",
       "Effect": "Allow",
       "Action": [
-        "sns:CreateTopic",
-        "sns:DeleteTopic",
-        "sns:ListSubscriptions",
-        "sns:ListTopics",
-        "sns:SetTopicAttributes",
-        "sns:Subscribe",
-        "sns:TagResource"
+        "firehose:CreateDeliveryStream",
+        "firehose:DeleteDeliveryStream",
+        "firehose:DescribeDeliveryStream",
+        "firehose:ListDeliveryStreams",
+        "firehose:ListTagsForDeliveryStream",
+        "firehose:TagDeliveryStream",
+        "firehose:UpdateDestination"
       ],
-      "Resource": "arn:aws:sns:us-east-1:562559071105:*"
+      "Resource": "arn:aws:firehose:us-east-1:562559071105:deliverystream/*"
     },
     {
-      "Sid": "SNSList",
+      "Sid": "Glue",
       "Effect": "Allow",
       "Action": [
-        "sns:ListSubscriptions",
-        "sns:ListTopics"
+        "glue:CreateDatabase",
+        "glue:CreateTable",
+        "glue:DeleteDatabase",
+        "glue:DeleteTable",
+        "glue:GetDatabase",
+        "glue:GetTable",
+        "glue:UpdateDatabase",
+        "glue:UpdateTable",
+        "glue:TagResource"
       ],
       "Resource": "*"
     },
     {
-      "Sid": "EventBridge",
-      "Effect": "Allow",
-      "Action": [
-        "events:DeleteRule",
-        "events:DescribeRule",
-        "events:ListRules",
-        "events:PutRule",
-        "events:PutTargets",
-        "events:RemoveTargets",
-        "events:TagResource"
-      ],
-      "Resource": [
-        "arn:aws:events:us-east-1:562559071105:event-bus/*",
-        "arn:aws:events:us-east-1:562559071105:rule/*"
-      ]
-    },
-    {
-      "Sid": "EventBridgeList",
-      "Effect": "Allow",
-      "Action": "events:ListRules",
-      "Resource": "*"
-    },
-    {
-      "Sid": "CloudWatch",
-      "Effect": "Allow",
-      "Action": [
-        "cloudwatch:DeleteAlarms",
-        "cloudwatch:DescribeAlarms",
-        "cloudwatch:PutMetricAlarm",
-        "cloudwatch:TagResource"
-      ],
-      "Resource": "arn:aws:cloudwatch:us-east-1:562559071105:alarm:*"
-    },
-    {
-      "Sid": "CloudWatchLogs",
+      "Sid": "Logs",
       "Effect": "Allow",
       "Action": [
         "logs:CreateLogGroup",
@@ -427,7 +218,7 @@
       "Resource": "arn:aws:logs:us-east-1:562559071105:log-group:*"
     },
     {
-      "Sid": "CloudWatchLogsList",
+      "Sid": "LogsList",
       "Effect": "Allow",
       "Action": [
         "logs:DescribeLogGroups",
@@ -440,81 +231,43 @@
       "Effect": "Allow",
       "Action": [
         "iam:AttachRolePolicy",
-        "iam:CreateInstanceProfile",
         "iam:CreatePolicy",
         "iam:CreateRole",
+        "iam:DeletePolicy",
         "iam:DeleteRole",
         "iam:DeleteRolePolicy",
         "iam:DetachRolePolicy",
+        "iam:GetPolicy",
+        "iam:GetPolicyVersion",
         "iam:GetRole",
+        "iam:GetRolePolicy",
         "iam:ListAttachedRolePolicies",
-        "iam:ListRoles",
+        "iam:ListRolePolicies",
         "iam:PutRolePolicy",
-        "iam:TagInstanceProfile",
         "iam:TagPolicy",
-        "iam:TagRole"
+        "iam:TagRole",
+        "iam:UpdateRole"
       ],
       "Resource": [
         "arn:aws:iam::562559071105:role/marketlens-*",
-        "arn:aws:iam::562559071105:policy/marketlens-*",
-        "arn:aws:iam::562559071105:instance-profile/marketlens-*"
+        "arn:aws:iam::562559071105:policy/marketlens-*"
       ]
     },
     {
       "Sid": "IAMPassRole",
       "Effect": "Allow",
       "Action": "iam:PassRole",
-      "Resource": "*",
+      "Resource": "arn:aws:iam::562559071105:role/marketlens-*",
       "Condition": {
         "StringEquals": {
           "iam:PassedToService": [
-            "ecs-tasks.amazonaws.com",
-            "ecs.amazonaws.com",
             "lambda.amazonaws.com",
-            "states.amazonaws.com",
             "apigateway.amazonaws.com",
             "cloudformation.amazonaws.com",
-            "events.amazonaws.com",
-            "rds.amazonaws.com",
-            "secretsmanager.amazonaws.com",
-            "sns.amazonaws.com"
+            "firehose.amazonaws.com"
           ]
         }
       }
-    },
-    {
-      "Sid": "IAMList",
-      "Effect": "Allow",
-      "Action": "iam:ListRoles",
-      "Resource": "*"
-    },
-    {
-      "Sid": "VPCNetworking",
-      "Effect": "Allow",
-      "Action": [
-        "ec2:AuthorizeSecurityGroupIngress",
-        "ec2:CreateSecurityGroup",
-        "ec2:CreateSubnet",
-        "ec2:CreateTags",
-        "ec2:CreateVpc",
-        "ec2:CreateVpcEndpoint",
-        "ec2:DescribeSecurityGroups",
-        "ec2:DescribeSubnets",
-        "ec2:DescribeVpcs",
-        "ec2:ModifyVpcEndpoint"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "ACM",
-      "Effect": "Allow",
-      "Action": [
-        "acm:AddTagsToCertificate",
-        "acm:DescribeCertificate",
-        "acm:ListCertificates",
-        "acm:RequestCertificate"
-      ],
-      "Resource": "*"
     },
     {
       "Sid": "CloudFormation",
@@ -522,9 +275,12 @@
       "Action": [
         "cloudformation:CreateChangeSet",
         "cloudformation:CreateStack",
+        "cloudformation:DeleteChangeSet",
         "cloudformation:DeleteStack",
         "cloudformation:DescribeChangeSet",
         "cloudformation:DescribeStackEvents",
+        "cloudformation:DescribeStackResource",
+        "cloudformation:DescribeStackResources",
         "cloudformation:DescribeStacks",
         "cloudformation:ExecuteChangeSet",
         "cloudformation:GetTemplate",
@@ -536,6 +292,12 @@
         "arn:aws:cloudformation:us-east-1:562559071105:stack/marketlens-*/*",
         "arn:aws:cloudformation:us-east-1:562559071105:changeSet/*/*"
       ]
+    },
+    {
+      "Sid": "CloudFormationServerlessTransform",
+      "Effect": "Allow",
+      "Action": "cloudformation:CreateChangeSet",
+      "Resource": "arn:aws:cloudformation:us-east-1:aws:transform/Serverless-2016-10-31"
     },
     {
       "Sid": "CloudFormationGlobal",
