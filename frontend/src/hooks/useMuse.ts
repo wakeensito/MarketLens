@@ -5,19 +5,17 @@ import {
   asMuseChatError,
   deleteMuseConversation,
   getMuseConversation,
-  sendMuseMessage,
   setMuseFeedback,
+  streamMuseMessage,
   type MuseChatError,
+  type MuseDonePayload,
   type MuseSyncMessage,
 } from '../museApi';
 
-/** Char-pacing constants for the local streaming simulation. The server is
- *  buffered, so we already have the full text — we just paint it gradually
- *  so the cursor + per-char rhythm still feel right. Numbers picked to land
- *  a typical 200-char answer at ~3s of paint time. */
-const LOCAL_STREAM_CHAR_MS = 12;
-const LOCAL_STREAM_JITTER_MS = 14;
-const LOCAL_STREAM_SENTENCE_PAUSE_MS = 220;
+/** Pause inserted after the server emits `event: sentence_boundary`. Keeps the
+ *  visual rhythm Muse had during the local-simulation era now that the backend
+ *  controls when boundaries fire. */
+const SENTENCE_BOUNDARY_PAUSE_MS = 220;
 
 function syncMessagesToTurns(messages: MuseSyncMessage[]): MuseTurn[] {
   return messages.map((m): MuseTurn => {
@@ -93,7 +91,7 @@ export interface UseMuseResult {
 }
 
 /**
- * Owns Muse view + per-report thread state, backed by the (buffered) Muse Lambda.
+ * Owns Muse view + per-report thread state, backed by the SSE Muse Lambda.
  *
  * `enabled` is auth-gated by the caller. When disabled, the hook still runs (so
  * React's hook order stays stable) but it never touches the network and
@@ -102,12 +100,12 @@ export interface UseMuseResult {
  * Chat lifecycle for a single turn:
  *  1. Append a user turn + empty placeholder muse turn, tagged with a
  *     `pendingId` so we can finalize / roll back precisely.
- *  2. POST /api/muse/chat and await the JSON response (the server does Bedrock
- *     synchronously and returns the full answer).
- *  3. Paint the answer char-by-char into `streamingText` so the cursor + rhythm
- *     match the original streaming craft. Sentence boundaries get a brief
- *     settle. Cancellation (abort, regenerate, reportId change) drops the
- *     paint loop immediately.
+ *  2. POST /api/muse/stream and consume the Server-Sent Events. Each
+ *     `event: token` appends to `streamingText`; `event: sentence_boundary`
+ *     pauses 220ms; `event: done` finalizes the placeholder with
+ *     sources/follow_ups/messageId.
+ *  3. Cancellation (abort, regenerate, reportId change) closes the reader
+ *     immediately via AbortController.
  *  4. On error: roll back both optimistic turns by pendingId and surface
  *     `lastError`. On `limit_reached`, snap the daily counter to the cap.
  */
@@ -129,15 +127,16 @@ export function useMuse({
 
   const conversationIdRef = useRef<string | null>(null);
   const inflightAbortRef = useRef<AbortController | null>(null);
-  /** Bumps on every cancel; the local paint loop checks this and bails. */
-  const paintGenerationRef = useRef(0);
+  /** Bumps on every cancel; in-flight stream handlers check this and bail
+   *  so a late-arriving event from an aborted fetch can't write into state. */
+  const streamGenerationRef = useRef(0);
 
   const cancelInflight = useCallback(() => {
     if (inflightAbortRef.current) {
       inflightAbortRef.current.abort();
       inflightAbortRef.current = null;
     }
-    paintGenerationRef.current += 1;
+    streamGenerationRef.current += 1;
   }, []);
 
   // Hydrate thread on reportId / enabled change.
@@ -189,38 +188,6 @@ export function useMuse({
   }, [reportId, enabled, cancelInflight]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  /** Paint `fullText` into `streamingText` over time. Bails immediately if
-   *  `cancelInflight` (or anything else that bumps the generation) is called. */
-  const paintLocally = useCallback((fullText: string): Promise<void> => {
-    const gen = ++paintGenerationRef.current;
-    setStreamingText('');
-    return new Promise<void>(resolve => {
-      let i = 0;
-      const tick = () => {
-        // Cancelled — drop the paint silently. Caller decides what to render.
-        if (paintGenerationRef.current !== gen) {
-          resolve();
-          return;
-        }
-        if (i >= fullText.length) {
-          resolve();
-          return;
-        }
-        const ch = fullText[i];
-        i += 1;
-        setStreamingText(fullText.slice(0, i));
-        const insideToken =
-          fullText.lastIndexOf('[[', i - 1) > fullText.lastIndexOf(']]', i - 1);
-        const isBoundary = (ch === '.' || ch === '?' || ch === '!') && !insideToken;
-        const delay = isBoundary
-          ? LOCAL_STREAM_SENTENCE_PAUSE_MS
-          : LOCAL_STREAM_CHAR_MS + Math.random() * LOCAL_STREAM_JITTER_MS;
-        window.setTimeout(tick, delay);
-      };
-      tick();
-    });
-  }, []);
-
   const sendInternal = useCallback(
     async (userText: string) => {
       if (!reportId || !enabled) return;
@@ -239,23 +206,55 @@ export function useMuse({
 
       const controller = new AbortController();
       inflightAbortRef.current = controller;
+      const gen = streamGenerationRef.current;
+      const isStale = () => streamGenerationRef.current !== gen;
+
+      // Accumulator outside React state — avoids a stale-closure read when a
+      // burst of `onToken` events fires before React flushes the previous setter.
+      let accumulated = '';
+      let doneEvent: MuseDonePayload | null = null;
 
       try {
-        const res = await sendMuseMessage(
+        await streamMuseMessage(
           {
             reportId,
             message: userText,
             conversationId: conversationIdRef.current,
           },
+          {
+            onToken: delta => {
+              if (isStale()) return;
+              accumulated += delta;
+              setStreamingText(accumulated);
+            },
+            onSentenceBoundary: async () => {
+              if (isStale()) return;
+              await new Promise(resolve =>
+                window.setTimeout(resolve, SENTENCE_BOUNDARY_PAUSE_MS),
+              );
+              // Re-check after the pause — cancelInflight could have landed
+              // during the 220ms window. Without this, the next read() loop
+              // iteration would still fire onToken on a generation we no
+              // longer own; the inner guard catches that, but bailing here
+              // keeps the boundaries between turns crisp.
+              if (isStale()) return;
+            },
+            onDone: payload => {
+              doneEvent = payload;
+            },
+          },
           { signal: controller.signal },
         );
 
-        // Paint locally for the streaming craft, then finalize.
-        await paintLocally(res.content);
-        // If a cancel landed during the paint, don't finalize — the cancel
-        // path (hydrate / regenerate / unmount) already handles the thread.
-        if (controller.signal.aborted) return;
+        // If a cancel landed mid-stream, don't finalize — the cancel path
+        // (hydrate / regenerate / unmount) already handles the thread.
+        if (controller.signal.aborted || isStale()) return;
+        if (!doneEvent) {
+          throw new ApiError(502, 'Muse stream ended without a done event.', null);
+        }
 
+        const finalText = accumulated;
+        const done: MuseDonePayload = doneEvent;
         setStreamingText(null);
         setThread(prev => {
           const placeholderIdx = prev.findIndex(
@@ -265,10 +264,10 @@ export function useMuse({
           const copy = [...prev];
           copy[placeholderIdx] = {
             speaker: 'muse',
-            content: res.content,
-            sources: res.sources,
-            followUps: res.follow_ups,
-            messageId: res.message_id,
+            content: finalText,
+            sources: done.sources,
+            followUps: done.follow_ups,
+            messageId: done.message_id,
             feedback: null,
           };
           const userIdx = copy.findIndex(
@@ -281,8 +280,8 @@ export function useMuse({
           }
           return copy;
         });
-        if (res.conversation_id) {
-          conversationIdRef.current = res.conversation_id;
+        if (done.conversation_id) {
+          conversationIdRef.current = done.conversation_id;
         }
         // Free users: bump the local counter so the cap reflects immediately.
         if (dailyLimit != null) {
@@ -308,7 +307,7 @@ export function useMuse({
         }
       }
     },
-    [reportId, enabled, cancelInflight, dailyLimit, paintLocally],
+    [reportId, enabled, cancelInflight, dailyLimit],
   );
 
   const sendMessage = useCallback(
