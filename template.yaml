@@ -50,6 +50,14 @@ Parameters:
     Description: >-
       Verified SES email address for sending OTP codes (e.g. noreply@yourdomain.com).
       Must be verified in SES before deploy. In SES sandbox, recipient must also be verified.
+  LwaLayerVersion:
+    Type: Number
+    Default: 27
+    Description: >-
+      AWS Lambda Web Adapter (us-east-1, x86_64) layer version. AWS Labs
+      occasionally retires old LWA layer versions; bumping this parameter
+      lets us swap without a code change. Source:
+      https://github.com/awslabs/aws-lambda-web-adapter.
 
 Globals:
   Function:
@@ -306,6 +314,16 @@ Resources:
             OriginCustomHeaders:
               - HeaderName: x-api-key
                 HeaderValue: !Ref ApiKeyValue
+          - Id: muse-stream
+            # FunctionUrl returns `https://<id>.lambda-url.<region>.on.aws/`.
+            # Strip the scheme + trailing slash so CloudFront sees just the host.
+            DomainName: !Select [2, !Split ["/", !GetAtt MuseStreamFunctionUrl.FunctionUrl]]
+            OriginAccessControlId: !Ref MuseStreamLambdaOAC
+            CustomOriginConfig:
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols:
+                - TLSv1.2
         DefaultRootObject: index.html
         PriceClass: PriceClass_100
         Enabled: true
@@ -339,14 +357,24 @@ Resources:
             OriginRequestPolicyId: !Ref CookieForwardingOriginRequestPolicy
             ViewerProtocolPolicy: redirect-to-https
             ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy
-          # /api/* — API endpoints (cookie forwarding for auth). Muse chat is
-          # now a regular API GW route (POST /api/muse/chat) — it lives under
-          # this behavior, no dedicated CloudFront origin needed. Previously a
-          # /api/muse/stream* behavior fanned out to a Lambda Function URL with
-          # RESPONSE_STREAM mode; native Python streaming wasn't supported there
-          # the way the original PR assumed (Runtime.MarshalError on generator
-          # return). See `docs/planning/BACKLOG.md` for the proper-streaming
-          # follow-up (AWS Lambda Web Adapter or Node.js port).
+          # /api/muse/stream* — SSE streaming endpoint. Routes to a Lambda
+          # Function URL (RESPONSE_STREAM) wrapped by AWS Lambda Web Adapter
+          # so a Python ASGI app (Starlette + sse-starlette) can serve native
+          # Server-Sent Events. The OAC SigV4-signs requests; the Function
+          # URL's AWS_IAM auth rejects anything that doesn't carry that
+          # signature. CloudFront routes by path-pattern *specificity* (longest
+          # prefix wins), not array order — this pattern wins over /api/*
+          # because it's more specific, regardless of position.
+          - AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
+            CachedMethods: [HEAD, GET, OPTIONS]
+            Compress: false
+            PathPattern: "/api/muse/stream*"
+            TargetOriginId: muse-stream
+            CachePolicyId: !Ref CookieForwardingCachePolicy
+            OriginRequestPolicyId: !Ref CookieForwardingOriginRequestPolicy
+            ViewerProtocolPolicy: redirect-to-https
+            ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy
+          # /api/* — API endpoints (cookie forwarding for auth)
           - AllowedMethods: [GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE]
             CachedMethods: [HEAD, GET, OPTIONS]
             Compress: false
@@ -1015,25 +1043,34 @@ Resources:
       LogGroupName: !Sub /aws/lambda/${MuseSyncFunction}
       RetentionInDays: 90
 
-  # ─── Lambda: Muse Chat (buffered JSON via API Gateway) ───
-  # Previously a Function URL with RESPONSE_STREAM mode; rolled back to a
-  # regular API Gateway POST because native Python response streaming via
-  # Function URLs isn't supported the way the original PR assumed. The
-  # frontend simulates char-by-char streaming locally so the craft is
-  # preserved. Resource logical id kept as `MuseStreamFunction` to avoid
-  # an unnecessary CloudFormation rename; the file is also still `stream.py`.
-  # See `docs/planning/BACKLOG.md` for the proper-streaming follow-up.
+  # ─── Lambda: Muse Chat (SSE streaming via Lambda Function URL) ───
+  # AWS Lambda Web Adapter wraps a Starlette + sse-starlette ASGI app so a
+  # Python Lambda can serve native Server-Sent Events over a Function URL with
+  # InvokeMode: RESPONSE_STREAM. CloudFront fronts the URL via OAC SigV4.
   MuseStreamFunction:
     Type: AWS::Serverless::Function
     Properties:
-      Handler: stream.handler
+      # LWA entrypoint script; LWA runs it on cold start, then proxies HTTP
+      # from the Function URL onto $AWS_LWA_PORT where uvicorn listens.
+      Handler: run.sh
       CodeUri: infrastructure/lambda/muse/
-      Description: Muse chat (buffered) — Bedrock Nova 2 Lite full-response
+      Description: Muse chat — Bedrock Nova 2 Lite streaming via LWA + Starlette
       MemorySize: 1024
-      # Bedrock latency for a typical Muse turn is well under 30s, but bump
-      # the timeout so the Lambda doesn't hard-kill an in-flight response on
-      # slow days. Caller (browser) sees the answer when this returns.
-      Timeout: 60
+      # Bedrock InvokeModelWithResponseStream can hold a single connection
+      # while the model is generating. 120s caps the worst-case turn so the
+      # CloudFront idle timeout and Lambda timeout both terminate the stream
+      # rather than letting the browser hang.
+      Timeout: 120
+      Layers:
+        # Powertools layer comes from Globals.Function.Layers (SAM appends
+        # function-level Layers to the global list).
+        - !Ref PlinthsAuthLayer
+        # AWS Lambda Web Adapter — public layer published by AWS Labs.
+        # Account 753240598075 is AWS-owned; the layer ARN is documented at
+        # https://github.com/awslabs/aws-lambda-web-adapter. Version pinned
+        # via the LwaLayerVersion stack parameter so it can be bumped
+        # without a code change if AWS retires an old version.
+        - !Sub arn:aws:lambda:${AWS::Region}:753240598075:layer:LambdaAdapterLayerX86:${LwaLayerVersion}
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref MuseConversationsTable
@@ -1052,25 +1089,81 @@ Resources:
                     - "USER#*"
         - Statement:
             - Effect: Allow
-              Action: bedrock:InvokeModel
+              Action: bedrock:InvokeModelWithResponseStream
               Resource: !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockModelIdMuseChat}"
       Environment:
         Variables:
           MUSE_CONVERSATIONS_TABLE: !Ref MuseConversationsTable
           CHAT_MODEL_ID: !Ref BedrockModelIdMuseChat
-      Events:
-        Chat:
-          Type: Api
-          Properties:
-            Path: /api/muse/chat
-            Method: POST
-            RestApiId: !Ref ApiGatewayApi
+          # PlinthsAuthLayer reads these at module-import time to verify the
+          # ml_access cookie (Function URLs bypass API Gateway's authorizer,
+          # so the Lambda verifies the JWT itself).
+          COGNITO_CLIENT_ID: !Ref CognitoUserPoolClient
+          COGNITO_USER_POOL_ID: !Ref CognitoUserPool
+          # AWS Lambda Web Adapter configuration.
+          AWS_LWA_INVOKE_MODE: response_stream
+          AWS_LWA_PORT: "8080"
+          PORT: "8080"
+          # LWA polls this path on cold start before marking the app ready;
+          # default is `/` which Starlette would 404 on. Point it at our
+          # explicit `/health` route so readiness reflects the ASGI app, not
+          # an accidental 404.
+          AWS_LWA_READINESS_CHECK_PATH: /health
+          POWERTOOLS_SERVICE_NAME: muse-stream
 
   MuseStreamFunctionLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub /aws/lambda/${MuseStreamFunction}
       RetentionInDays: 90
+
+  # CloudFront-to-Lambda OAC: SigV4-signs each origin request so the Function
+  # URL's AWS_IAM auth rejects everything that doesn't carry the signature.
+  MuseStreamLambdaOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub plinths-muse-stream-oac-${Stage}
+        OriginAccessControlOriginType: lambda
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  MuseStreamFunctionUrl:
+    Type: AWS::Lambda::Url
+    Properties:
+      TargetFunctionArn: !GetAtt MuseStreamFunction.Arn
+      AuthType: AWS_IAM
+      InvokeMode: RESPONSE_STREAM
+      Cors:
+        AllowOrigins:
+          # Production domain only; the local-dev story is "hit the deployed
+          # dev stack" (SAM local can't reproduce the Function URL + CloudFront
+          # OAC topology anyway). On the first deploy this will be `localhost`
+          # which means browser Origin headers from the real CloudFront domain
+          # will fail CORS preflight — redeploy with the real domain set on
+          # the CognitoCallbackDomain parameter before opening traffic.
+          - !Sub "https://${CognitoCallbackDomain}"
+        AllowMethods:
+          - POST
+        AllowHeaders:
+          # `Cookie` is a CORS-forbidden request header per the Fetch spec —
+          # listing it in Access-Control-Allow-Headers is a no-op (browsers
+          # never put Cookie in a preflight Access-Control-Request-Headers).
+          # The cookie still rides on the actual POST via `credentials:
+          # 'include'` on the fetch + the cookie-forwarding origin request
+          # policy on the CloudFront behavior.
+          - Content-Type
+        AllowCredentials: true
+        MaxAge: 0
+
+  MuseStreamFunctionUrlPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt MuseStreamFunction.Arn
+      Action: lambda:InvokeFunctionUrl
+      Principal: cloudfront.amazonaws.com
+      FunctionUrlAuthType: AWS_IAM
+      SourceArn: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}
 
   # ─── Lambda: API ───
   ApiFunction:
@@ -1375,3 +1468,7 @@ Outputs:
   MuseForwarderDLQUrl:
     Description: SQS DLQ for forwarder ESM failures — alarm on ApproximateNumberOfMessagesVisible > 0
     Value: !Ref MuseForwarderDLQ
+
+  MuseStreamFunctionUrl:
+    Description: Raw Lambda Function URL for the Muse SSE endpoint (debug only — browsers hit CloudFront, not this URL)
+    Value: !GetAtt MuseStreamFunctionUrl.FunctionUrl
