@@ -12,9 +12,6 @@ import {
   type MuseSyncMessage,
 } from '../museApi';
 
-/** Pause inserted after the server emits `event: sentence_boundary`. Keeps the
- *  visual rhythm Muse had during the local-simulation era now that the backend
- *  controls when boundaries fire. */
 const SENTENCE_BOUNDARY_PAUSE_MS = 220;
 
 function syncMessagesToTurns(messages: MuseSyncMessage[]): MuseTurn[] {
@@ -232,12 +229,6 @@ export function useMuse({
               await new Promise(resolve =>
                 window.setTimeout(resolve, SENTENCE_BOUNDARY_PAUSE_MS),
               );
-              // Re-check after the pause — cancelInflight could have landed
-              // during the 220ms window. Without this, the next read() loop
-              // iteration would still fire onToken on a generation we no
-              // longer own; the inner guard catches that, but bailing here
-              // keeps the boundaries between turns crisp.
-              if (isStale()) return;
             },
             onDone: payload => {
               doneEvent = payload;

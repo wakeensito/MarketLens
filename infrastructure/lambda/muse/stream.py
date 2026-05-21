@@ -89,7 +89,7 @@ def _auth_from_request(request: Request) -> AuthContext | None:
     return verify_session_cookie(request.headers.get("cookie"))
 
 
-# ─── Plan gate (same semantics as the buffered version) ───
+# ─── Plan gate ───
 
 
 def _check_plan_gate(plan: str, user_id: str, user_message_count: int) -> dict | None:
@@ -114,6 +114,7 @@ def _check_plan_gate(plan: str, user_id: str, user_message_count: int) -> dict |
         return None
     if plan in ("max", "admin"):
         return None
+    # Fail closed: any unrecognized plan value is treated as not allowed.
     return {
         "code": "plan_locked",
         "message": "Your account plan is not recognized. Contact support.",
@@ -536,7 +537,9 @@ async def _chat_stream(auth: AuthContext, parsed: dict):
     )
 
 
-# ─── Healthcheck (LWA polls / for readiness on cold start) ───
+# ─── Healthcheck ───
+# LWA does a TCP connection check against the listening port by default. We
+# expose /health anyway so an operator can curl it during incident response.
 
 
 async def health(_: Request):

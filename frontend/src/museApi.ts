@@ -136,14 +136,9 @@ export interface MuseStreamHandlers {
 /**
  * Stream a chat turn over SSE.
  *
- * Resolves when the server emits `event: done`. Rejects with `ApiError` if the
- * stream emits `event: error`, the HTTP response is non-2xx, or the network
- * fails. The promise resolves *after* `onDone` returns, so the caller can
- * await this and treat resolution as "turn fully rendered".
- *
- * Cancellation: pass an `AbortSignal`; aborting throws `AbortError` which
- * `useMuse` recognizes and ignores (the caller already cleared the placeholder
- * turn via `cancelInflight`).
+ * Resolves after `onDone` returns; rejects with `ApiError` on `event: error`,
+ * non-2xx HTTP, or network failure. Aborting the signal throws `AbortError`,
+ * which `useMuse` swallows (cancellation paths already clean up the thread).
  */
 export async function streamMuseMessage(
   req: MuseChatRequest,
