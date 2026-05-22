@@ -134,7 +134,7 @@ def _build_nova_payload(
     payload = {
         "system": [{"text": system_prompt}],
         "inferenceConfig": {
-            "max_new_tokens": _MAX_OUTPUT_TOKENS,
+            "maxTokens": _MAX_OUTPUT_TOKENS,
             "temperature": _TEMPERATURE,
         },
         "messages": messages,
