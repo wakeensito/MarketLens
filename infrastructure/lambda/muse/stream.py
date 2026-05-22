@@ -278,14 +278,35 @@ def _validate_request_body(body: Any) -> tuple[dict, dict | None]:
             "code": "validation",
             "message": "Request body must be a JSON object.",
         }
-    report_id = (body.get("report_id") or "").strip()
-    message = (body.get("message") or "").strip()
-    conversation_id_in = body.get("conversation_id") or None
+
+    required_fields_error = {
+        "code": "validation",
+        "message": "Both `report_id` and `message` are required.",
+    }
+    raw_report_id = body.get("report_id")
+    raw_message = body.get("message")
+    if not isinstance(raw_report_id, str) or not isinstance(raw_message, str):
+        return {}, required_fields_error
+
+    report_id = raw_report_id.strip()
+    message = raw_message.strip()
     if not report_id or not message:
-        return {}, {
-            "code": "validation",
-            "message": "Both `report_id` and `message` are required.",
-        }
+        return {}, required_fields_error
+
+    if "conversation_id" in body:
+        raw_conversation_id = body["conversation_id"]
+        if raw_conversation_id is None:
+            conversation_id_in = None
+        elif isinstance(raw_conversation_id, str):
+            conversation_id_in = raw_conversation_id.strip() or None
+        else:
+            return {}, {
+                "code": "validation",
+                "message": "`conversation_id` must be a string or null.",
+            }
+    else:
+        conversation_id_in = None
+
     return (
         {
             "report_id": report_id,
