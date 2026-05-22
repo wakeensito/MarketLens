@@ -2,3 +2,9 @@
 # boto3 is included in Lambda runtime — do not add here
 # aws-lambda-powertools is provided via layer — do not add here
 # PyJWT + cryptography come from the PlinthsAuthLayer — do not add here
+
+# Streaming Muse only (sync Lambda doesn't use these, but SAM builds a single
+# CodeUri so they're packaged for both).
+starlette==0.52.1
+sse-starlette==3.0.2
+uvicorn==0.34.3
