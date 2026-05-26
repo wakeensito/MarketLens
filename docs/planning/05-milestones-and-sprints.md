@@ -16,7 +16,7 @@ This plan starts with the simplest possible AWS deployment — Lambda Durable Fu
 | PoC (Phase 0) | Current State (May 2026) | Full Architecture (Target) |
 |---|---|---|
 | 2 S3 buckets (frontend + exports) | 2 S3 buckets (frontend + exports) | Multi-bucket with Object Lock, lifecycle policies |
-| 3 Lambdas (API + durable pipeline + export) | 8 Lambdas (API + AI + Export + BFF Auth + Authorizer + 3 Cognito triggers) | 10 microservices on ECS Fargate + Lambda |
+| 3 Lambdas (API + durable pipeline + export) | 13 Lambdas (API + AI + Export + Billing + BFF Auth + Authorizer + 3 Cognito triggers + 2 Muse + 2 forwarders) | 10 microservices on ECS Fargate + Lambda |
 | API Gateway (REST) + CloudFront | API Gateway + Lambda Authorizer + CloudFront (cookie forwarding, custom domain `plinths.net`) | API Gateway + WAF + per-tenant throttling |
 | DynamoDB (reports table) | DynamoDB (org-scoped reports + user/org records) | RDS Postgres with RLS + DynamoDB + ElastiCache |
 | SAM + Terraform (IAM) for deployment | SAM + Terraform (IAM), secrets in SSM Parameter Store | SAM (application layer) + Terraform (infrastructure layer) |
@@ -201,13 +201,16 @@ Notes on what is intentionally **not** plan-gated:
 - [x] Open: production Stripe keys + webhook secret populated in SSM SecureString (`/marketlens/${Stage}/stripe-secret-key`, `/marketlens/${Stage}/stripe-webhook-secret`)
 - [ ] Open: end-to-end test on a live Stripe test account (checkout → webhook → activation overlay resolves → `/api/me` reflects new plan)
 
-### Muse — Chat Agent (design locked, build deferred until post-Max launch)
-See `CLAUDE.md` § Muse for the persisted design decision.
-- [ ] Chat Lambda: per-report conversation history in DynamoDB
-- [ ] Report `result_json` as system prompt context
-- [ ] Transport: SSE / WebSocket / response streaming — TBD
-- [ ] Frontend: inline conversation in workspace; report collapses into the toolbar attachment-button toggle when chat starts
-- [ ] Tier scope: Free → locked paywall · Pro → ~30 msgs per report · Max → unlimited + cross-report memory
+### Muse — Chat Agent (Pro path built & deployed in dev; Max features pending)
+See `CLAUDE.md` § Muse for the implemented architecture. Backend notes: `docs/muse/MUSE-BACKEND-HANDOFF.md`.
+- [x] Chat Lambdas: `MuseStreamFunction` (SSE) + `MuseSyncFunction` (list/delete/feedback); per-report history in `MuseConversationsTable` (`pk=REPORT#…`, `sk=MSG#…`)
+- [x] Report `result_json` as system prompt context (`infrastructure/lambda/muse/prompts.py`)
+- [x] Transport: **SSE over Lambda Function URL** (`RESPONSE_STREAM`) via AWS Lambda Web Adapter + Starlette; CloudFront proxies `/api/muse/stream*` with OAC SigV4
+- [x] Frontend: inline conversation wired to the live stream (`useMuse`); report collapses into the toolbar toggle when chat starts
+- [x] Tier scope (Pro): ~30 msgs per report on default Bedrock model (`MUSE_PRO_MESSAGE_CAP`); Free daily cap enforced (`MUSE_FREE_DAILY_LIMIT`)
+- [ ] Free: locked chat placeholder + "Upgrade to Pro" paywall on report view
+- [ ] Max: cross-report memory (reserved `gsi1pk=ORG#…` index) + multi-model selection (OpenAI/Google/Perplexity, each its own SSM secret + scoped IAM)
+- [ ] Analytics pipeline live (`MuseConversationsTable` → forwarder → Firehose → Parquet → Athena); verify end-to-end
 
 ### Custom Model Selection (planned, paid tier feature)
 - [ ] Model config per stage stored on user/org record
@@ -232,7 +235,7 @@ Phase 0 (PoC) ✅
         └── Phase 2 (Auth) ✅ passwordless OTP + Google SSO + org isolation
               └── Phase 2.5 (Scoring) ✅ gradient signals + Wiki enrichment
                     └── Phase 3 (Beta) 🔄 domain done, gates + testers next
-                          └── Phase 4 (Billing) 🔄 Stripe core shipped; Muse + model selection still pending
+                          └── Phase 4 (Billing) 🔄 Stripe core shipped; Muse Pro path live; Max features + report-model selection still pending
                                 └── Phase 5 (Hardening) ⏳ RBAC, audit, DR
 
 INDEPENDENT:
@@ -244,7 +247,7 @@ INDEPENDENT:
 
 ---
 
-## Current Architecture (8 Lambdas)
+## Current Architecture (13 Lambdas)
 
 | # | Lambda | Purpose |
 |---|---|---|
@@ -256,6 +259,11 @@ INDEPENDENT:
 | 6 | Auth Define | Cognito trigger: controls custom auth flow |
 | 7 | Auth Create | Cognito trigger: generates OTP, sends via SES |
 | 8 | Auth Verify | Cognito trigger: constant-time OTP comparison |
+| 9 | Billing | Stripe checkout / portal / webhook (signature-verified) |
+| 10 | Muse Stream | Chat SSE via LWA + Starlette over a Lambda Function URL (`RESPONSE_STREAM`) |
+| 11 | Muse Sync | List / delete a per-report thread + per-message feedback |
+| 12 | Muse Forwarder | DynamoDB Stream → Firehose → Parquet (Muse analytics) |
+| 13 | Email Forwarder | SES inbound (info@/support@plinths.net) → personal addr via SSM |
 
 ---
 

@@ -133,6 +133,15 @@ export interface MuseStreamHandlers {
   onDone: (payload: MuseDonePayload) => void;
 }
 
+/** Lowercase hex SHA-256 of a string, for the `x-amz-content-sha256` header.
+ *  `crypto.subtle` is available in secure contexts (https + localhost). */
+async function sha256Hex(input: string): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(input));
+  return Array.from(new Uint8Array(digest))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
 /**
  * Stream a chat turn over SSE.
  *
@@ -145,18 +154,29 @@ export async function streamMuseMessage(
   handlers: MuseStreamHandlers,
   options?: { signal?: AbortSignal },
 ): Promise<void> {
+  const body = JSON.stringify({
+    report_id: req.reportId,
+    message: req.message,
+    conversation_id: req.conversationId,
+  });
+
+  // The stream endpoint is a Lambda function URL behind CloudFront OAC. For
+  // POST, the function URL's AWS_IAM auth requires the viewer to supply the
+  // SHA256 of the body in `x-amz-content-sha256` — CloudFront folds it into
+  // the SigV4 signature it adds (Lambda doesn't accept unsigned payloads).
+  // Without it the function URL returns 403 before the Lambda runs. The hash
+  // must cover the exact bytes we send, so compute it over `body` above.
+  const bodyHash = await sha256Hex(body);
+
   const res = await fetch(`${BASE}/api/muse/stream`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Accept: 'text/event-stream',
+      'x-amz-content-sha256': bodyHash,
     },
     credentials: 'include',
-    body: JSON.stringify({
-      report_id: req.reportId,
-      message: req.message,
-      conversation_id: req.conversationId,
-    }),
+    body,
     signal: options?.signal,
   });
 

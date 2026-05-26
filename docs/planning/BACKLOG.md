@@ -4,23 +4,15 @@
 
 ---
 
-## 🔁 Muse: restore true streaming (deferred)
+## ✅ Muse: restore true streaming (Completed)
 
-**Status:** Deferred — May 2026
+**Status:** Done — May 2026 (option 1, AWS Lambda Web Adapter)
 
-The Muse chat endpoint shipped as a **buffered** API Gateway POST returning a full JSON response; the frontend simulates char-by-char streaming locally. The original PR #37 design used a Lambda Function URL with `InvokeMode=RESPONSE_STREAM` and a generator-returning Python handler — but Python Lambda doesn't natively treat generator returns as streaming responses the way Node.js does with `awslambda.streamifyResponse`. Result: `Runtime.MarshalError: Object of type generator is not JSON serializable` on every invocation, even though the Function URL was correctly configured for RESPONSE_STREAM.
+The Muse chat endpoint originally shipped as a **buffered** API Gateway POST with the frontend simulating char-by-char streaming locally — a workaround for `Runtime.MarshalError: Object of type generator is not JSON serializable`, since Python Lambda doesn't treat generator returns as streaming the way Node.js does with `awslambda.streamifyResponse`.
 
-Rolled back to buffered JSON to ship the feature. UX preserved via client-side paint loop (`useMuse.paintLocally`) — looks like streaming, but the server latency is exposed as a "thinking pause" before the paint starts.
+**Resolved via option 1 (AWS Lambda Web Adapter).** `MuseStreamFunction` now runs the LWA layer in front of a Starlette ASGI app (`infrastructure/lambda/muse/stream.py`) using `sse-starlette`'s `EventSourceResponse`; LWA bridges the Function URL's `RESPONSE_STREAM` protocol to ordinary HTTP so we get real SSE while staying in Python. The deleted infra was restored: CloudFront `/api/muse/stream*` behavior + OAC, `MuseStreamFunctionUrl` (`AuthType: AWS_IAM`, `InvokeMode: RESPONSE_STREAM`), and the URL permission. SSE contract (`token` / `sentence_boundary` / `done` / `error` + keep-alives) is documented in `docs/muse/MUSE-BACKEND-HANDOFF.md`.
 
-**To restore true streaming, pick one:**
-
-1. **AWS Lambda Web Adapter** (recommended) — add the LWA layer, wrap the chat handler as an ASGI app (FastAPI or Starlette), LWA handles SSE streaming over the Function URL. Keeps Python.
-2. **Port stream handler to Node.js** — rewrite `stream.py` in JS with `awslambda.streamifyResponse`. Mixed-runtime stack.
-3. **API Gateway WebSocket** — connection-based model; replaces Function URL entirely. Larger infra shift.
-
-When this lands, also restore the deleted infrastructure (CloudFront `/api/muse/stream*` cache behavior, `muse-stream` origin, `MuseStreamLambdaOAC`, `MuseStreamFunctionUrl`, `MuseStreamFunctionUrlPermission`, related output) — see commit history before this rollback for the working template shape.
-
-Related code: `infrastructure/lambda/muse/stream.py`, `frontend/src/museApi.ts`, `frontend/src/hooks/useMuse.ts` (the `paintLocally` helper would be removed in favor of real per-token rendering).
+Frontend now consumes the live stream per-token (`streamMuseMessage` in `src/api.ts`, `useMuse.ts`); the old `paintLocally` simulation is gone.
 
 ---
 
