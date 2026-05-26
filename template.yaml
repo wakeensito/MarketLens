@@ -371,6 +371,11 @@ Resources:
             PathPattern: "/api/muse/stream*"
             TargetOriginId: muse-stream
             CachePolicyId: !Ref CookieForwardingCachePolicy
+            # Shares CookieForwardingOriginRequestPolicy (forwards the ml_access
+            # cookie for in-Lambda auth). The x-amz-content-sha256 body hash the
+            # browser sends is NOT forwarded via this policy — CloudFront's OAC
+            # signing consumes it automatically and CloudFront rejects that
+            # header inside an OriginRequestPolicy, so it must not be listed.
             OriginRequestPolicyId: !Ref CookieForwardingOriginRequestPolicy
             ViewerProtocolPolicy: redirect-to-https
             ResponseHeadersPolicyId: !Ref ResponseHeadersPolicy
@@ -1101,6 +1106,12 @@ Resources:
           COGNITO_CLIENT_ID: !Ref CognitoUserPoolClient
           COGNITO_USER_POOL_ID: !Ref CognitoUserPool
           # AWS Lambda Web Adapter configuration.
+          # On a managed runtime, the LWA layer only takes over the invocation
+          # when AWS_LAMBDA_EXEC_WRAPPER points at its bootstrap. Without this,
+          # the native Python runtime treats `Handler: run.sh` as a module
+          # import and fails cold start with
+          # "Runtime.ImportModuleError: No module named 'run'".
+          AWS_LAMBDA_EXEC_WRAPPER: /opt/bootstrap
           AWS_LWA_INVOKE_MODE: response_stream
           AWS_LWA_PORT: "8080"
           PORT: "8080"

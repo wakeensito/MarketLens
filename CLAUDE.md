@@ -21,14 +21,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 │       ├── authorizer/            # API Gateway JWT authorizer (always-Deny on uncertainty)
 │       ├── bff/                   # Backend-for-frontend (Hosted UI ↔ HttpOnly cookies, OTP exchange)
 │       ├── billing/               # Stripe billing Lambda — checkout, portal, webhook
+│       ├── email-forwarder/       # SES inbound (info@/support@plinths.net) → personal addr via SSM
 │       ├── export/                # CSV export Lambda (Python, Powertools)
-│       └── muse/                  # Chat agent Lambda (planned — see Muse section)
+│       ├── muse/                  # Chat agent: sync.py (REST routes) + stream.py (SSE via LWA) — see Muse
+│       └── muse-forwarder/        # DynamoDB Stream → Firehose → Parquet (Muse analytics)
 ├── infra/
 │   └── iam/                       # Terraform (CD role, OIDC provider)
 ├── frontend/                      # React + Vite + TypeScript
+├── bin/                           # deploy wrapper script
+├── scripts/                       # one-off data scripts (report export / migration)
 ├── .github/workflows/             # CI + CD pipelines
 ├── events/                        # SAM local test events
-└── docs/                          # Architecture documentation
+├── docs/                          # Architecture documentation
+├── DESIGN.md                      # Design-system spec (themes, OKLCH tokens) — source of truth for theming
+└── PRODUCT.md                     # Product register / positioning
 ```
 
 ## Frontend Commands
@@ -70,8 +76,14 @@ Base URL: `https://amcgahmo7i.execute-api.us-east-1.amazonaws.com/dev`
 | POST | `/api/billing/checkout` | required | Create Stripe Checkout Session, body: `{"plan": "pro" \| "pro_annual" \| "max" \| "max_annual"}` |
 | POST | `/api/billing/portal` | required | Create Stripe Customer Portal session for self-serve management |
 | POST | `/api/billing/webhook` | none (Stripe-signed) | Stripe webhook receiver — signature is verified, never trust the body without it |
+| GET | `/api/muse/conversations/{report_id}` | required | List the per-report Muse thread |
+| DELETE | `/api/muse/conversations/{report_id}` | required | Clear the per-report thread |
+| POST | `/api/muse/conversations/{report_id}/messages/{message_id}/feedback` | required | Thumbs up/down on a Muse turn |
+| POST | `/api/muse/stream` | cookie (in-Lambda) | Muse chat SSE — **not** API GW; see note below |
 
 `required` = passes through the Lambda Authorizer (`infrastructure/lambda/authorizer/app.py`); always-Deny on uncertainty. The webhook route is mounted with `Authorizer: NONE` so Stripe can reach it; signature verification is the only gate.
+
+The three `GET`/`DELETE`/feedback Muse routes are API GW + the standard authorizer (`MuseSyncFunction`). **`POST /api/muse/stream` is different**: it's a Lambda Function URL (`MuseStreamFunction`, `InvokeMode: RESPONSE_STREAM`) that CloudFront proxies under `/api/muse/stream*` with OAC SigV4 signing. The Function URL bypasses API Gateway entirely, so the Lambda verifies the `ml_access` cookie itself via `plinths_auth` at request time.
 
 ## Actual Backend Response Schema
 
@@ -177,11 +189,18 @@ Plinths is solo-only. The plan axis is power, not audience.
 
 There is no Team plan and no multi-seat workflow. Teams considering plinths are routed to a "Contact us" affordance (not built yet). If a future feature implies team usage, push back rather than scope-creeping it.
 
-## Muse — Chat Agent (backlogged)
+## Muse — Chat Agent (backend built; in active dev)
 
 Conversational agent that lets authenticated users ask questions about a generated report and run general market-research Q&A. **Muse** is the brand/UI name; older docs (`docs/planning/BACKLOG.md`, `docs/planning/05-milestones-and-sprints.md`) still call it "chat" — both refer to the same surface.
 
-**Status:** design direction locked, build deferred until after the Free/Pro/Max launch is settled. Do not scaffold backend code without a fresh shape pass; the design below is the persisted decision but technical details (transport, schema) still need work.
+**Status:** backend is built and deployed in the dev stack; the frontend (`useMuse`) consumes the live stream. The Pro tier (default Bedrock model) works end-to-end. Max-only features — cross-report memory and multi-model selection — are scaffolded but not wired (the `gsi1pk=ORG#…` index is reserved for cross-report queries; the OpenAI/Google/Perplexity integrations are not built). Backend implementation notes: `docs/muse/MUSE-BACKEND-HANDOFF.md` (authoritative SSE spec) and `docs/muse/MUSE-IMPLEMENTATION-PLAN.md`.
+
+**Implemented architecture:**
+- **Transport: SSE over a Lambda Function URL** (`MuseStreamFunction`, `InvokeMode: RESPONSE_STREAM`). The AWS Lambda Web Adapter (LWA) layer bridges the Function URL's streaming protocol to ordinary HTTP, where `uvicorn` serves a Starlette ASGI app (`infrastructure/lambda/muse/stream.py`) using `sse-starlette`. CloudFront proxies `/api/muse/stream*` to the Function URL with OAC SigV4 signing; the URL is `AuthType: AWS_IAM` so only CloudFront-signed requests reach it. SSE events: `token` / `sentence_boundary` / `done` / `error` + 15s keep-alives.
+- **Auth on the stream:** Function URLs bypass the API GW authorizer, so `stream.py` verifies the `ml_access` cookie itself via the `plinths_auth` layer (`PlinthsAuthLayer`) at request time.
+- **Sync routes** (`MuseSyncFunction`, normal API GW + authorizer, `infrastructure/lambda/muse/sync.py`): list / delete a thread and post per-message feedback.
+- **DynamoDB key schema** (`MuseConversationsTable`, `infrastructure/lambda/muse/persistence.py`): `pk=REPORT#{report_id}`, `sk=MSG#{iso_ts}#{message_id}` (lexicographic time order); `gsi1pk=ORG#{org_id}`, `gsi1sk={iso_ts}#{report_id}` — the GSI is reserved for Max cross-report memory.
+- **Model:** Pro uses `BedrockModelIdMuseChat` (default `amazon.nova-2-lite-v1:0`) via `InvokeModelWithResponseStream`. Caps via env: `MUSE_FREE_DAILY_LIMIT` (3), `MUSE_PRO_MESSAGE_CAP` (~30/report), `MUSE_HISTORY_TURN_LIMIT` (12). Free-tier daily counter writes to `USER#{user_id}` rows on the Reports table (scoped `UpdateItem` on `USER#*` leading keys only).
 
 **UI direction (locked):**
 - **Inline conversation** lives in the workspace once a report exists — chat thread renders below the report on submit.
@@ -214,11 +233,10 @@ Direction: "prestigious LLM" register (Perplexity-grade) executed in the Pale In
 - **Streaming rhythm:** char-by-char with ~240ms settle at sentence boundaries (`.?!`). Settles are skipped while *inside* a `[[…]]` citation token. Stream cursor is a 1px-wide vertical line in `--text-secondary` that blinks at 1s steps. No "Muse is typing…" dots.
 - **Per-report scoping:** threads are keyed by `reportId` and persisted to localStorage (preview only — production will hit DynamoDB). Switching reports in the sidebar surfaces each report's own conversation; opening a report with an existing thread defaults to chat-view.
 
-**Reference preview:** wired into the real workspace behind a flag — append `?muse=1` to any report URL, set `VITE_MUSE_PREVIEW=true`, or use `?muse=demo` for a pre-populated thread. Source: `frontend/src/hooks/useMuse.ts`, `frontend/src/components/muse/*`, integration in `frontend/src/App.tsx` and `frontend/src/components/AnimatedAiInput.tsx`. Replies are canned (3 mock muse turns rotated); backend not wired.
+**Frontend wiring (live):** Muse is a real workspace feature, no longer behind a preview flag — the `?muse=1` / `?muse=demo` / `VITE_MUSE_PREVIEW` gates and canned mock replies have been removed. `frontend/src/hooks/useMuse.ts` POSTs to `/api/muse/stream` and consumes the live SSE stream (`streamMuseMessage` in `src/api.ts`); `event: token` appends to `streamingText`, `done` finalizes. Source: `frontend/src/hooks/useMuse.ts`, `frontend/src/components/muse/*`, integration in `frontend/src/App.tsx` and `frontend/src/components/AnimatedAiInput.tsx`.
 
-**Still TBD when build resumes:**
-- Transport — SSE / WebSocket / Lambda response streaming / plain JSON. Pending research; affects API Gateway type and Lambda config.
-- DynamoDB key schema for the per-report thread (must accommodate cross-report memory queries on Max).
+**Still TBD:**
+- Max-only features — cross-report memory (query the reserved `gsi1pk=ORG#…` index) and multi-model selection (OpenAI/Google/Perplexity integrations, each needing its own SSM SecureString + scoped IAM). Not built.
 - Animation timings: currently plain mount/unmount on view swap (no morph). Revisit only if hard snapping reads as broken in real use.
 
 **Naming convention when scaffolding:** Lambda dir `infrastructure/lambda/muse/`, API route prefix `/api/muse`, frontend hook `useMuse`, types prefixed `Muse*` (e.g., `MuseMessage`, `MuseConversation`).
@@ -232,16 +250,18 @@ Direction: "prestigious LLM" register (Perplexity-grade) executed in the Pale In
 
 ## Design System — Pale Intelligence
 
-Light mode by default. Warm parchment backgrounds, dark ink interactions, single amber logo accent.
-Theme toggle (light/dark/system) via `src/theme.ts`; persisted in localStorage key `'plinths-theme'`;
-applied as `data-theme` attribute on `<html>`.
+Two themes (full token tables + rationale live in `DESIGN.md`, the source of truth):
+- **`light` — Pale Intelligence** (default): warm parchment backgrounds, dark ink interactions, warm-sepia signal, amber on the wordmark only.
+- **`stealth` — Stealth**: neutral near-black canvas (chroma 0), off-white accent, and warm amber (`#c9965a`) as the *only* color in the UI — it doubles as both signal and logo accent.
+
+Theme preference is `'light' | 'stealth' | 'system'` (resolves to `'light' | 'stealth'`) via `src/theme.ts`; persisted in localStorage key `'plinths-theme'`; applied as `data-theme` on `<html>`. A legacy stored value of `'dark'` is migrated to `'stealth'` on read.
 
 **Color tokens** (OKLCH) in `src/index.css`:
-- `--bg / --surface / --surface-alt`: warm parchment scale
+- `--bg / --surface / --surface-alt`: warm parchment scale (light) / near-black scale (stealth)
 - `--text / --text-secondary / --text-muted`: warm charcoal scale
-- `--accent`: dark ink (all interactive elements)
-- `--signal`: slate blue (scores, data highlights)
-- `--logo-accent`: warm amber — **restricted to "Lens" wordmark only**
+- `--accent`: dark ink / off-white (all interactive elements)
+- `--signal`: warm sepia ink in light (`oklch(34% 0.05 65)`); amber in stealth (scores, data highlights, Muse citation pills)
+- `--logo-accent`: warm amber — in light, **restricted to the "plinths" wordmark only**; in stealth it's the single UI accent
 - `--success/warning/danger`: green / amber / coral
 
 **Fonts**: IBM Plex Serif (`--font-display`), IBM Plex Sans (`--font-body`), IBM Plex Mono (`--font-mono`)

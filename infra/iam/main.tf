@@ -55,6 +55,15 @@ locals {
   oidc_provider_arn = var.create_oidc_provider ? aws_iam_openid_connect_provider.github[0].arn : var.existing_oidc_provider_arn
 }
 
+# Prevent an empty Federated principal (MalformedPolicyDocument) when
+# create_oidc_provider is false but existing_oidc_provider_arn was not set.
+check "oidc_provider_arn_configured" {
+  assert {
+    condition     = local.oidc_provider_arn != ""
+    error_message = "Set create_oidc_provider = true OR provide existing_oidc_provider_arn (GitHub OIDC provider ARN)."
+  }
+}
+
 # --- CD Role ---
 resource "aws_iam_role" "cd_role" {
   name = "marketlens-cd-role"
