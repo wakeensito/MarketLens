@@ -28,8 +28,8 @@ Parameters:
     Description: Bedrock model for Summarise stage (narrative) — Amazon Nova 2 Lite (replaces Claude 3 Haiku)
   BedrockModelIdMuseChat:
     Type: String
-    Default: amazon.nova-2-lite-v1:0
-    Description: Bedrock model for Muse chat (Pro tier). Same Nova family as Summarise; kept separate so the chat experience can be tuned independently.
+    Default: us.amazon.nova-2-lite-v1:0
+    Description: Bedrock inference profile for Muse chat (Pro tier). Nova 2 Lite is NOT invokable on-demand by bare FM ID — it requires a cross-region inference profile (us.* prefix). Same Nova family as Summarise; kept separate so the chat experience can be tuned independently.
   GoogleClientId:
     Type: String
     NoEcho: true
@@ -1093,9 +1093,20 @@ Resources:
                   dynamodb:LeadingKeys:
                     - "USER#*"
         - Statement:
+            # Muse invokes Nova 2 Lite through a cross-region inference profile
+            # (us.amazon.nova-2-lite-v1:0). Bedrock evaluates IAM against BOTH
+            # the inference-profile ARN AND the underlying foundation-model ARNs
+            # in every region the profile can route to (us-east-1/2, us-west-2).
+            # Omitting the FM ARNs turns the ValidationException into AccessDenied.
+            # The FM ARNs are hardcoded (not derived from the param) because the
+            # param now holds a profile ID, not an FM ID.
             - Effect: Allow
               Action: bedrock:InvokeModelWithResponseStream
-              Resource: !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockModelIdMuseChat}"
+              Resource:
+                - !Sub "arn:aws:bedrock:${AWS::Region}:${AWS::AccountId}:inference-profile/${BedrockModelIdMuseChat}"
+                - "arn:aws:bedrock:us-east-1::foundation-model/amazon.nova-2-lite-v1:0"
+                - "arn:aws:bedrock:us-east-2::foundation-model/amazon.nova-2-lite-v1:0"
+                - "arn:aws:bedrock:us-west-2::foundation-model/amazon.nova-2-lite-v1:0"
       Environment:
         Variables:
           MUSE_CONVERSATIONS_TABLE: !Ref MuseConversationsTable
