@@ -676,21 +676,6 @@ html { scroll-behavior: smooth; }
   /* No overflow clip — the layoutId animation needs accurate size measurement */
 }
 
-.ws-header-meta {
-  display: contents;
-}
-
-.ws-query-label {
-  font-size: 13px;
-  color: var(--text-muted);
-  font-style: italic;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 260px;
-  flex-shrink: 1;
-}
-
 .ws-header-spacer { flex: 1; }
 
 .nav-badge {
@@ -1831,13 +1816,6 @@ textarea:focus-visible {
   margin-left: auto;
   flex-shrink: 0;
   color: var(--accent);
-}
-
-.ai-input__sep {
-  width: 1px;
-  height: 18px;
-  background: var(--border-mid);
-  flex-shrink: 0;
 }
 
 .ai-input__send {
