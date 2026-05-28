@@ -8,10 +8,12 @@ import {
   type KeyboardEvent,
 } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { ArrowRight, Check, ChevronDown } from 'lucide-react';
+import { ArrowRight, Blocks, Check, ChevronDown, MessageSquare } from 'lucide-react';
 import { AnthropicIcon, GeminiIcon, OpenAiIcon } from './model-brand-icons';
 import { PlinthsMark } from './BrandWordmark';
 import { SoonPill } from './SoonPill';
+import { SaturationToggleMark } from './muse/SaturationToggleMark';
+import type { WorkspaceTab } from './WorkspaceTabs';
 
 type BrandIcon = ComponentType<{ className?: string }>;
 
@@ -35,6 +37,19 @@ const AI_MODELS = [
 ] as const satisfies readonly ModelDef[];
 
 type ModelId = (typeof AI_MODELS)[number]['id'];
+
+const NAV_ORDER: WorkspaceTab[] = ['report', 'build-brief', 'muse'];
+const NAV_LABEL: Record<WorkspaceTab, string> = {
+  report: 'Open report',
+  'build-brief': 'Open build brief',
+  muse: 'Open chat',
+};
+
+function NavGlyph({ tab }: { tab: WorkspaceTab }) {
+  if (tab === 'report') return <SaturationToggleMark />;
+  if (tab === 'build-brief') return <Blocks size={16} strokeWidth={1.8} aria-hidden />;
+  return <MessageSquare size={16} strokeWidth={1.7} aria-hidden />;
+}
 
 function useAutoResizeTextarea(minHeight: number, maxHeight: number) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -82,6 +97,11 @@ export interface AnimatedAiInputProps {
    *  is reached so the user gets a clear "you can't send" signal instead of
    *  typing into a black hole that errors on submit. */
   disabled?: boolean;
+  /** Active workspace surface. When provided with `onNavigate`, the toolbar
+   *  renders destination glyphs for the other two surfaces. */
+  activeTab?: WorkspaceTab;
+  /** Navigate to another surface from the toolbar glyphs. */
+  onNavigate?: (tab: WorkspaceTab) => void;
 }
 
 const AnimatedAiInput = forwardRef<HTMLTextAreaElement, AnimatedAiInputProps>(
@@ -95,6 +115,8 @@ const AnimatedAiInput = forwardRef<HTMLTextAreaElement, AnimatedAiInputProps>(
       compact = false,
       autoFocus: autoFocusProp,
       disabled = false,
+      activeTab,
+      onNavigate,
     },
     forwardedRef,
   ) {
@@ -214,6 +236,23 @@ const AnimatedAiInput = forwardRef<HTMLTextAreaElement, AnimatedAiInputProps>(
                 </ul>
               </div>
             </details>
+            {onNavigate && activeTab && (
+              <>
+                <span className="ai-input__sep" aria-hidden />
+                {NAV_ORDER.filter(t => t !== activeTab).map(t => (
+                  <button
+                    key={t}
+                    type="button"
+                    className="ai-input__nav-glyph"
+                    onClick={() => onNavigate(t)}
+                    aria-label={NAV_LABEL[t]}
+                    title={NAV_LABEL[t]}
+                  >
+                    <NavGlyph tab={t} />
+                  </button>
+                ))}
+              </>
+            )}
           </div>
 
           <button
