@@ -3,35 +3,8 @@
    --signal marks "the work that's yours", neutral for off-the-shelf.
    No new color tokens, no vendor logos, no decorative motion. */
 
-.bb-section {
-  margin: 8px 0 0;
-}
-
-/* ────────────────────────────────────────────────────────────
-   Header — an icon chip gives this surface a focal point so it
-   reads as a distinct action, not another hairline evidence row.
-   ──────────────────────────────────────────────────────────── */
-
-.bb-chip {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  flex-shrink: 0;
-  border-radius: var(--radius-md);
-  background: var(--surface);
-  border: 1px solid var(--signal-border);
-  color: var(--signal);
-}
-
-.bb-kicker {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
+.bb-pane {
+  display: block;
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -114,95 +87,6 @@
 .bb-cta:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-}
-
-/* ────────────────────────────────────────────────────────────
-   Block — generating / error / ready. A header bar with the chip,
-   content flowing below. Inner blocks carry their own structure,
-   so the block itself stays frameless (no card-in-card).
-   ──────────────────────────────────────────────────────────── */
-
-.bb-block-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--border);
-}
-
-.bb-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: color 0.15s ease;
-}
-
-.bb-toggle:hover {
-  color: var(--text);
-}
-
-.bb-toggle:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 4px;
-  border-radius: var(--radius-sm);
-}
-
-.bb-toggle-chev {
-  color: var(--text-muted);
-  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.bb-toggle-chev.is-open {
-  transform: rotate(180deg);
-}
-
-.bb-block-body {
-  margin-top: 18px;
-}
-
-/* ── Ready peek — a value teaser shown while collapsed ── */
-
-.bb-peek {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 16px;
-}
-
-.bb-peek-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.bb-peek-item--muted {
-  color: var(--text-muted);
-}
-
-.bb-peek-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.bb-peek-sep {
-  font-family: var(--font-mono);
-  color: var(--border-strong);
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -637,7 +521,7 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 14px;
-  margin-top: 18px;
+  margin-top: 0;
 }
 
 .bb-error-msg {
@@ -679,7 +563,7 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
-  margin-top: 18px;
+  margin-top: 0;
 }
 
 .bb-skel-strip {
@@ -753,10 +637,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .bb-toggle-chev {
-    transition: none;
-  }
-
   .bb-skel-bar {
     animation: none;
   }

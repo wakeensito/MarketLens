@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
-import { Blocks, Check, ChevronDown, Copy, Lock, RefreshCw } from 'lucide-react';
+import { Blocks, Check, Copy, Lock, RefreshCw } from 'lucide-react';
 import type { BuildBrief } from '../types';
 import type { UseBuildBriefResult } from '../hooks/useBuildBrief';
 import './build-brief.css';
@@ -103,22 +102,6 @@ function buildBriefMarkdown(brief: BuildBrief, idea: string): string {
 }
 
 /* ──────────────────────────────────────────────────────────
-   Header — icon chip gives the surface a focal point distinct
-   from the report's hairline evidence sections.
-   ────────────────────────────────────────────────────────── */
-
-function Kicker() {
-  return (
-    <>
-      <span className="bb-chip" aria-hidden>
-        <Blocks size={15} strokeWidth={2} />
-      </span>
-      <span className="bb-kicker">Build Brief</span>
-    </>
-  );
-}
-
-/* ──────────────────────────────────────────────────────────
    Invitation — the CTA states (locked / idle) are a present,
    warm card, not a hidden accordion row.
    ────────────────────────────────────────────────────────── */
@@ -135,7 +118,6 @@ function Invite({
   return (
     <div className="bb-invite">
       <div className="bb-invite-head">
-        <Kicker />
         {locked && (
           <span className="bb-pro">
             <Lock size={10} strokeWidth={2.5} aria-hidden />
@@ -160,44 +142,6 @@ function Invite({
           <Blocks size={14} strokeWidth={2} aria-hidden />
           Generate build brief
         </button>
-      )}
-    </div>
-  );
-}
-
-/* ──────────────────────────────────────────────────────────
-   Ready peek — a value teaser shown while collapsed so there's
-   a reason to open it.
-   ────────────────────────────────────────────────────────── */
-
-function ReadyPeek({ brief }: { brief: BuildBrief }) {
-  if (!brief.isTechDominant) {
-    return (
-      <div className="bb-peek">
-        <span className="bb-peek-item">
-          <span className="bb-peek-dot" style={{ background: 'var(--success)' }} aria-hidden />
-          Low-tech · website + payments
-        </span>
-      </div>
-    );
-  }
-  return (
-    <div className="bb-peek">
-      <span className="bb-peek-item">
-        <span
-          className="bb-peek-dot"
-          style={{ background: complexityColor(brief.complexityScore) }}
-          aria-hidden
-        />
-        {brief.complexityLabel} complexity
-      </span>
-      {brief.effort.timeframe && (
-        <>
-          <span className="bb-peek-sep" aria-hidden>
-            ·
-          </span>
-          <span className="bb-peek-item bb-peek-item--muted">{brief.effort.timeframe}</span>
-        </>
       )}
     </div>
   );
@@ -422,120 +366,69 @@ function BriefBody({
 }
 
 /* ──────────────────────────────────────────────────────────
-   Section — positioned in the conclusion cluster (after the
-   first move), so it reads as the next beat after the verdict.
+   Pane — the Build Brief tab. Renders the matching state directly;
+   no collapsible section, no header, no peek.
    ────────────────────────────────────────────────────────── */
 
-export default function BuildBriefSection({ buildBrief, idea, onUpgrade }: Props) {
+export default function BuildBriefPane({ buildBrief, idea, onUpgrade }: Props) {
   const { status, brief, generatedAt, error, capReached, generate, dismissError } = buildBrief;
-  const [expanded, setExpanded] = useState(false);
-
-  /** Generating from the CTA / retry should reveal the result as it lands. */
-  const runGenerate = () => {
-    setExpanded(true);
-    generate();
-  };
 
   if (status === 'locked') {
     return (
-      <section className="bb-section">
+      <div className="bb-pane">
         <Invite locked onUpgrade={onUpgrade} />
-      </section>
+      </div>
     );
   }
 
   if (status === 'idle') {
     return (
-      <section className="bb-section">
-        <Invite onGenerate={runGenerate} />
-      </section>
+      <div className="bb-pane">
+        <Invite onGenerate={generate} />
+      </div>
     );
   }
 
   if (status === 'loading' || status === 'generating') {
     return (
-      <section className="bb-section">
-        <div className="bb-block">
-          <div className="bb-block-head">
-            <Kicker />
-          </div>
-          <SkeletonState />
-        </div>
-      </section>
+      <div className="bb-pane">
+        <SkeletonState />
+      </div>
     );
   }
 
   if (status === 'error') {
     return (
-      <section className="bb-section">
-        <div className="bb-block">
-          <div className="bb-block-head">
-            <Kicker />
-          </div>
-          <ErrorState message={error ?? "Couldn't generate the brief."} onRetry={runGenerate} />
-        </div>
-      </section>
+      <div className="bb-pane">
+        <ErrorState message={error ?? "Couldn't generate the brief."} onRetry={generate} />
+      </div>
     );
   }
 
-  // ready
   return (
-    <section className="bb-section">
-      <div className="bb-block">
-        <div className="bb-block-head">
-          <Kicker />
+    <div className="bb-pane">
+      {brief && (
+        <BriefBody
+          brief={brief}
+          idea={idea}
+          generatedAt={generatedAt}
+          capReached={capReached}
+          onRegenerate={generate}
+        />
+      )}
+      {error && (
+        <div className="bb-cap-msg" role="alert">
+          <span>{error}</span>
           <button
             type="button"
-            className="bb-toggle"
-            onClick={() => setExpanded(o => !o)}
-            aria-expanded={expanded}
+            className="bb-cap-msg-dismiss"
+            onClick={dismissError}
+            aria-label="Dismiss"
           >
-            {expanded ? 'Hide' : 'View build brief'}
-            <ChevronDown
-              size={14}
-              strokeWidth={2}
-              className={`bb-toggle-chev${expanded ? ' is-open' : ''}`}
-              aria-hidden
-            />
+            ×
           </button>
         </div>
-
-        {!expanded && brief && <ReadyPeek brief={brief} />}
-
-        <AnimatePresence initial={false}>
-          {expanded && brief && (
-            <motion.div
-              className="bb-block-body"
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -4 }}
-              transition={{ duration: 0.28, ease: 'easeOut' as const }}
-            >
-              <BriefBody
-                brief={brief}
-                idea={idea}
-                generatedAt={generatedAt}
-                capReached={capReached}
-                onRegenerate={runGenerate}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {error && (
-          <div className="bb-cap-msg" role="alert">
-            <span>{error}</span>
-            <button
-              type="button"
-              className="bb-cap-msg-dismiss"
-              onClick={dismissError}
-              aria-label="Dismiss"
-            >
-              ×
-            </button>
-          </div>
-        )}
-      </div>
-    </section>
+      )}
+    </div>
   );
 }

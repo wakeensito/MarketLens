@@ -447,19 +447,6 @@
   height: 16px;
 }
 
-/* ────────────────────────────────────────────────────────────
-   Workspace integration — wrapper around ReportView
-   ──────────────────────────────────────────────────────────── */
-
-.muse-report-surface {
-  display: block;
-}
-
-.muse-report-surface--open {
-  position: relative;
-  z-index: 1;
-}
-
 /* ── Cell pulse — fires when a citation routes here ─────── */
 
 [data-muse-cell].muse-cell-pulsing {

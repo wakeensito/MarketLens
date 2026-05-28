@@ -19,6 +19,8 @@ import { useMuse } from './hooks/useMuse';
 import { useBuildBrief } from './hooks/useBuildBrief';
 import { MuseThread } from './components/muse/MuseThread';
 import { MuseEmptyLine } from './components/muse/MuseEmptyLine';
+import { WorkspaceTabs, type WorkspaceTab } from './components/WorkspaceTabs';
+import BuildBriefPane from './components/BuildBrief';
 import './components/muse/muse.css';
 import { EXAMPLE_QUERIES } from './mockData';
 import { landingEntryAnimate, landingEntryInitial } from './motion';
@@ -81,13 +83,38 @@ export default function App() {
   // component, mirroring the Muse integration discipline.
   const buildBrief = useBuildBrief({ reportId, plan: userPlan });
 
-  // When a citation routes the user to report-open with a target cell, scroll
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>('report');
+  const isPaid = userPlan !== '' && userPlan !== 'free';
+  const showTabs = screen === 'report' && !!report && !!reportId;
+
+  // Default-tab selection syncs tab state to external changes (active report /
+  // Muse hydration settling), so setState-in-effect is the intended pattern.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  // Reset to the Report tab whenever the active report changes.
+  const lastReportTabRef = useRef<string | null>(null);
+  const museHydratedTabRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (reportId !== lastReportTabRef.current) {
+      lastReportTabRef.current = reportId;
+      museHydratedTabRef.current = null;
+      setActiveTab('report');
+    }
+  }, [reportId]);
+  // After Muse hydration settles, default to Muse if the report already has a thread.
+  useEffect(() => {
+    if (!reportId || muse.hydrating || museHydratedTabRef.current === reportId) return;
+    museHydratedTabRef.current = reportId;
+    if (muse.thread.length > 0) setActiveTab('muse');
+  }, [reportId, muse.hydrating, muse.thread.length]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
+  // When a citation routes the user to the Report tab with a target cell, scroll
   // smoothly to the matching `[data-muse-cell]` element and pulse it once.
   // Lives at the App boundary so ReportView stays pure — it just emits stable
   // data attributes; the routing logic is owned by the Muse integration layer.
   useEffect(() => {
     if (!muse.enabled) return;
-    if (muse.view !== 'report-open' || !muse.highlightTarget) return;
+    if (activeTab !== 'report' || !muse.highlightTarget) return;
     const target = muse.highlightTarget;
     type WithMuseClear = HTMLElement & { _museClear?: number };
     let pulsed: WithMuseClear | null = null;
@@ -116,7 +143,7 @@ export default function App() {
         pulsed.classList.remove('muse-cell-pulsing');
       }
     };
-  }, [muse.enabled, muse.view, muse.highlightTarget]);
+  }, [muse.enabled, activeTab, muse.highlightTarget]);
   const [billingCancelToast, setBillingCancelToast] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     const params = new URLSearchParams(window.location.search);
@@ -259,37 +286,45 @@ export default function App() {
     setShowSavePrompt(false);
   }, [auth.isAuthenticated, startNewChat]);
 
+  const upgradeToPro = useCallback(() => {
+    if (!auth.isAuthenticated) {
+      pendingCheckoutPlanRef.current = 'pro';
+      setShowSignIn(true);
+      return;
+    }
+    void billing.startCheckout('pro');
+  }, [auth.isAuthenticated, billing]);
+
+  const handleCite = useCallback((target: string) => {
+    setActiveTab('report');
+    muse.cite(target);
+  }, [muse]);
 
   const onSubmit = useCallback((val: string) => {
-    if (val.trim().length <= 4) return;
+    const text = val.trim();
+    if (text.length <= 4) return;
 
-    // Muse hijack: when chat is live and we're sitting on a finished report,
-    // the bottom input talks to Muse instead of starting a new analysis.
-    // When the Free daily cap is reached, the input is `disabled` (so this
-    // branch shouldn't fire) — the guard is defensive against keyboard submits
-    // that bypass the button's disabled state.
-    if (muse.enabled && screen === 'report' && report && reportId) {
+    // On a report, the bottom bar is the Muse composer.
+    if (screen === 'report' && report && reportId && museEligible) {
       if (museCapped) return;
-      muse.sendMessage(val.trim());
+      setActiveTab('muse');
+      muse.sendMessage(text);
       setInputValue('');
       return;
     }
 
+    // Empty-state hero input: start a new analysis (or gate to sign-in).
     if (!auth.isAuthenticated) {
-      // Store the query so we can auto-submit after sign-in. Also mirror to
-      // sessionStorage so the query survives the Cognito Hosted UI redirect
-      // (full page reload wipes the ref).
-      const q = val.trim();
-      pendingQueryRef.current = q;
-      try { sessionStorage.setItem(PENDING_QUERY_KEY, q); } catch { /* private mode */ }
+      pendingQueryRef.current = text;
+      try { sessionStorage.setItem(PENDING_QUERY_KEY, text); } catch { /* private mode */ }
       setShowSignIn(true);
       return;
     }
 
-    startAnalysis(val.trim());
+    startAnalysis(text);
     setInputValue('');
     setShowSavePrompt(false);
-  }, [startAnalysis, auth.isAuthenticated, muse, screen, report, reportId, museCapped]);
+  }, [screen, report, reportId, museEligible, museCapped, muse, auth.isAuthenticated, startAnalysis]);
 
   // ── Loading ─────────────────────────────────────────────
   if (auth.loading) {
@@ -584,15 +619,21 @@ export default function App() {
                 <PanelLeft size={15} strokeWidth={2} />
               </button>
 
-              <motion.div
-                className="ws-header-meta"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1, transition: { delay: 0.18, duration: 0.3 } }}
-              >
-                {query && !isWorkspaceEmpty && <div className="ws-query-label">"{query}"</div>}
+              {showTabs ? (
+                <WorkspaceTabs
+                  active={activeTab}
+                  onChange={tab => {
+                    if (tab === 'report') muse.clearHighlight();
+                    setActiveTab(tab);
+                  }}
+                  isPaid={isPaid}
+                  isAuthenticated={auth.isAuthenticated}
+                />
+              ) : (
                 <div className="ws-header-spacer" />
-                <span className="nav-badge">Beta</span>
-              </motion.div>
+              )}
+
+              <span className="nav-badge">Beta</span>
             </header>
 
             <main className="ws-main">
@@ -667,102 +708,118 @@ export default function App() {
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1, transition: { duration: 0.4 } }}
                   >
-                    {report && reportId && (() => {
-                      const reportEl = (
-                        <ReportView
-                          report={report}
-                          reportId={reportId}
-                          onRequestUpgrade={() => setProactiveUpgrade(true)}
-                          onUpgradeToPro={() => {
-                            if (!auth.isAuthenticated) {
-                              pendingCheckoutPlanRef.current = 'pro';
-                              setShowSignIn(true);
-                              return;
-                            }
-                            void billing.startCheckout('pro');
-                          }}
-                          onFeedback={async (rating, comment) => {
-                            await submitFeedback(reportId, rating, comment);
-                          }}
-                          buildBrief={buildBrief}
-                        />
-                      );
+                    {report && reportId && (
+                      <>
+                        {query && <div className="ws-query-subrow">"{query}"</div>}
 
-                      // Anonymous users see the report only — Muse is sign-in-gated.
-                      if (!museEligible) return reportEl;
-
-                      return (
-                        <>
-                          {muse.view !== 'chat' && (
-                            <div
-                              className={
-                                'muse-report-surface' +
-                                (muse.view === 'report-open' ? ' muse-report-surface--open' : '')
-                              }
-                            >
-                              {muse.view === 'report-open' && muse.highlightTarget && (
-                                <div className="muse-back-banner">
-                                  <span className="muse-back-banner__label">
-                                    From your conversation
-                                  </span>
-                                  <button
-                                    type="button"
-                                    className="muse-back-banner__btn"
-                                    onClick={muse.closeReport}
-                                  >
-                                    <span aria-hidden>←</span>
-                                    <span>Back to chat</span>
-                                  </button>
-                                </div>
-                              )}
-                              {reportEl}
-                            </div>
-                          )}
-
-                          {muse.view === 'idle' && muse.thread.length === 0 && !museCapped && (
-                            <MuseEmptyLine />
-                          )}
-
-                          {muse.view === 'chat' && (
-                            <MuseThread
-                              thread={muse.thread}
-                              streamingText={muse.streamingText}
-                              onCite={muse.cite}
-                              onAsk={muse.sendMessage}
-                              onRegenerate={muse.regenerate}
-                              onFeedback={muse.setFeedback}
+                        {activeTab === 'report' && (
+                          <div
+                            id="ws-panel-report"
+                            role="tabpanel"
+                            aria-labelledby="ws-tab-report"
+                            className="ws-pane"
+                          >
+                            {museEligible && muse.highlightTarget && (
+                              <div className="muse-back-banner">
+                                <span className="muse-back-banner__label">
+                                  From your conversation
+                                </span>
+                                <button
+                                  type="button"
+                                  className="muse-back-banner__btn"
+                                  onClick={() => {
+                                    setActiveTab('muse');
+                                    muse.clearHighlight();
+                                  }}
+                                >
+                                  <span aria-hidden>←</span>
+                                  <span>Back to chat</span>
+                                </button>
+                              </div>
+                            )}
+                            <ReportView
+                              report={report}
+                              reportId={reportId}
+                              onRequestUpgrade={() => setProactiveUpgrade(true)}
+                              onUpgradeToPro={upgradeToPro}
+                              onFeedback={async (rating, comment) => {
+                                await submitFeedback(reportId, rating, comment);
+                              }}
                             />
-                          )}
+                          </div>
+                        )}
 
-                          {museCapped && (
-                            <MuseEmptyLine
-                              locked
-                              lockedReason="you've used today's free chats"
-                              onUpgrade={() => setShowPricing(true)}
+                        {activeTab === 'build-brief' && (
+                          <div
+                            id="ws-panel-build-brief"
+                            role="tabpanel"
+                            aria-labelledby="ws-tab-build-brief"
+                            className="ws-pane"
+                          >
+                            <BuildBriefPane
+                              buildBrief={buildBrief}
+                              idea={report.idea}
+                              onUpgrade={upgradeToPro}
                             />
-                          )}
+                          </div>
+                        )}
 
-                          {muse.lastError && (
-                            <div className="muse-error" role="alert">
-                              <span>{muse.lastError}</span>
-                              <button
-                                type="button"
-                                className="muse-error__dismiss"
-                                onClick={muse.dismissError}
-                                aria-label="Dismiss error"
-                              >×</button>
-                            </div>
-                          )}
-                        </>
-                      );
-                    })()}
+                        {activeTab === 'muse' && (
+                          <div
+                            id="ws-panel-muse"
+                            role="tabpanel"
+                            aria-labelledby="ws-tab-muse"
+                            className="ws-pane"
+                          >
+                            {!museEligible ? (
+                              <MuseEmptyLine
+                                locked
+                                actionLabel="sign in"
+                                lockedReason="sign in to chat with this report"
+                                onUpgrade={() => setShowSignIn(true)}
+                              />
+                            ) : museCapped ? (
+                              <MuseEmptyLine
+                                locked
+                                lockedReason="you've used today's free chats"
+                                onUpgrade={() => setShowPricing(true)}
+                              />
+                            ) : muse.thread.length > 0 || muse.streamingText !== null ? (
+                              <MuseThread
+                                thread={muse.thread}
+                                streamingText={muse.streamingText}
+                                onCite={handleCite}
+                                onAsk={muse.sendMessage}
+                                onRegenerate={muse.regenerate}
+                                onFeedback={muse.setFeedback}
+                              />
+                            ) : (
+                              <MuseEmptyLine />
+                            )}
+                            {muse.lastError && (
+                              <div className="muse-error" role="alert">
+                                <span>{muse.lastError}</span>
+                                <button
+                                  type="button"
+                                  className="muse-error__dismiss"
+                                  onClick={muse.dismissError}
+                                  aria-label="Dismiss error"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
             </main>
 
-            {/* Fixed bottom input — only during analysis / report */}
-            {!isWorkspaceEmpty && (
+            {/* Fixed bottom input — Muse composer on a report */}
+            {screen === 'report' && report && museEligible && (
               <motion.div
                 layoutId="ml-input"
                 className="ws-input-wrap"
@@ -775,20 +832,14 @@ export default function App() {
                   onChange={setInputValue}
                   onSubmit={onSubmit}
                   placeholder={
-                    muse.enabled && screen === 'report' && museCapped
+                    museCapped
                       ? 'Free Muse chats used for today'
-                      : muse.enabled && screen === 'report'
-                        ? muse.view === 'idle'
-                          ? 'Ask about this report…'
-                          : 'Reply…'
-                        : 'Type a new idea to analyse'
+                      : activeTab === 'muse'
+                        ? 'Reply…'
+                        : 'Ask Muse about this report…'
                   }
                   compact
-                  disabled={muse.enabled && screen === 'report' && museCapped}
-                  museMode={
-                    muse.enabled && screen === 'report' ? muse.view : null
-                  }
-                  onMuseToggle={muse.toggleReport}
+                  disabled={museCapped}
                 />
               </motion.div>
             )}

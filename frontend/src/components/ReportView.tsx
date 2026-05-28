@@ -5,8 +5,6 @@ import type { MarketReport, Competitor, MarketGap, RoadmapPhase } from '../types
 import { exportReport } from '../api';
 import { useAuthContext } from '../hooks/useAuth';
 import ReportFeedback, { type FeedbackRating } from './ReportFeedback';
-import BuildBriefSection from './BuildBrief';
-import type { UseBuildBriefResult } from '../hooks/useBuildBrief';
 
 interface Props {
   report:           MarketReport;
@@ -18,8 +16,6 @@ interface Props {
   /** Fires on thumb click (comment=null) and again on optional comment send (comment=string).
    *  Wire your backend here. */
   onFeedback?:      (rating: FeedbackRating, comment: string | null) => void | Promise<void>;
-  /** Build Brief state — owned by the integration layer (App.tsx), so ReportView stays pure. */
-  buildBrief?:      UseBuildBriefResult;
 }
 
 type ExportFormat = 'md' | 'csv' | 'pdf';
@@ -355,7 +351,7 @@ function RoadmapRow({ phase, index }: { phase: RoadmapPhase; index: number }) {
   );
 }
 
-function ReportViewInner({ report, reportId, onRequestUpgrade, onUpgradeToPro, onFeedback, buildBrief }: Props) {
+function ReportViewInner({ report, reportId, onRequestUpgrade, onUpgradeToPro, onFeedback }: Props) {
   const auth = useAuthContext();
   const planRaw = (auth.user?.plan ?? '').trim().toLowerCase();
   const isPaid  = auth.isAuthenticated && planRaw !== '' && planRaw !== 'free';
@@ -550,17 +546,6 @@ function ReportViewInner({ report, reportId, onRequestUpgrade, onUpgradeToPro, o
                 <li key={i} className="first-move-item">{m}</li>
               ))}
             </ul>
-          </motion.div>
-        )}
-
-        {/* ── Build Brief — the next beat after the verdict ── */}
-        {buildBrief && (
-          <motion.div variants={fadeUp}>
-            <BuildBriefSection
-              buildBrief={buildBrief}
-              idea={report.idea}
-              onUpgrade={onUpgradeToPro ?? onRequestUpgrade ?? (() => {})}
-            />
           </motion.div>
         )}
 
