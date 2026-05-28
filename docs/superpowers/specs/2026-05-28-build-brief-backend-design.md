@@ -15,7 +15,7 @@ These supersede the corresponding points in the product spec:
 1. **Routes move to a dedicated `BuildBriefFunction`** — *not* the existing API Lambda. Keeps `bedrock:InvokeModel` off the fast CRUD Lambda (least privilege) and lets the brief Lambda be tuned for a model call. Mirrors the `MuseSyncFunction` precedent.
 2. **No regenerate.** Generate-once per report. POST is idempotent: if a brief already exists, return the stored one (no re-spend).
 3. **No daily cap.** With regenerate gone, brief generation is already bounded by the report daily limits (you cannot make more briefs than reports). The atomic-counter / `429` / `capReached` machinery is dropped.
-4. **Model = verify-then-plug.** Not pinned to DeepSeek. Confirm the live deployed model, then set the SAM param (lean: Nova 2 Lite — the Summarise stage's founder-prose model, whose inference-profile + IAM are already solved for Muse).
+4. **Model = Claude 3 Haiku** (`anthropic.claude-3-haiku-20240307-v1:0`). Verified 2026-05-28 against the live `marketlens-dev` stack: all three report stages (Parse/Analyse/Summarise) run Claude 3 Haiku — the Nova/DeepSeek values in `template.yaml` are defaults that were overridden at deploy and never shipped. The brief reuses this proven, access-enabled model; it invokes on-demand by bare FM ARN (no inference profile), unlike Nova 2 Lite. Not DeepSeek (the 2026-05-26 spec's pick).
 
 Everything else in the 2026-05-26 spec (content, trust block, vendor-neutral framing, low-tech graceful path, ownership/`409` rules, schema) still holds.
 
@@ -65,7 +65,7 @@ flowchart TD
 
 - Python, Powertools resolver, behind the **existing API GW + standard authorizer**, mounted at both routes above. Mirrors `MuseSyncFunction`.
 - **IAM (least privilege):**
-  - `bedrock:InvokeModel` scoped to **only** the brief model ARN(s). If the chosen model needs a `us.*` cross-region inference profile (as Nova 2 Lite does), include the inference-profile ARN *and* the underlying foundation-model ARNs across all routed regions — same pattern already in the template for `BedrockModelIdMuseChat`.
+  - `bedrock:InvokeModel` scoped to **only** the brief model — a bare foundation-model ARN `arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockModelIdBuildBrief}`, mirroring the report pipeline's scoping (template:1262-1264). Claude 3 Haiku needs no inference profile. (If a future swap targets a model that requires a `us.*` inference profile — as Nova 2 Lite does — add the inference-profile ARN plus the underlying FM ARNs across routed regions, per the `BedrockModelIdMuseChat` pattern.)
   - `DynamoDBCrudPolicy` scoped to the Reports table (read the report's `result_json`; write the brief fields).
 - **Plan freshness:** resolve plan from the `USER#{user_id}` DynamoDB row (not the ~5-min-cached authorizer snapshot), same pattern as `_atomic_check_and_increment`, so a just-upgraded user is not wrongly `403`'d.
 
@@ -81,7 +81,7 @@ Stored on the existing report item (1:1, no new table, same org-scoped key space
 - **Input:** the completed report's `result_json` (vertical, oneliner, scores, competitors, gaps, recommendation) + `idea_text`.
 - **Invoke:** reuse the provider-aware `call_llm()` shape from `ai-orchestration` (payload builder, retry/backoff, token tracking). **Default: copy/adapt the small invoke helper into the new Lambda** so it stays self-contained (the repo keeps each Lambda dir independent); a shared Lambda layer is a possible later refactor, not Phase 1. Handles nova / anthropic / deepseek, so the verified model slots in without code changes.
 - **Output:** the exact `build_brief_json` schema the frontend adapter expects. Parse + validate; malformed/empty → `502` (frontend shows its error state).
-- **Model:** behind a new SAM param `BedrockModelIdBuildBrief`. **Value TBD pending live verification** (see Open item). Synchronous within API GW's 29s window — a single bounded brief lands in a few seconds with comfortable margin.
+- **Model:** behind a new SAM param `BedrockModelIdBuildBrief`, **default `anthropic.claude-3-haiku-20240307-v1:0`** (the verified report-pipeline model). Synchronous within API GW's 29s window — a single bounded brief lands in a few seconds with comfortable margin.
 - **Low-tech graceful path:** prompt instructs `is_tech_dominant: "false"` for non-digital ideas; `foundation` collapses to website + payments; complexity stays low. Never fabricate a stack (per the 2026-05-26 trust framing).
 
 ### `build_brief_json` schema
@@ -130,16 +130,23 @@ The frontend is built; only these align it with the decisions above and with the
 
 ---
 
-## Open item (before merge)
+## Model verification (resolved 2026-05-28)
 
-**Verify the deployed model, then set `BedrockModelIdBuildBrief`.** `samconfig.toml` does not override the model params, and a deploy uses CloudFormation's previous value, so the repo defaults (Nova/DeepSeek) may not match what is live. Confirm via:
+Queried the live `marketlens-dev` stack parameters:
 
 ```
-aws lambda get-function-configuration --function-name <AiOrchestrationFn> \
-  --query 'Environment.Variables.{Parse:BEDROCK_MODEL_ID_PARSE,Analyse:BEDROCK_MODEL_ID_ANALYSE,Summarise:BEDROCK_MODEL_ID_SUMMARISE}'
+aws cloudformation describe-stacks --stack-name marketlens-dev --region us-east-1 \
+  --query "Stacks[0].Parameters[?contains(ParameterKey, 'BedrockModelId')]"
 ```
 
-Then set the brief param to the confirmed, access-enabled model (lean: Nova 2 Lite via its `us.*` inference profile, matching Muse) and scope the IAM ARNs accordingly.
+| Param | Live value |
+|---|---|
+| `BedrockModelIdParse` | `anthropic.claude-3-haiku-20240307-v1:0` |
+| `BedrockModelIdAnalyse` | `anthropic.claude-3-haiku-20240307-v1:0` |
+| `BedrockModelIdSummarise` | `anthropic.claude-3-haiku-20240307-v1:0` |
+| `BedrockModelIdMuseChat` | `us.amazon.nova-2-lite-v1:0` |
+
+**Decision:** `BedrockModelIdBuildBrief` default = `anthropic.claude-3-haiku-20240307-v1:0`. Proven, access-enabled, on-demand by bare FM ARN. `samconfig.toml` must **not** re-pass the model params on deploy (it doesn't today) so the live override is preserved via CloudFormation's previous-value behavior.
 
 ---
 
