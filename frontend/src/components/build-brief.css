@@ -1,0 +1,643 @@
+/* Build Brief (Pro) — the next beat after the verdict.
+   Pale Intelligence applied to a build deliverable: parchment surfaces,
+   --signal marks "the work that's yours", neutral for off-the-shelf.
+   No new color tokens, no vendor logos, no decorative motion. */
+
+.bb-pane {
+  display: block;
+}
+
+/* ────────────────────────────────────────────────────────────
+   Invitation — the CTA states (locked / idle) are a present,
+   warm card echoing the recommendation block.
+   ──────────────────────────────────────────────────────────── */
+
+.bb-invite {
+  padding: 22px 24px;
+  background: var(--signal-light);
+  border: 1px solid var(--signal-border);
+  border-radius: var(--radius-lg);
+}
+
+.bb-invite-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.bb-pro {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--signal);
+  background: var(--surface);
+  border: 1px solid var(--signal-border);
+  border-radius: var(--radius-full);
+  padding: 3px 9px;
+}
+
+.bb-headline {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  color: var(--text);
+  margin: 0 0 8px;
+}
+
+.bb-lead {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  max-width: 56ch;
+  margin: 0;
+}
+
+.bb-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 16px;
+  margin-top: 18px;
+  background: var(--accent);
+  color: var(--text-inverse);
+  border: none;
+  border-radius: var(--radius-lg);
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease, box-shadow 0.18s ease;
+}
+
+.bb-cta:hover {
+  background: var(--accent-hover);
+  box-shadow: 0 4px 14px var(--accent-light);
+}
+
+.bb-cta:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ────────────────────────────────────────────────────────────
+   Shared block + type (inner brief content)
+   ──────────────────────────────────────────────────────────── */
+
+.bb-card {
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+}
+
+.bb-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* ── Conclusion strip: complexity + effort (or low-tech note) ── */
+
+.bb-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.bb-summary-cell {
+  padding: 18px 20px;
+  border-right: 1px solid var(--border);
+}
+
+.bb-summary-cell:last-child {
+  border-right: none;
+}
+
+.bb-complexity {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.bb-complexity-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.bb-complexity-label {
+  font-family: var(--font-body);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.bb-complexity-score {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+.bb-drivers {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin: 10px 0 0;
+}
+
+.bb-effort-value {
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--text);
+  margin-top: 10px;
+}
+
+.bb-effort-team {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.bb-lowtech-text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  max-width: 60ch;
+  margin: 10px 0 0;
+}
+
+/* ── Brief groups ── */
+
+.bb-group {
+  margin-top: 28px;
+}
+
+.bb-group-intro {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  max-width: 60ch;
+  margin: 8px 0 14px;
+}
+
+.bb-caps,
+.bb-foundation {
+  margin-top: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.bb-cap,
+.bb-prim {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.bb-cap:last-child,
+.bb-prim:last-child {
+  border-bottom: none;
+}
+
+.bb-cap-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bb-cap-name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.bb-tag {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+}
+
+/* BUILD = the work that's yours → carries the signal color.
+   BUY = a vendor solved it → stays quiet and neutral. */
+.bb-tag--build {
+  color: var(--signal);
+  background: var(--signal-light);
+  border-color: var(--signal-border);
+}
+
+.bb-tag--buy {
+  color: var(--text-muted);
+  background: var(--surface-alt);
+  border-color: var(--border);
+}
+
+.bb-cap-desc {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  margin: 6px 0 0;
+}
+
+.bb-cap-reco {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  margin-top: 8px;
+}
+
+.bb-cap-reco-label {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-right: 8px;
+}
+
+.bb-prim-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.bb-prim-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.bb-prim-clouds {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.01em;
+  color: var(--text-secondary);
+  text-align: right;
+}
+
+.bb-prim-why {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  margin: 5px 0 0;
+}
+
+.bb-mvp {
+  margin-top: 12px;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  font-size: 14px;
+  line-height: 1.65;
+  color: var(--text-secondary);
+}
+
+.bb-risks {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.bb-risk {
+  display: flex;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.bb-risk:first-child {
+  padding-top: 4px;
+}
+
+.bb-risk:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.bb-risk-index {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--signal);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.bb-risk-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.bb-risk-desc {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin: 4px 0 0;
+}
+
+/* ── Foundations & limits — calm authority about the product's own limits ── */
+
+.bb-limits {
+  margin-top: 28px;
+  background: var(--surface-alt);
+}
+
+.bb-limits-header {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 14px;
+}
+
+.bb-principles {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.bb-principle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.bb-principle::before {
+  content: '→';
+  color: var(--signal);
+  font-weight: 700;
+  font-size: 12px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.bb-limit-statement {
+  margin: 14px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text);
+}
+
+/* ── Action row — mirrors Muse's copy / regenerate language ── */
+
+.bb-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 22px;
+  flex-wrap: wrap;
+}
+
+.bb-actions-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.bb-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  background: transparent;
+  border: none;
+  padding: 4px 0;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.bb-action-btn:hover {
+  color: var(--text);
+}
+
+.bb-action-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.bb-actions-dot {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--border-mid);
+}
+
+.bb-generated {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+  letter-spacing: 0.02em;
+}
+
+/* ── Calm cap / error message ── */
+
+.bb-cap-msg {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+}
+
+.bb-cap-msg[role='alert'] {
+  color: var(--warning);
+}
+
+.bb-cap-msg-dismiss {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1;
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.bb-cap-msg-dismiss:hover {
+  color: var(--text);
+  border-color: var(--border-mid);
+}
+
+/* ── Error state ── */
+
+.bb-error {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14px;
+  margin-top: 0;
+}
+
+.bb-error-msg {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.bb-retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-md);
+  background: var(--accent-light);
+  color: var(--accent);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.bb-retry:hover {
+  border-color: var(--accent);
+}
+
+.bb-retry:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Skeleton — content-shaped loading, not a lingering spinner ── */
+
+.bb-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-top: 0;
+}
+
+.bb-skel-strip {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.bb-skel-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bb-skel-bar {
+  background: var(--surface-alt);
+  border-radius: var(--radius-sm);
+  animation: bb-skel-pulse 1.4s ease-in-out infinite;
+}
+
+.bb-skel-bar--badge {
+  width: 150px;
+  height: 34px;
+  border-radius: var(--radius-lg);
+}
+
+.bb-skel-bar--effort {
+  width: 200px;
+  height: 34px;
+  border-radius: var(--radius-lg);
+}
+
+.bb-skel-bar--eyebrow {
+  width: 100px;
+  height: 10px;
+}
+
+.bb-skel-bar--row {
+  width: 100%;
+  height: 14px;
+}
+
+.bb-skel-bar--short {
+  width: 55%;
+}
+
+@keyframes bb-skel-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.5; }
+}
+
+/* ── Responsive ── */
+
+@media (max-width: 680px) {
+  .bb-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .bb-summary-cell {
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .bb-summary-cell:last-child {
+    border-bottom: none;
+  }
+
+  .bb-prim-clouds {
+    text-align: left;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bb-skel-bar {
+    animation: none;
+  }
+}

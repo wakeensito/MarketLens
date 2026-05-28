@@ -1,7 +1,5 @@
 /** Muse types — kept local to the muse module until backend lands. */
 
-export type MuseView = 'idle' | 'chat' | 'report-open';
-
 export type MuseCitationKind = 'inline' | 'cross';
 
 export interface MuseCitation {

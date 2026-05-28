@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ApiError } from '../api';
-import type { MuseFeedback, MuseTurn, MuseView } from '../components/muse/museTypes';
+import type { MuseFeedback, MuseTurn } from '../components/muse/museTypes';
 import {
   asMuseChatError,
   deleteMuseConversation,
@@ -60,7 +60,6 @@ function describeSendError(e: unknown): { message: string; chatErr: MuseChatErro
 
 export interface UseMuseResult {
   enabled: boolean;
-  view: MuseView;
   thread: MuseTurn[];
   /** Partial assistant text during the local streaming simulation; null when
    *  no chat is in flight. */
@@ -74,10 +73,10 @@ export interface UseMuseResult {
   dailyUsed: number | null;
   dailyLimit: number | null;
   sendMessage: (text: string) => void;
-  openReport: () => void;
-  closeReport: () => void;
-  toggleReport: () => void;
+  /** Set the cited cell target. The caller (App) switches to the Report tab. */
   cite: (target: string) => void;
+  /** Clear the cited target (e.g. when leaving the Report tab by tab click). */
+  clearHighlight: () => void;
   /** Re-run a muse turn — drops it + replays the prior user message. */
   regenerate: (turnIndex: number) => void;
   /** Set up/down feedback on an assistant turn. Toggles off when the same value
@@ -88,7 +87,7 @@ export interface UseMuseResult {
 }
 
 /**
- * Owns Muse view + per-report thread state, backed by the SSE Muse Lambda.
+ * Owns per-report thread state, backed by the SSE Muse Lambda.
  *
  * `enabled` is auth-gated by the caller. When disabled, the hook still runs (so
  * React's hook order stays stable) but it never touches the network and
@@ -114,7 +113,6 @@ export function useMuse({
   enabled: boolean;
 }): UseMuseResult {
   const [thread, setThread] = useState<MuseTurn[]>([]);
-  const [view, setView] = useState<MuseView>('idle');
   const [streamingText, setStreamingText] = useState<string | null>(null);
   const [highlightTarget, setHighlightTarget] = useState<string | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
@@ -146,7 +144,6 @@ export function useMuse({
 
     if (!enabled || !reportId) {
       setThread([]);
-      setView('idle');
       conversationIdRef.current = null;
       setHydrating(false);
       setDailyUsed(null);
@@ -156,7 +153,6 @@ export function useMuse({
 
     let cancelled = false;
     setThread([]);
-    setView('idle');
     conversationIdRef.current = null;
     setHydrating(true);
 
@@ -167,7 +163,6 @@ export function useMuse({
         const turns = syncMessagesToTurns(res.messages);
         conversationIdRef.current = res.conversation_id;
         setThread(turns);
-        setView(turns.length > 0 ? 'chat' : 'idle');
         // Free users get muse_daily_used + muse_daily_limit; Pro/Max omit them.
         setDailyUsed(res.muse_daily_used ?? null);
         setDailyLimit(res.muse_daily_limit ?? null);
@@ -198,7 +193,6 @@ export function useMuse({
       const userTurn: MuseTurn = { speaker: 'user', content: userText, pendingId };
       const placeholder: MuseTurn = { speaker: 'muse', content: '', pendingId };
       setThread(prev => [...prev, userTurn, placeholder]);
-      setView('chat');
       setStreamingText('');
 
       const controller = new AbortController();
@@ -328,31 +322,12 @@ export function useMuse({
     [reportId, enabled, thread, cancelInflight, sendInternal],
   );
 
-  const openReport = useCallback(() => {
-    setHighlightTarget(null);
-    setView('report-open');
-  }, []);
-  const closeReport = useCallback(() => {
-    setView('chat');
-    setHighlightTarget(null);
-  }, []);
-  const toggleReport = useCallback(() => {
-    setView(v => {
-      if (v === 'report-open') {
-        setHighlightTarget(null);
-        return 'chat';
-      }
-      if (v === 'chat') {
-        setHighlightTarget(null);
-        return 'report-open';
-      }
-      return v;
-    });
-  }, []);
-
   const cite = useCallback((target: string) => {
     setHighlightTarget(target);
-    setView('report-open');
+  }, []);
+
+  const clearHighlight = useCallback(() => {
+    setHighlightTarget(null);
   }, []);
 
   const setFeedbackCb = useCallback(
@@ -393,7 +368,6 @@ export function useMuse({
   const clearThread = useCallback(async () => {
     cancelInflight();
     setThread([]);
-    setView('idle');
     setStreamingText(null);
     setHighlightTarget(null);
     setLastError(null);
@@ -416,7 +390,6 @@ export function useMuse({
 
   return {
     enabled,
-    view,
     thread,
     streamingText,
     highlightTarget,
@@ -425,10 +398,8 @@ export function useMuse({
     dailyUsed,
     dailyLimit,
     sendMessage,
-    openReport,
-    closeReport,
-    toggleReport,
     cite,
+    clearHighlight,
     regenerate,
     setFeedback: setFeedbackCb,
     clearThread,

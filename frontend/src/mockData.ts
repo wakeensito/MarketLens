@@ -1,4 +1,4 @@
-import type { PipelineStage } from './types';
+import type { BuildBrief, PipelineStage } from './types';
 import type { ApiReport, ResultJson } from './api';
 
 export const PIPELINE_STAGE_DEFS: Omit<PipelineStage, 'status' | 'elapsedMs'>[] = [
@@ -192,6 +192,106 @@ export const MOCK_HISTORY: ApiReport[] = [
     result_json: { ...MOCK_REPORT, saturation_score: '47', saturation_label: 'Moderately Saturated' },
   },
 ];
+
+/** Mock Build Brief used when VITE_USE_MOCK=true — matches the fitness MOCK_REPORT. */
+export const MOCK_BUILD_BRIEF: BuildBrief = {
+  isTechDominant: true,
+  complexityScore: 58,
+  complexityLabel: 'Moderate',
+  complexityDrivers: [
+    'real-time adaptive logic',
+    'wearable & biometric integrations',
+    'a model that improves per user',
+  ],
+  capabilities: [
+    {
+      name: 'Accounts & sign-in',
+      description: 'Let people create an account and sign back in securely.',
+      buildOrBuy: 'buy',
+      recommendation: 'Use a managed identity provider (Auth0, Cognito, or Clerk). Do not roll your own.',
+    },
+    {
+      name: 'Payments & subscriptions',
+      description: 'Charge for the plan and manage upgrades, renewals, and cancellations.',
+      buildOrBuy: 'buy',
+      recommendation: 'Stripe handles checkout, billing, and subscription state out of the box.',
+    },
+    {
+      name: 'Wearable & health-data sync',
+      description: 'Pull sleep, heart rate, and activity from the devices people already wear.',
+      buildOrBuy: 'build',
+      recommendation: 'Use each vendor SDK (Apple Health, Whoop, Oura); the sync orchestration is yours to build.',
+    },
+    {
+      name: 'Adaptive coaching engine',
+      description: 'Replan each workout from past sessions, recovery, and schedule.',
+      buildOrBuy: 'build',
+      recommendation: 'This is your differentiator. Build it in-house — it is the reason the product exists.',
+    },
+    {
+      name: 'Notifications',
+      description: 'Nudge people back with reminders and session summaries.',
+      buildOrBuy: 'buy',
+      recommendation: 'Use a managed push and email service rather than maintaining your own senders.',
+    },
+    {
+      name: 'Outcome & retention analytics',
+      description: 'See who keeps coming back and whether they are getting results.',
+      buildOrBuy: 'buy',
+      recommendation: 'Start with an off-the-shelf product-analytics tool; instrument retention from day one.',
+    },
+  ],
+  foundation: [
+    {
+      primitive: 'Object storage',
+      why: 'Hold workout media, exported briefs, and anything users upload.',
+      cloudExamples: 'S3 (AWS) / Blob Storage (Azure) / Cloud Storage (GCP)',
+    },
+    {
+      primitive: 'Managed database',
+      why: 'Keep accounts, programs, and session history in one durable place.',
+      cloudExamples: 'RDS or DynamoDB (AWS) / Azure SQL or Cosmos DB / Cloud SQL or Firestore (GCP)',
+    },
+    {
+      primitive: 'Serverless compute',
+      why: 'Run the adaptive logic on demand without managing servers.',
+      cloudExamples: 'Lambda (AWS) / Functions (Azure) / Cloud Functions (GCP)',
+    },
+    {
+      primitive: 'CDN',
+      why: 'Deliver the app and its media fast, everywhere.',
+      cloudExamples: 'CloudFront (AWS) / Front Door (Azure) / Cloud CDN (GCP)',
+    },
+    {
+      primitive: 'Lightweight data pipeline',
+      why: 'Move session data somewhere you can learn from it later.',
+      cloudExamples: 'Kinesis Firehose (AWS) / Event Hubs (Azure) / Pub/Sub + Dataflow (GCP)',
+    },
+  ],
+  mvpScope:
+    'To stand up a localhost MVP: a sign-in screen, a profile, a workout that adapts from one manual input (how hard the last session felt), and a way to log a completed session. Skip wearables, payments, and the learning model until you have proven people come back.',
+  effort: {
+    timeframe: '8 to 14 weeks to a usable MVP',
+    teamShape: '1 to 2 engineers, plus a part-time designer',
+  },
+  technicalRisks: [
+    {
+      title: 'Retention is the real product',
+      description:
+        'Most fitness apps lose people around the 60-day mark. The adaptive engine only matters if people keep opening it, so instrument retention before you spend on growth.',
+    },
+    {
+      title: 'Health data is sensitive',
+      description:
+        'Biometric and health data carry real privacy obligations. Keep the scope tight and get professional guidance before you store it.',
+    },
+    {
+      title: 'Wearable integrations drift',
+      description:
+        'Third-party health APIs change and rate-limit. Treat each integration as something you will maintain, not set and forget.',
+    },
+  ],
+};
 
 export const EXAMPLE_QUERIES = [
   'AI fitness coaching app',

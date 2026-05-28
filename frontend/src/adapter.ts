@@ -1,9 +1,14 @@
-import type { MarketReport, MarketStat, Competitor, MarketGap, RoadmapPhase } from './types';
-import type { ResultJson, BackendCompetitor } from './api';
+import type { MarketReport, MarketStat, Competitor, MarketGap, RoadmapPhase, BuildBrief } from './types';
+import type { ResultJson, BackendCompetitor, BuildBriefJson } from './api';
 
 function parseScore(raw: number | string | undefined): number {
   const n = typeof raw === 'number' ? raw : parseInt(raw ?? '0', 10);
   return isNaN(n) ? 0 : Math.min(100, Math.max(0, n));
+}
+
+function parseBool(raw: boolean | string | undefined): boolean {
+  if (typeof raw === 'boolean') return raw;
+  return String(raw ?? '').trim().toLowerCase() === 'true';
 }
 
 function competitorStrength(c: BackendCompetitor): Competitor['strength'] {
@@ -83,5 +88,34 @@ export function adaptReport(json: ResultJson, idea_text: string): MarketReport {
     roadmap,
     trendSignal:     json.trend_signal ?? '',
     recommendation:  json.recommendation ?? '',
+  };
+}
+
+export function adaptBuildBrief(json: BuildBriefJson): BuildBrief {
+  return {
+    isTechDominant:    parseBool(json.is_tech_dominant),
+    complexityScore:   parseScore(json.complexity_score),
+    complexityLabel:   json.complexity_label ?? '',
+    complexityDrivers: json.complexity_drivers ?? [],
+    capabilities: (json.capabilities ?? []).map(c => ({
+      name:        c.name ?? '',
+      description: c.description ?? '',
+      buildOrBuy:  (c.build_or_buy ?? 'buy').trim().toLowerCase() === 'build' ? 'build' : 'buy',
+      recommendation: c.recommendation ?? '',
+    })),
+    foundation: (json.foundation ?? []).map(f => ({
+      primitive:     f.primitive ?? '',
+      why:           f.why ?? '',
+      cloudExamples: f.cloud_examples ?? '',
+    })),
+    mvpScope: json.mvp_scope ?? '',
+    effort: {
+      timeframe: json.effort_estimate?.timeframe ?? '',
+      teamShape: json.effort_estimate?.team_shape ?? '',
+    },
+    technicalRisks: (json.technical_risks ?? []).map(r => ({
+      title:       r.title ?? '',
+      description: r.description ?? '',
+    })),
   };
 }

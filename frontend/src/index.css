@@ -676,21 +676,6 @@ html { scroll-behavior: smooth; }
   /* No overflow clip — the layoutId animation needs accurate size measurement */
 }
 
-.ws-header-meta {
-  display: contents;
-}
-
-.ws-query-label {
-  font-size: 13px;
-  color: var(--text-muted);
-  font-style: italic;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 260px;
-  flex-shrink: 1;
-}
-
 .ws-header-spacer { flex: 1; }
 
 .nav-badge {
@@ -1833,13 +1818,6 @@ textarea:focus-visible {
   color: var(--accent);
 }
 
-.ai-input__sep {
-  width: 1px;
-  height: 18px;
-  background: var(--border-mid);
-  flex-shrink: 0;
-}
-
 .ai-input__send {
   display: inline-flex;
   align-items: center;
@@ -2146,20 +2124,64 @@ textarea:focus-visible {
 
 .report-title {
   font-family: var(--font-display);
-  font-size: clamp(22px, 3vw, 30px);
-  font-weight: 600;
+  font-size: clamp(20px, 2.4vw, 26px);
+  font-weight: 500;
   letter-spacing: -0.015em;
   color: var(--text);
   margin-bottom: 6px;
-  line-height: 1.2;
+  line-height: 1.25;
 }
 
-.report-oneliner {
-  font-size: 14px;
-  color: var(--text-secondary);
-  line-height: 1.65;
+/* The user's raw idea (often a paragraph) — faithful but secondary, under the
+   AI summary title. Sans = the "person voice"; clamps to 3 lines with a toggle. */
+.report-asked {
   max-width: 640px;
   margin-bottom: 16px;
+}
+.report-asked__label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.report-asked__text {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.report-asked__text.is-expanded {
+  display: block;
+  -webkit-line-clamp: unset;
+  overflow: visible;
+}
+.report-asked__toggle {
+  margin-top: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+.report-asked__toggle:hover { color: var(--text); }
+.report-asked__toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
 }
 
 .report-hero {
@@ -3339,7 +3361,6 @@ textarea:focus-visible {
 /* Narrow phones — hide decorative header chrome, preserve core actions */
 @media (max-width: 480px) {
   .nav-badge        { display: none; }
-  .ws-query-label   { display: none; }
   .stats-grid       { grid-template-columns: 1fr; }
   .brand-wordmark-inner--landing {
     font-size: clamp(20px, 12vw, 34px);
@@ -5085,4 +5106,84 @@ textarea:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px var(--border-focus);
   border-radius: var(--radius-sm);
+}
+
+/* ── Workspace tabs (header-as-tabs) ─────────────────────── */
+.ws-tabs {
+  display: flex;
+  align-items: stretch;
+  height: 52px;
+  flex: 1;
+  min-width: 0;
+  padding-left: 8px;
+}
+.ws-tab {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 52px;
+  padding: 0 14px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  transition: color 0.15s ease;
+}
+.ws-tab:hover { color: var(--text-secondary); }
+.ws-tab.is-active { color: var(--text); }
+.ws-tab:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--border-focus);
+  border-radius: var(--radius-sm);
+}
+.ws-tab-marker {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--signal);
+  border: 1px solid var(--signal-border);
+  border-radius: var(--radius-full);
+  padding: 1px 6px;
+}
+.ws-tab-underline {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 0;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
+  pointer-events: none;
+}
+@media (max-width: 680px) {
+  .ws-tab { padding: 0 10px; font-size: 10px; }
+  .ws-tab-marker { display: none; }
+}
+
+/* ── Query sub-row + tab pane (under the header) ─────────── */
+.ws-query-subrow {
+  font-size: 13px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 20px;
+}
+.ws-pane {
+  display: block;
+}
+
+/* Vertical hairline separating the model dropdown from the nav glyphs */
+.ai-input__sep {
+  width: 1px;
+  height: 18px;
+  background: var(--border-mid);
+  flex-shrink: 0;
 }

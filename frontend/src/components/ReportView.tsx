@@ -1,4 +1,4 @@
-import { useRef, useEffect, useMemo, useState } from 'react';
+import { useRef, useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence, useInView, type Variants } from 'framer-motion';
 import { TrendingUp, Download, Loader2, ArrowUpRight, ChevronDown } from 'lucide-react';
 import type { MarketReport, Competitor, MarketGap, RoadmapPhase } from '../types';
@@ -363,6 +363,27 @@ function ReportViewInner({ report, reportId, onRequestUpgrade, onUpgradeToPro, o
   const [menuOpen, setMenuOpen] = useState(false);
   const [showAllCompetitors, setShowAllCompetitors] = useState(false);
 
+  // Title = the AI summary; the user's raw idea (often a paragraph) becomes a
+  // faithful "what you asked" block beneath it. Falls back to the raw idea as
+  // title only when no summary came back.
+  const summary = report.oneliner.trim();
+  const idea = report.idea.trim();
+  const headline = summary || idea;
+  const showAskedBlock = summary !== '' && idea !== '' && idea !== summary;
+  const [ideaExpanded, setIdeaExpanded] = useState(false);
+  const [ideaClamped, setIdeaClamped] = useState(false);
+  const ideaRef = useRef<HTMLParagraphElement>(null);
+
+  // Only show the toggle when the collapsed text actually overflows 3 lines.
+  // Measured while collapsed; once expanded we keep the last result so the
+  // toggle doesn't vanish.
+  useLayoutEffect(() => {
+    if (ideaExpanded || !showAskedBlock) return;
+    const el = ideaRef.current;
+    if (!el) return;
+    setIdeaClamped(el.scrollHeight > el.clientHeight + 1);
+  }, [idea, ideaExpanded, showAskedBlock]);
+
   // Sort by threat level (dominant → niche). Stable within each tier.
   const sortedCompetitors = useMemo(() => {
     return report.competitors
@@ -492,8 +513,27 @@ function ReportViewInner({ report, reportId, onRequestUpgrade, onUpgradeToPro, o
             <span className="brief-meta-item">{report.vertical}</span>
           </div>
 
-          <h1 className="report-title">{report.idea}</h1>
-          <p className="report-oneliner">{report.oneliner}</p>
+          <h1 className="report-title">{headline}</h1>
+          {showAskedBlock && (
+            <div className="report-asked">
+              <span className="report-asked__label">What you asked</span>
+              <p
+                ref={ideaRef}
+                className={`report-asked__text${ideaExpanded ? ' is-expanded' : ''}`}
+              >
+                {report.idea}
+              </p>
+              {ideaClamped && (
+                <button
+                  type="button"
+                  className="report-asked__toggle"
+                  onClick={() => setIdeaExpanded(v => !v)}
+                >
+                  {ideaExpanded ? 'Show less' : 'Show more'}
+                </button>
+              )}
+            </div>
+          )}
 
           <div className="verdict-row">
             <span className={`verdict-badge verdict-badge--${variant}`}>{badgeText}</span>

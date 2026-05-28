@@ -384,81 +384,6 @@
   border-color: var(--border-mid);
 }
 
-/* ────────────────────────────────────────────────────────────
-   Saturation toggle mark — the ▬▬ glyph (used in AnimatedAiInput toolbar)
-   ──────────────────────────────────────────────────────────── */
-
-.muse-toggle-mark {
-  display: inline-flex;
-  flex-direction: column;
-  gap: 3px;
-  width: 14px;
-}
-
-.muse-toggle-mark__bar {
-  height: 3px;
-  border-radius: 1px;
-  background: currentcolor;
-}
-
-.muse-toggle-mark__bar--low  { width: 100%; }
-.muse-toggle-mark__bar--high { width: 60%;  }
-
-/* ────────────────────────────────────────────────────────────
-   AnimatedAiInput muse-toggle slot
-   ──────────────────────────────────────────────────────────── */
-
-.ai-input__muse-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: var(--radius-lg);
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-
-@media (hover: hover) {
-  .ai-input__muse-toggle:hover {
-    background: var(--accent-light);
-    border-color: var(--accent-border);
-    color: var(--text);
-  }
-}
-
-.ai-input__muse-toggle:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.ai-input__muse-toggle-inner {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.ai-input__muse-glyph {
-  width: 16px;
-  height: 16px;
-}
-
-/* ────────────────────────────────────────────────────────────
-   Workspace integration — wrapper around ReportView
-   ──────────────────────────────────────────────────────────── */
-
-.muse-report-surface {
-  display: block;
-}
-
-.muse-report-surface--open {
-  position: relative;
-  z-index: 1;
-}
 
 /* ── Cell pulse — fires when a citation routes here ─────── */
 
@@ -573,4 +498,56 @@
   .muse-followup {
     font-size: 0.9375rem;
   }
+}
+
+/* ────────────────────────────────────────────────────────────
+   Saturation toggle mark — the ▬▬ glyph (Report destination glyph)
+   ──────────────────────────────────────────────────────────── */
+
+.muse-toggle-mark {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 14px;
+}
+
+.muse-toggle-mark__bar {
+  height: 3px;
+  border-radius: 1px;
+  background: currentcolor;
+}
+
+.muse-toggle-mark__bar--low  { width: 100%; }
+.muse-toggle-mark__bar--high { width: 60%;  }
+
+/* ────────────────────────────────────────────────────────────
+   AnimatedAiInput nav glyphs — jump to another workspace surface
+   ──────────────────────────────────────────────────────────── */
+
+.ai-input__nav-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+@media (hover: hover) {
+  .ai-input__nav-glyph:hover {
+    background: var(--accent-light);
+    border-color: var(--accent-border);
+    color: var(--text);
+  }
+}
+
+.ai-input__nav-glyph:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
