@@ -721,7 +721,9 @@ export default function App() {
                   >
                     {report && reportId && (
                       <>
-                        {query && <div className="ws-query-subrow">"{query}"</div>}
+                        {activeTab !== 'report' && (report.oneliner.trim() || query) && (
+                          <div className="ws-query-subrow">{report.oneliner.trim() || query}</div>
+                        )}
 
                         {activeTab === 'report' && (
                           <div
