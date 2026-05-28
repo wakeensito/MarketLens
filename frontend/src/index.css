@@ -3317,7 +3317,6 @@ textarea:focus-visible {
 /* Narrow phones — hide decorative header chrome, preserve core actions */
 @media (max-width: 480px) {
   .nav-badge        { display: none; }
-  .ws-query-label   { display: none; }
   .stats-grid       { grid-template-columns: 1fr; }
   .brand-wordmark-inner--landing {
     font-size: clamp(20px, 12vw, 34px);
