@@ -308,6 +308,12 @@ export default function App() {
     muse.cite(target);
   }, [muse]);
 
+  const handleTabChange = useCallback((tab: WorkspaceTab) => {
+    userChangedTabRef.current = true;
+    if (tab === 'report') muse.clearHighlight();
+    setActiveTab(tab);
+  }, [muse]);
+
   const onSubmit = useCallback((val: string) => {
     const text = val.trim();
     if (text.length <= 4) return;
@@ -630,11 +636,7 @@ export default function App() {
               {showTabs ? (
                 <WorkspaceTabs
                   active={activeTab}
-                  onChange={tab => {
-                    userChangedTabRef.current = true;
-                    if (tab === 'report') muse.clearHighlight();
-                    setActiveTab(tab);
-                  }}
+                  onChange={handleTabChange}
                   isPaid={isPaid}
                   isAuthenticated={auth.isAuthenticated}
                 />
@@ -849,6 +851,8 @@ export default function App() {
                   }
                   compact
                   disabled={museCapped}
+                  activeTab={activeTab}
+                  onNavigate={handleTabChange}
                 />
               </motion.div>
             )}
