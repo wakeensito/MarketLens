@@ -5139,6 +5139,7 @@ textarea:focus-visible {
   height: 2px;
   background: var(--accent);
   border-radius: 2px 2px 0 0;
+  pointer-events: none;
 }
 @media (max-width: 680px) {
   .ws-tab { padding: 0 10px; font-size: 10px; }

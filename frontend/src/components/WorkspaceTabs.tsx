@@ -24,7 +24,7 @@ interface Props {
 }
 
 export function WorkspaceTabs({ active, onChange, isPaid, isAuthenticated }: Props) {
-  const refs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const refs = useRef<Partial<Record<WorkspaceTab, HTMLButtonElement | null>>>({});
   const reduceMotion = useReducedMotion();
 
   const markerFor = (id: WorkspaceTab): string | null => {
