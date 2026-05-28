@@ -87,7 +87,7 @@ export interface UseMuseResult {
 }
 
 /**
- * Owns Muse view + per-report thread state, backed by the SSE Muse Lambda.
+ * Owns per-report thread state, backed by the SSE Muse Lambda.
  *
  * `enabled` is auth-gated by the caller. When disabled, the hook still runs (so
  * React's hook order stays stable) but it never touches the network and

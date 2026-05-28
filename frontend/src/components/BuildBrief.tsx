@@ -117,14 +117,14 @@ function Invite({
 }) {
   return (
     <div className="bb-invite">
-      <div className="bb-invite-head">
-        {locked && (
+      {locked && (
+        <div className="bb-invite-head">
           <span className="bb-pro">
             <Lock size={10} strokeWidth={2.5} aria-hidden />
             Pro
           </span>
-        )}
-      </div>
+        </div>
+      )}
       <h3 className="bb-headline">
         {locked ? 'See what it would take to build this.' : 'Turn this idea into a build brief.'}
       </h3>
