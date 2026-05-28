@@ -58,3 +58,47 @@ export interface MarketReport {
   trendSignal: string;
   recommendation: string;
 }
+
+/* ── Build Brief (Pro) ───────────────────────────────────────
+   A plain-English, founder-altitude build deliverable derived
+   from a completed report. Vendor-neutral by design. */
+
+export type BuildOrBuy = 'build' | 'buy';
+
+export interface BuildBriefCapability {
+  name: string;
+  description: string;
+  /** "build" = your work / differentiator; "buy" = an off-the-shelf vendor solves it. */
+  buildOrBuy: BuildOrBuy;
+  recommendation: string;
+}
+
+export interface BuildBriefPrimitive {
+  primitive: string;
+  why: string;
+  /** Example cross-cloud mapping, e.g. "S3 (AWS) / Blob Storage (Azure) / Cloud Storage (GCP)". */
+  cloudExamples: string;
+}
+
+export interface BuildBriefRisk {
+  title: string;
+  description: string;
+}
+
+export interface BuildBriefEffort {
+  timeframe: string;
+  teamShape: string;
+}
+
+export interface BuildBrief {
+  /** false → low-tech idea; the brief degrades to website + payments rather than inventing a stack. */
+  isTechDominant: boolean;
+  complexityScore: number;
+  complexityLabel: string;
+  complexityDrivers: string[];
+  capabilities: BuildBriefCapability[];
+  foundation: BuildBriefPrimitive[];
+  mvpScope: string;
+  effort: BuildBriefEffort;
+  technicalRisks: BuildBriefRisk[];
+}

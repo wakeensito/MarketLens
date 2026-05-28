@@ -16,6 +16,7 @@ import { useAnalysis } from './hooks/useAnalysis';
 import { useAuthContext } from './hooks/useAuth';
 import { useBilling } from './hooks/useBilling';
 import { useMuse } from './hooks/useMuse';
+import { useBuildBrief } from './hooks/useBuildBrief';
 import { MuseThread } from './components/muse/MuseThread';
 import { MuseEmptyLine } from './components/muse/MuseEmptyLine';
 import './components/muse/muse.css';
@@ -74,6 +75,11 @@ export default function App() {
     muse.dailyLimit != null &&
     muse.dailyUsed != null &&
     muse.dailyUsed >= muse.dailyLimit;
+
+  // Build Brief is plan-gated (free/anon → locked upsell) and lives inside the
+  // report. The hook is lifted here so ReportView stays a pure presentational
+  // component, mirroring the Muse integration discipline.
+  const buildBrief = useBuildBrief({ reportId, plan: userPlan });
 
   // When a citation routes the user to report-open with a target cell, scroll
   // smoothly to the matching `[data-muse-cell]` element and pulse it once.
@@ -678,6 +684,7 @@ export default function App() {
                           onFeedback={async (rating, comment) => {
                             await submitFeedback(reportId, rating, comment);
                           }}
+                          buildBrief={buildBrief}
                         />
                       );
 

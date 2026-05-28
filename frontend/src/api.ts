@@ -76,6 +76,47 @@ export interface ApiReport {
   gsi1sk?: string;
 }
 
+/* ── Build Brief (Pro) ───────────────────────────────────────
+   Flat string-tolerant shapes mirroring result_json conventions
+   (string-number scores, object arrays) so the adapter pattern
+   carries over. */
+
+export interface BuildBriefCapabilityJson {
+  name: string;
+  description: string;
+  build_or_buy: string;
+  recommendation: string;
+}
+
+export interface BuildBriefPrimitiveJson {
+  primitive: string;
+  why: string;
+  cloud_examples: string;
+}
+
+export interface BuildBriefRiskJson {
+  title: string;
+  description: string;
+}
+
+export interface BuildBriefJson {
+  is_tech_dominant: boolean | string;
+  complexity_score: number | string;
+  complexity_label: string;
+  complexity_drivers: string[];
+  capabilities: BuildBriefCapabilityJson[];
+  foundation: BuildBriefPrimitiveJson[];
+  mvp_scope: string;
+  effort_estimate: { timeframe: string; team_shape: string };
+  technical_risks: BuildBriefRiskJson[];
+}
+
+export interface BuildBriefResponse {
+  /** null when the report has no brief generated yet (some backends 404 instead). */
+  build_brief_json: BuildBriefJson | null;
+  build_brief_generated_at: string | null;
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const controller = new AbortController();
   const timeoutMs = 20_000;
@@ -178,6 +219,18 @@ export async function submitFeedback(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Fetch a stored Build Brief for a completed report. 404/null → not generated yet. */
+export function getBuildBrief(report_id: string): Promise<BuildBriefResponse> {
+  return request<BuildBriefResponse>(`/api/reports/${report_id}/build-brief`);
+}
+
+/** Generate (or regenerate) the Build Brief, store it, and return it. */
+export function generateBuildBrief(report_id: string): Promise<BuildBriefResponse> {
+  return request<BuildBriefResponse>(`/api/reports/${report_id}/build-brief`, {
+    method: 'POST',
+  });
 }
 
 export type BillingPlan = 'pro' | 'pro_annual' | 'max' | 'max_annual';
