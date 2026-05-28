@@ -84,6 +84,8 @@ export default function App() {
   const buildBrief = useBuildBrief({ reportId, plan: userPlan });
 
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('report');
+  // Anything non-free (pro / max / admin) unlocks the Build Brief tab; mirrors
+  // useBuildBrief's PAID_PLANS gate so the tab marker and the pane agree.
   const isPaid = userPlan !== '' && userPlan !== 'free';
   const showTabs = screen === 'report' && !!report && !!reportId;
 
@@ -93,17 +95,23 @@ export default function App() {
   // Reset to the Report tab whenever the active report changes.
   const lastReportTabRef = useRef<string | null>(null);
   const museHydratedTabRef = useRef<string | null>(null);
+  // Set once the user picks a tab themselves, so the post-hydration auto-default
+  // below never overrides an explicit choice made during hydration.
+  const userChangedTabRef = useRef(false);
   useEffect(() => {
     if (reportId !== lastReportTabRef.current) {
       lastReportTabRef.current = reportId;
       museHydratedTabRef.current = null;
+      userChangedTabRef.current = false;
       setActiveTab('report');
     }
   }, [reportId]);
-  // After Muse hydration settles, default to Muse if the report already has a thread.
+  // After Muse hydration settles, default to Muse if the report already has a
+  // thread — unless the user already chose a tab during hydration.
   useEffect(() => {
     if (!reportId || muse.hydrating || museHydratedTabRef.current === reportId) return;
     museHydratedTabRef.current = reportId;
+    if (userChangedTabRef.current) return;
     if (muse.thread.length > 0) setActiveTab('muse');
   }, [reportId, muse.hydrating, muse.thread.length]);
   /* eslint-enable react-hooks/set-state-in-effect */
@@ -623,6 +631,7 @@ export default function App() {
                 <WorkspaceTabs
                   active={activeTab}
                   onChange={tab => {
+                    userChangedTabRef.current = true;
                     if (tab === 'report') muse.clearHighlight();
                     setActiveTab(tab);
                   }}
