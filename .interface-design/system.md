@@ -102,19 +102,38 @@ Plinths leans sharper than most warm-toned UIs. Rounded-full is exceptional.
 ## Component patterns
 
 ### Input bar (`AnimatedAiInput`)
-Two-row layout: textarea on top, toolbar on the bottom. Toolbar has a model dropdown on the left and a Send arrow on the right. When the muse toggle applies (`museMode === 'chat' | 'report-open'`), a separator + toggle button render between them — otherwise the slot is empty (no disabled placeholders, no ghost-feature paperclip). The bar morphs between full (landing/empty workspace) and compact (analysis/report) via `layoutId="ml-input"`. Both variants share the same toolbar order.
+Two-row layout: textarea on top, toolbar on the bottom. Toolbar-left has the model dropdown; toolbar-right has the Send arrow. On a report (where the compact composer is the Muse composer), the toolbar-left also renders, after a separator, the **navigation glyphs** (see *Navigation glyphs* below) — the two surfaces you're not currently on. The bar morphs between full (landing/empty workspace) and compact (analysis/report) via `layoutId="ml-input"`. Both variants share the same toolbar order.
 
 ### Legal pages
 38rem max-width column, left-aligned in a centered shell. Headings in Plex Serif, body in Plex Sans, metadata in Plex Mono. No horizontal rules in the body flow — whitespace is the divider. Back-to-top sits at the document close with light treatment (no divider above, no hover pill).
 
-### Cards (report, plan)
-Same surface treatment across all cards: `--surface` background, `--border` border, `--radius-xl` corners, symmetrical padding. Internal structure varies by content; surface chrome does not.
+### Cards (report, plan, brief)
+Same surface treatment across all cards: `--surface` background, `--border` border, symmetrical padding. Report and Build Brief cards use `--radius-lg` corners; modals and the main input bar use the larger `--radius-xl` / input radius. Internal structure varies by content; surface chrome does not.
+
+### Workspace navigation — tabs + nav glyphs (added 2026-05-28)
+
+A report workspace has three surfaces: **Report · Build Brief · Muse**, shown one at a time (single-attention; no split-screen). Two navigations, one state (`activeTab`, owned in `App.tsx`):
+
+- **Header tabs** (`WorkspaceTabs`) — the header row is the tab bar (mono uppercase labels; an animated `--accent` underline that slides via a `layoutId` *tween*, not a spring). Always shows all three. Gated tabs carry a small marker — `Pro` on Build Brief for free/anon, `Sign in` on Muse for anon — and open to a calm upsell pane, never a blurred teaser.
+- **Toolbar nav glyphs** (in the composer) — an always-on quick-switch shortcut; see *Navigation glyphs* under Muse patterns.
+
+Both routes call one shared `handleTabChange`, so they cannot diverge. Default tab on opening a report: Report for a fresh one; Muse if a saved thread exists. Tab/pane swaps are a plain opacity fade — no morph. Each pane is a `role="tabpanel"` (`.ws-pane`) wired to its tab.
+
+### Build Brief (Pro) — the build read
+
+A Pro deliverable derived from a completed report; lives in its own tab/pane. States:
+
+- **Locked (free/anon) / Idle (Pro, not generated):** a warm **invitation card** — `--signal-light` background + `--signal-border` (echoes the recommendation block), a serif headline, and a primary CTA (`Upgrade to Pro` / `Generate build brief`). Present and inviting, never a blurred teaser.
+- **Generating:** a content-shaped skeleton (no lingering spinner).
+- **Ready:** the brief — a complexity + effort strip; a **build/buy pill** where **BUILD carries `--signal`** ("the work that's yours") and **BUY stays neutral** (a vendor solved it); a vendor-neutral **foundation** list with cross-cloud mappings in mono (`S3 / Blob / Cloud Storage`, no vendor logos or colors); MVP scope; technical risks (mono `R1…` index in `--signal`); a fixed **`FOUNDATIONS & LIMITS`** block (product-voice principles + the "AI isn't always right, get professional review" limit); and an action row (`copy as markdown · regenerate`).
+
+Generation is synchronous — a deliverable, not a chat reply. Type roles hold: serif for the conclusion-y headlines, mono for labels / data / cloud mappings, sans for prose.
 
 ---
 
 ## Muse patterns (locked 2026-05-12)
 
-These decisions sit on top of the structural locks in CLAUDE.md (inline thread, report-as-toggle, no split-screen, plain view-swap with no morph).
+These decisions sit on top of the structural locks in CLAUDE.md (inline thread, no split-screen, single-attention, plain view-swap with no morph). Navigation among Report · Build Brief · Muse is via the header tabs + toolbar nav glyphs (see *Workspace navigation*); the earlier single "report-as-toggle" has been superseded by that three-surface model.
 
 **Register:** "prestigious LLM" — read as document Q/A pairs, not as a chat exchange. Anti-references: iMessage bubbles, ChatGPT speaker labels, "Claude is typing…" dots, avatar bubbles, right-aligned user turns. Reference: Perplexity, executed in the Pale Intelligence palette.
 
@@ -163,7 +182,7 @@ Pill style:
 - color: `--signal` · background: `--signal-light` · border: `--signal-border`
 - radius: `--radius-sm` (square; pills not capsules)
 - hover: background → `color-mix(in oklch, var(--signal) 14%, transparent)`, border stronger
-- on tap: view flips to `report-open`, the matching `[data-muse-cell="<target>"]` element scrolls into view (`block: center`, smooth), then pulses once (1.6s ring shadow in `--signal-light`). The integration owns the routing — `ReportView` just emits stable `data-muse-cell` attributes on competitor / gap / roadmap items (`competitor-N` / `gap-N` / `roadmap-N`, 1-indexed).
+- on tap: the active surface switches to the **Report tab**, the matching `[data-muse-cell="<target>"]` element scrolls into view (`block: center`, smooth), then pulses once (1.6s ring shadow in `--signal-light`). The integration owns the routing — `ReportView` just emits stable `data-muse-cell` attributes on competitor / gap / roadmap items (`competitor-N` / `gap-N` / `roadmap-N`, 1-indexed).
 
 Model output uses `[[target|Label]]` syntax — renderer parses these inline. Stream-safe: partial tokens degrade to plain text and snap into pills on `]]`.
 
@@ -237,15 +256,17 @@ A sticky banner appears at the top of the report column **only when the user arr
 
 Style: `--surface` bg, `--accent-border` border, `--radius-lg`. Sticky `top: 1rem` so it stays visible during scroll. State management: opening via toolbar / closing via toolbar both clear `highlightTarget` so the banner state stays honest.
 
-### Toggle glyph — destination semantics
+### Navigation glyphs — destination semantics (updated 2026-05-28)
 
-The toggle slot in `AnimatedAiInput`'s toolbar appears only when there's a real destination. The icon always represents *where the tap will take you*, not the action being performed:
+The workspace has three surfaces (Report · Build Brief · Muse) navigated by **header tabs** (primary, labeled — see *Workspace navigation*) and by **toolbar nav glyphs** in `AnimatedAiInput` (a quiet, in-context shortcut). Both drive the same `activeTab` via one shared `handleTabChange`, so they can never diverge.
 
-- **Empty / pre-chat:** **no toggle, no separator** — the slot is absent. No disabled paperclip, no "coming soon" placeholder. Ghost-feature affordances mislead.
-- **Chat active:** `▬▬` mini-saturation-bar (14px wide), `--text-secondary` — tap opens the report (echoes the report's saturation gauge, "where you'll go is the document")
-- **Report open:** chat-bubble glyph (lucide `MessageSquare`, 16px, `--text-secondary`) — tap returns to the conversation. **Never `✕`** — close-style icons read as "delete" first.
+The glyphs are **always-on** while the composer shows (signed-in, on a report): the toolbar renders a glyph for each of the *other two* surfaces — always exactly two. The icon represents *where the tap will take you*, not the action being performed:
 
-The button is a plain `<button>` with the appropriate glyph inside — no `layoutId`, no spring morph. Switching between chat and report-open is a clean mount/unmount of the main panel.
+- **Report** → `▬▬` mini-saturation mark (`SaturationToggleMark`, 14px) — echoes the report's saturation gauge.
+- **Build Brief** → lucide `Blocks` (16px) — matches the Build Brief CTA icon.
+- **Muse** → lucide `MessageSquare` (16px). **Never `✕`** — close-style icons read as "delete" first.
+
+All `--text-secondary`; each is a plain `<button class="ai-input__nav-glyph">` with a subtle hover container and a `title` / `aria-label`. No `layoutId`, no spring. (This replaces the earlier single `museMode` toggle, which appeared only when chat was active — superseded once the three-surface tab model landed. The active surface never shows its own glyph.)
 
 ### Empty state
 
@@ -264,14 +285,14 @@ MUSE · upgrade to chat with this report      [ see plans ]
 
 ### Per-report scoping
 
-Threads are keyed by `reportId` and persisted to `localStorage` under `plinths-muse-thread-v2:{reportId}`. Switching reports in the sidebar surfaces each report's own conversation. Opening a report that already has a thread defaults to chat-view (CLAUDE.md locked behavior).
+Threads are keyed by `reportId` and persisted server-side (the Muse SSE Lambda + DynamoDB; `useMuse` hydrates the thread on report open). Switching reports in the sidebar surfaces each report's own conversation. Opening a report that already has a thread defaults to the **Muse tab** (CLAUDE.md locked behavior); otherwise the Report tab.
 
 ---
 
 ## Reference
 
-- Working preview: Muse is wired into the real workspace behind a flag. Append `?muse=1` to any report URL, or set `VITE_MUSE_PREVIEW=true`. `?muse=demo` opens with a pre-filled thread.
-- Source: `frontend/src/hooks/useMuse.ts`, `frontend/src/components/muse/*`, integration points in `frontend/src/App.tsx` and `frontend/src/components/AnimatedAiInput.tsx`
+- Muse is live in the workspace (no preview flag). It POSTs to `/api/muse/stream` and consumes the live SSE stream.
+- Source: `frontend/src/hooks/useMuse.ts`, `frontend/src/hooks/useBuildBrief.ts`, `frontend/src/components/muse/*`, `frontend/src/components/WorkspaceTabs.tsx`, `frontend/src/components/BuildBrief.tsx`, integration in `frontend/src/App.tsx` and `frontend/src/components/AnimatedAiInput.tsx`
 - Token definitions: `frontend/src/index.css`
 - Animation presets: `frontend/src/motion.ts`
 - CLAUDE.md Muse section: top-level Muse status and constraints
