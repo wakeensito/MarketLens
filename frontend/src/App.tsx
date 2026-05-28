@@ -298,7 +298,7 @@ export default function App() {
   const handleCite = useCallback((target: string) => {
     setActiveTab('report');
     muse.cite(target);
-  }, [muse.cite]);
+  }, [muse]);
 
   const onSubmit = useCallback((val: string) => {
     const text = val.trim();
