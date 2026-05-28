@@ -21,8 +21,6 @@ export interface UseBuildBriefResult {
   brief: BuildBrief | null;
   generatedAt: string | null;
   error: string | null;
-  /** True when a regenerate hit the soft daily cap (429). The prior brief, if any, stays visible. */
-  capReached: boolean;
   generate: () => void;
   dismissError: () => void;
 }
@@ -46,7 +44,6 @@ export function useBuildBrief({
   const [brief, setBrief] = useState<BuildBrief | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [capReached, setCapReached] = useState(false);
 
   /** Bumps on every reset/regenerate so a late async result can't write stale state. */
   const generationRef = useRef(0);
@@ -57,7 +54,6 @@ export function useBuildBrief({
     generationRef.current += 1;
     const gen = generationRef.current;
     setError(null);
-    setCapReached(false);
     setBrief(null);
     setGeneratedAt(null);
 
@@ -105,7 +101,6 @@ export function useBuildBrief({
     generationRef.current += 1;
     const gen = generationRef.current;
     setError(null);
-    setCapReached(false);
     setStatus('generating');
 
     (async () => {
@@ -130,12 +125,6 @@ export function useBuildBrief({
         }
       } catch (e) {
         if (generationRef.current !== gen) return;
-        if (e instanceof ApiError && e.status === 429) {
-          // Soft daily cap — keep any prior brief visible, surface calmly.
-          setCapReached(true);
-          setStatus(brief ? 'ready' : 'idle');
-          return;
-        }
         setStatus('error');
         const msg =
           e instanceof ApiError && e.message
@@ -144,9 +133,9 @@ export function useBuildBrief({
         setError(msg);
       }
     })();
-  }, [reportId, paid, brief]);
+  }, [reportId, paid]);
 
   const dismissError = useCallback(() => setError(null), []);
 
-  return { status, brief, generatedAt, error, capReached, generate, dismissError };
+  return { status, brief, generatedAt, error, generate, dismissError };
 }
