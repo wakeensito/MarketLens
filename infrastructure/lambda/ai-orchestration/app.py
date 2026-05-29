@@ -31,6 +31,9 @@ logger = Logger()
 tracer = Tracer()
 metrics = Metrics()
 
+import scoring as _scoring
+_scoring.logger = logger  # use the powertools logger in prod; scoring.py's stdlib logger is the test fallback
+
 # ── Token usage tracking ──
 # Per-model cost rates (USD per 1M tokens) — keep in sync with pricing
 _MODEL_COST_PER_1M = {
