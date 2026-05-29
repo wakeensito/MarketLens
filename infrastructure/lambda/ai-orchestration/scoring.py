@@ -5,6 +5,7 @@ Extracted from app.py so it can be unit-tested without importing the Lambda
 """
 import math
 import logging
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -128,12 +129,11 @@ _SOURCE_LABELS = {
 
 
 def _source_label(url: str) -> str:
-    from urllib.parse import urlparse
     host = (urlparse(url).hostname or "").lower()
     if host.startswith("www."):
         host = host[4:]
     for domain, label in _SOURCE_LABELS.items():
-        if host.endswith(domain):
+        if host == domain or host.endswith("." + domain):
             return label
     return host.split(".")[0].title() if host else "Source"
 
