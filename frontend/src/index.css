@@ -5620,3 +5620,11 @@ textarea:focus-visible {
 .gap-rating--high   .gap-rating-word { color: var(--success); }
 .gap-rating--medium .gap-rating-word { color: var(--warning); }
 .gap-rating--low    .gap-rating-word { color: var(--text-muted); }
+
+.memo-preview-status {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+  padding: 24px 0;
+}
+.memo-preview-status--error { color: var(--danger); }
