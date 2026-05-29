@@ -25,14 +25,14 @@ from aws_lambda_powertools.metrics import MetricUnit
 from aws_durable_execution_sdk_python import durable_execution, DurableContext
 from botocore.exceptions import BotoCoreError, ClientError
 
+import scoring as _scoring
 from scoring import _clamp, _safe_number, score
 
 logger = Logger()
 tracer = Tracer()
 metrics = Metrics()
 
-import scoring as _scoring
-_scoring.logger = logger  # use the powertools logger in prod; scoring.py's stdlib logger is the test fallback
+_scoring.logger = logger  # use powertools logger in prod; scoring.py's stdlib logger is the test fallback
 
 # ── Token usage tracking ──
 # Per-model cost rates (USD per 1M tokens) — keep in sync with pricing
