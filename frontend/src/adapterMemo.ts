@@ -22,10 +22,18 @@ function asTier(v: unknown): EvidenceTier {
 function asSeverity(v: unknown): GapSeverity {
   return SEVERITIES.includes(v as GapSeverity) ? (v as GapSeverity) : 'medium';
 }
+// Only allow http(s) links to reach an href. Drops javascript:/data:/etc.
+// schemes (defense-in-depth — these URLs originate from search results / the
+// LLM pipeline, which should only ever yield http(s), but the renderer puts
+// them straight into <a href>, so we gate the scheme here).
+function safeUrl(raw: unknown): string {
+  const url = String(raw ?? '').trim();
+  return /^https?:\/\//i.test(url) ? url : '';
+}
 function asSources(arr: SourceJson[] | undefined): Source[] {
   if (!Array.isArray(arr)) return [];
   return arr
-    .map(s => ({ label: String(s?.label ?? ''), url: String(s?.url ?? '') }))
+    .map(s => ({ label: String(s?.label ?? ''), url: safeUrl(s?.url) }))
     .filter(s => s.url);
 }
 
@@ -93,7 +101,7 @@ export function adaptMemo(json: ResultJson, ideaText: string): MarketMemo {
       weakness: c.weakness ?? '',
       position,
       fundingStage: c.funding_stage ?? 'unknown',
-      url: c.url ?? '',
+      url: safeUrl(c.url),
     };
   });
 
@@ -115,7 +123,7 @@ export function adaptMemo(json: ResultJson, ideaText: string): MarketMemo {
           .filter(q => q && q.quote)
           .map(q => ({
             quote: String(q.quote),
-            source: { label: String(q.source?.label ?? ''), url: String(q.source?.url ?? '') },
+            source: { label: String(q.source?.label ?? ''), url: safeUrl(q.source?.url) },
           }))
       : [],
   }));
