@@ -108,10 +108,12 @@ function buildBriefMarkdown(brief: BuildBrief, idea: string): string {
 
 function Invite({
   locked,
+  freeTaste,
   onGenerate,
   onUpgrade,
 }: {
   locked?: boolean;
+  freeTaste?: boolean;
   onGenerate?: () => void;
   onUpgrade?: () => void;
 }) {
@@ -138,10 +140,17 @@ function Invite({
           Upgrade to Pro
         </button>
       ) : (
-        <button type="button" className="bb-cta" onClick={onGenerate}>
-          <Blocks size={14} strokeWidth={2} aria-hidden />
-          Generate build brief
-        </button>
+        <>
+          {freeTaste && (
+            <div className="bb-eyebrow" style={{ marginBottom: '0.75rem' }}>
+              Your free build brief · 1 sample
+            </div>
+          )}
+          <button type="button" className="bb-cta" onClick={onGenerate}>
+            <Blocks size={14} strokeWidth={2} aria-hidden />
+            Generate build brief
+          </button>
+        </>
       )}
     </div>
   );
@@ -354,7 +363,7 @@ function BriefBody({
    ────────────────────────────────────────────────────────── */
 
 export default function BuildBriefPane({ buildBrief, idea, onUpgrade }: Props) {
-  const { status, brief, generatedAt, error, generate, dismissError } = buildBrief;
+  const { status, brief, generatedAt, error, freeTaste, generate, dismissError } = buildBrief;
 
   if (status === 'locked') {
     return (
@@ -367,7 +376,7 @@ export default function BuildBriefPane({ buildBrief, idea, onUpgrade }: Props) {
   if (status === 'idle') {
     return (
       <div className="bb-pane">
-        <Invite onGenerate={generate} />
+        <Invite freeTaste={freeTaste} onGenerate={generate} />
       </div>
     );
   }

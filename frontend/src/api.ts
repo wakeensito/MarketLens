@@ -115,6 +115,8 @@ export interface BuildBriefResponse {
   /** null when the report has no brief generated yet (some backends 404 instead). */
   build_brief_json: BuildBriefJson | null;
   build_brief_generated_at: string | null;
+  /** True only when the user is free AND has already spent their one lifetime sample. */
+  free_brief_used?: boolean;
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
