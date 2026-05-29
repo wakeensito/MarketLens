@@ -27,6 +27,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 import scoring as _scoring
 from scoring import _clamp, _safe_number, score, _top_sources
+from assembly import assemble_v2
 
 logger = Logger()
 tracer = Tracer()
@@ -1147,16 +1148,8 @@ Include 2-4 gaps and 3-4 roadmap phases. quote_indexes must only use indexes sho
 def assemble(
     parsed: dict, search_results: dict, analysis: dict, scores: dict, summary: dict
 ) -> dict:
-    """Combine all results into the final report JSON."""
-    return {
-        "vertical": parsed.get("industry", ""),
-        "geography": parsed.get("geography", ""),
-        "business_model": parsed.get("business_model", ""),
-        **scores,
-        **summary,
-        "competitors": analysis.get("competitor_analysis", []),
-        "market_size": search_results.get("market_size_tam_usd") or "Unknown",
-    }
+    """Combine all results into the final report JSON (v2, additive)."""
+    return assemble_v2(parsed, search_results, analysis, scores, summary)
 
 
 # ---------------------------------------------------------------------------
