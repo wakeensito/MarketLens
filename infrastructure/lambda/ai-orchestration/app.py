@@ -26,7 +26,7 @@ from aws_durable_execution_sdk_python import durable_execution, DurableContext
 from botocore.exceptions import BotoCoreError, ClientError
 
 import scoring as _scoring
-from scoring import _clamp, _safe_number, score
+from scoring import _clamp, _safe_number, score, _top_sources
 
 logger = Logger()
 tracer = Tracer()
@@ -865,6 +865,9 @@ RULES:
             "trends": result.get("trends", []),
             "user_pain_points": result.get("user_pain_points", []),
             "wiki_enrichment": wiki_enrichment,
+            "market_sources": _top_sources(market_size, n=2),
+            "trend_sources": _top_sources(trend_results, n=1),
+            "pain_sources": _top_sources(pain_points, n=4),
         }
     except json.JSONDecodeError:
         logger.warning(
@@ -934,6 +937,9 @@ RULES:
             ),
             "market_age_years": _safe_number(result.get("market_age_years"), default=5),
             "trends": result.get("trends", []),
+            "market_sources": [],
+            "trend_sources": [],
+            "pain_sources": [],
         }
     except json.JSONDecodeError:
         return {
@@ -942,6 +948,9 @@ RULES:
             "market_growth_rate_pct": None,
             "market_age_years": 5,
             "trends": [],
+            "market_sources": [],
+            "trend_sources": [],
+            "pain_sources": [],
         }
 
 

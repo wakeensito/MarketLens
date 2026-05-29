@@ -113,6 +113,46 @@ def _opportunity_receipt(tam_usd, growth_pct, num_gaps: int) -> str:
     return s[0].upper() + s[1:] + "."
 
 
+# Maps known research/source domains to clean display labels.
+_SOURCE_LABELS = {
+    "grandviewresearch.com": "Grand View Research",
+    "statista.com": "Statista",
+    "mordorintelligence.com": "Mordor Intelligence",
+    "fortunebusinessinsights.com": "Fortune Business Insights",
+    "techcrunch.com": "TechCrunch",
+    "crunchbase.com": "Crunchbase",
+    "reddit.com": "Reddit",
+    "g2.com": "G2",
+    "trustpilot.com": "Trustpilot",
+}
+
+
+def _source_label(url: str) -> str:
+    from urllib.parse import urlparse
+    host = (urlparse(url).hostname or "").lower()
+    if host.startswith("www."):
+        host = host[4:]
+    for domain, label in _SOURCE_LABELS.items():
+        if host.endswith(domain):
+            return label
+    return host.split(".")[0].title() if host else "Source"
+
+
+def _top_sources(results: list[dict], n: int = 2) -> list[dict]:
+    """Pick up to n unique {label, url} citations from Brave web results."""
+    seen: set[str] = set()
+    out: list[dict] = []
+    for r in results:
+        url = (r or {}).get("url", "")
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        out.append({"label": _source_label(url), "url": url})
+        if len(out) >= n:
+            break
+    return out
+
+
 def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
     """Compute saturation, difficulty, opportunity scores.
 
