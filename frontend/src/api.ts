@@ -21,16 +21,34 @@ export class ApiError extends Error {
   }
 }
 
+export interface SourceJson { label: string; url: string }
+export interface BandJson {
+  axis: 'saturation' | 'difficulty' | 'opportunity';
+  label: string; receipt: string; score: number | string; tone: string;
+}
+export interface MarketJson { tam: string; growth: string; note?: string; tier: string; sources: SourceJson[] }
+export interface WhyNowJson { shift: string; tier: string; sources: SourceJson[] }
+export interface EntryCostJson { label: string; value: string; tier: string; sources?: SourceJson[] }
+export interface ReadJson { synthesis: string; recommendation: string; limit: string }
+export interface GapQuoteJson { quote: string; source: SourceJson }
+
 export interface BackendCompetitor {
   name: string;
   strength: string;
   weakness: string;
   market_position: string;
+  funding_stage?: string;   // v2
+  url?: string;             // v2
 }
 
 export interface BackendGap {
   title: string;
   description: string;
+  severity?: string;                    // v2
+  underserved?: string;                 // v2
+  opportunity_score?: number | string;  // v2
+  tags?: string[];                      // v2
+  quotes?: GapQuoteJson[];              // v2
 }
 
 export interface BackendRoadmapPhase {
@@ -60,6 +78,12 @@ export interface ResultJson {
   gaps: BackendGap[];
   roadmap: BackendRoadmapPhase[];
   key_stats: BackendKeyStat[];
+  // --- v2 (Market Memo) additive keys ---
+  bands?: BandJson[];
+  market?: MarketJson;
+  why_now?: WhyNowJson;
+  entry_cost?: EntryCostJson[];
+  read?: ReadJson;
 }
 
 export interface ApiReport {
