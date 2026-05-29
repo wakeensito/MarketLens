@@ -17,6 +17,7 @@ import boto3
 from botocore.exceptions import ClientError
 
 from aws_lambda_powertools import Logger, Metrics, Tracer
+from aws_lambda_powertools.metrics import MetricUnit
 from aws_lambda_powertools.logging import correlation_paths
 from aws_lambda_powertools.event_handler import APIGatewayRestResolver
 from aws_lambda_powertools.utilities.typing import LambdaContext
@@ -85,7 +86,10 @@ def _gate(report_id: str):
     auth = _auth()
     if not auth["is_authenticated"]:
         return auth, ({"error": "Authentication required"}, 401)
-    if _fresh_plan(auth["user_id"], auth["plan"]) not in _PAID_PLANS:
+    # Resolve the accurate plan once and stash it so metric dimensions downstream
+    # reflect the real tier (not the stale authorizer snapshot).
+    auth["plan"] = _fresh_plan(auth["user_id"], auth["plan"])
+    if auth["plan"] not in _PAID_PLANS:
         return auth, (
             {"error": "Build Brief is a Pro feature", "code": "upgrade_required"},
             403,
@@ -142,6 +146,8 @@ def generate_brief(report_id: str):
             "Build Brief generation failed",
             extra={"report_id": report_id, "error": str(e)},
         )
+        metrics.add_dimension(name="plan", value=auth["plan"])
+        metrics.add_metric(name="BuildBriefFailed", unit=MetricUnit.Count, value=1)
         return {"error": "Could not generate the brief. Try again."}, 502
 
     generated_at = datetime.now(timezone.utc).isoformat()
@@ -182,6 +188,9 @@ def generate_brief(report_id: str):
         raise
 
     logger.info("Build Brief generated", extra={"report_id": report_id})
+    metrics.add_dimension(name="plan", value=auth["plan"])
+    metrics.add_metadata(key="tech_dominant", value=str(brief_json["is_tech_dominant"]))
+    metrics.add_metric(name="BuildBriefGenerated", unit=MetricUnit.Count, value=1)
     return {"build_brief_json": brief_json, "build_brief_generated_at": generated_at}
 
 
