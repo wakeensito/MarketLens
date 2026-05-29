@@ -102,8 +102,11 @@ def _opportunity_receipt(tam_usd, growth_pct, num_gaps: int) -> str:
     if tam_usd and tam_usd > 0:
         if tam_usd >= 1e9:
             parts.append(f"a ${tam_usd / 1e9:.1f}B market")
-        else:
+        elif tam_usd >= 1e6:
             parts.append(f"a ${tam_usd / 1e6:.0f}M market")
+        else:
+            # Sub-million TAM: render as $K so it never collapses to "$0M".
+            parts.append(f"a ${tam_usd / 1e3:.0f}K market")
     if growth_pct and growth_pct > 0:
         parts.append(f"growing {growth_pct:.0f}% a year")
     if num_gaps:
@@ -145,6 +148,10 @@ def _top_sources(results: list[dict], n: int = 2) -> list[dict]:
     for r in results:
         url = (r or {}).get("url", "")
         if not url or url in seen:
+            continue
+        # Only persist http(s) citations — never let a non-http(s) scheme
+        # (javascript:, data:, etc.) reach a stored, later-rendered href.
+        if not (url.startswith("http://") or url.startswith("https://")):
             continue
         seen.add(url)
         out.append({"label": _source_label(url), "url": url})

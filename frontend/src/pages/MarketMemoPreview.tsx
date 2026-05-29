@@ -21,29 +21,34 @@ type State =
   | { kind: 'ready'; memo: MarketMemoType; label: string }
   | { kind: 'error'; message: string };
 
-export default function MarketMemoPreview() {
-  const [state, setState] = useState<State>({ kind: 'mock' });
+/** Decide the initial source synchronously (sessionStorage / ?report / mock) so
+ *  we never call setState inside an effect for the non-async paths. Only the
+ *  `?report=<id>` path defers to the async fetch in the effect below. */
+function initialState(): State {
+  const blob = sessionStorage.getItem('memoPreviewJson');
+  if (blob) {
+    try {
+      const json = JSON.parse(blob);
+      return {
+        kind: 'ready',
+        memo: adaptMemo(json, json.idea_text ?? 'Pasted report'),
+        label: 'sessionStorage',
+      };
+    } catch {
+      return { kind: 'error', message: 'sessionStorage "memoPreviewJson" is not valid JSON.' };
+    }
+  }
+  const id = new URLSearchParams(window.location.search).get('report');
+  return id ? { kind: 'loading', id } : { kind: 'mock' };
+}
 
+export default function MarketMemoPreview() {
+  const [state, setState] = useState<State>(initialState);
+
+  // Async path only: fetch the real report when we started in `loading`.
   useEffect(() => {
-    // 1. sessionStorage override (auth-free)
-    const blob = sessionStorage.getItem('memoPreviewJson');
-    if (blob) {
-      try {
-        const json = JSON.parse(blob);
-        setState({ kind: 'ready', memo: adaptMemo(json, json.idea_text ?? 'Pasted report'), label: 'sessionStorage' });
-        return;
-      } catch {
-        setState({ kind: 'error', message: 'sessionStorage "memoPreviewJson" is not valid JSON.' });
-        return;
-      }
-    }
-    // 2. ?report=<id>
-    const id = new URLSearchParams(window.location.search).get('report');
-    if (!id) {
-      setState({ kind: 'mock' });
-      return;
-    }
-    setState({ kind: 'loading', id });
+    if (state.kind !== 'loading') return;
+    const id = state.id;
     let cancelled = false;
     getReport(id)
       .then(r => {
@@ -60,6 +65,9 @@ export default function MarketMemoPreview() {
         setState({ kind: 'error', message: `Could not load report ${id}: ${msg}. (Real reports need the auth cookie — run on the deployed origin, or use the sessionStorage override.)` });
       });
     return () => { cancelled = true; };
+    // Runs once: the initial state already decided loading-vs-not; state only
+    // transitions loading → ready/error (never back to loading).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const flag =

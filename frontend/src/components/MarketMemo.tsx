@@ -17,7 +17,7 @@ interface Props {
 }
 
 const fadeUp: Variants = {
-  hidden: { opacity: 0, y: 10 },
+  hidden: { opacity: 0, y: 8 },
   show:   { opacity: 1, y: 0, transition: { duration: 0.38, ease: 'easeOut' as const } },
 };
 
@@ -65,6 +65,11 @@ function toneColor(tone: ScoreBand['tone']): string {
 
 /** A citation receipt — mirrors the Muse pill exactly (mono, --signal, square). */
 function CitePill({ source }: { source: Source }) {
+  // No usable URL → render the source label as a non-clickable chip (the adapter
+  // already gated schemes to http(s); an empty url means it was dropped).
+  if (!source.url) {
+    return <span className="muse-cite" style={{ cursor: 'default' }}>{source.label}</span>;
+  }
   return (
     <a className="muse-cite" href={source.url} target="_blank" rel="noopener noreferrer">
       {source.label}
@@ -127,6 +132,11 @@ function StrengthIndicator({ tier }: { tier: CompetitorTier }) {
 }
 
 function CompName({ c }: { c: MemoCompetitor }) {
+  // No usable URL → plain name (no misleading link affordance). Parent classes
+  // (.comp-card-name / .comp-name) carry the name styling.
+  if (!c.url) {
+    return <>{c.name}</>;
+  }
   return (
     <a className="memo-comp-link" href={c.url} target="_blank" rel="noopener noreferrer">
       {c.name}
@@ -151,8 +161,8 @@ function CompetitorTable({ competitors }: { competitors: MemoCompetitor[] }) {
           <motion.tr
             key={c.name}
             data-muse-cell={`competitor-${i + 1}`}
-            initial={{ opacity: 0, x: -4 }}
-            whileInView={{ opacity: 1, x: 0 }}
+            initial={{ opacity: 0, y: 8 }}
+            whileInView={{ opacity: 1, y: 0 }}
             viewport={VIEWPORT}
             transition={{ duration: 0.3, ease: 'easeOut' as const, delay: i * 0.05 }}
           >

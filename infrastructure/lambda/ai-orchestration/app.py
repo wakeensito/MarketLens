@@ -26,7 +26,7 @@ from aws_durable_execution_sdk_python import durable_execution, DurableContext
 from botocore.exceptions import BotoCoreError, ClientError
 
 import scoring as _scoring
-from scoring import _clamp, _safe_number, score, _top_sources
+from scoring import _safe_number, score, _top_sources
 from assembly import assemble_v2
 
 logger = Logger()
