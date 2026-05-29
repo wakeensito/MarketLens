@@ -4,7 +4,8 @@ Behind the existing API Gateway + authorizer:
   GET  /api/reports/{report_id}/build-brief  -> stored brief or nulls
   POST /api/reports/{report_id}/build-brief  -> generate-once, store, return
 
-Paid-gated (pro/max/admin). Report must be complete (result_json present).
+Pro feature; **free users get one lifetime sample** (`free_build_brief_used`
+on the USER# row). Report must be complete (result_json present).
 POST is idempotent: a stored brief is returned instead of re-generating."""
 
 from __future__ import annotations
@@ -66,6 +67,57 @@ def _fresh_plan(user_id: str, fallback: str) -> str:
         return fallback
 
 
+def _free_brief_used(user_id: str) -> bool:
+    """Has this free user already spent their one lifetime sample?"""
+    try:
+        row = (
+            table.get_item(
+                Key={"pk": f"USER#{user_id}", "sk": f"USER#{user_id}"},
+                ConsistentRead=True,
+                ProjectionExpression="free_build_brief_used",
+            ).get("Item")
+            or {}
+        )
+        return bool(row.get("free_build_brief_used"))
+    except ClientError:
+        # On read failure, fail CLOSED (treat as used) so we never over-grant.
+        return True
+
+
+def _reserve_free_brief(user_id: str) -> bool:
+    """Atomically consume the one free sample. Returns True if reserved (it was
+    available and is now spent), False if it was already used. Conditional write
+    prevents a free user racing two reports into two free briefs."""
+    try:
+        table.update_item(
+            Key={"pk": f"USER#{user_id}", "sk": f"USER#{user_id}"},
+            UpdateExpression="SET free_build_brief_used = :t",
+            ConditionExpression=(
+                "attribute_not_exists(free_build_brief_used) "
+                "OR free_build_brief_used = :f"
+            ),
+            ExpressionAttributeValues={":t": True, ":f": False},
+        )
+        return True
+    except ClientError as e:
+        if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            return False
+        raise
+
+
+def _release_free_brief(user_id: str) -> None:
+    """Give the sample back (generation failed after we reserved it)."""
+    try:
+        table.update_item(
+            Key={"pk": f"USER#{user_id}", "sk": f"USER#{user_id}"},
+            UpdateExpression="SET free_build_brief_used = :f",
+            ExpressionAttributeValues={":f": False},
+        )
+    except ClientError:
+        logger.warning("Failed to release free build-brief sample",
+                       extra={"user_id": user_id})
+
+
 def _get_report(
     org_id: str, report_id: str, consistent_read: bool = False
 ) -> dict | None:
@@ -79,21 +131,14 @@ def _get_report(
 
 
 def _gate(report_id: str):
-    """Shared precondition checks. Returns (auth, error_tuple). error_tuple is
-    None when the caller is an authenticated paid user."""
+    """Auth + report-id precondition. Resolves the accurate plan onto auth.
+    Does NOT block free users — the paid/taste decision happens per-route."""
     if not _REPORT_ID_RE.match(report_id):
         return None, ({"error": "Invalid report_id"}, 400)
     auth = _auth()
     if not auth["is_authenticated"]:
         return auth, ({"error": "Authentication required"}, 401)
-    # Resolve the accurate plan once and stash it so metric dimensions downstream
-    # reflect the real tier (not the stale authorizer snapshot).
     auth["plan"] = _fresh_plan(auth["user_id"], auth["plan"])
-    if auth["plan"] not in _PAID_PLANS:
-        return auth, (
-            {"error": "Build Brief is a Pro feature", "code": "upgrade_required"},
-            403,
-        )
     return auth, None
 
 
@@ -106,9 +151,13 @@ def get_brief(report_id: str):
     report = _get_report(auth["org_id"], report_id)
     if report is None:
         return {"error": "Report not found"}, 404
+    free_used = (
+        auth["plan"] not in _PAID_PLANS and _free_brief_used(auth["user_id"])
+    )
     return {
         "build_brief_json": report.get("build_brief_json"),
         "build_brief_generated_at": report.get("build_brief_generated_at"),
+        "free_brief_used": free_used,
     }
 
 
@@ -135,6 +184,17 @@ def generate_brief(report_id: str):
     if report.get("status") != "complete" or not result_json:
         return {"error": "Report is not complete yet", "code": "not_ready"}, 409
 
+    # --- Generation gate: paid proceeds; free reserves its one lifetime sample ---
+    is_paid = auth["plan"] in _PAID_PLANS
+    reserved_free = False
+    if not is_paid:
+        reserved_free = _reserve_free_brief(auth["user_id"])
+        if not reserved_free:
+            return (
+                {"error": "Build Brief is a Pro feature", "code": "upgrade_required"},
+                403,
+            )
+
     try:
         raw = llm.call_llm(
             prompt_mod.build_prompt(report.get("idea_text", ""), result_json),
@@ -142,6 +202,8 @@ def generate_brief(report_id: str):
         )
         brief_json = prompt_mod.parse_and_validate(raw)
     except Exception as e:
+        if reserved_free:
+            _release_free_brief(auth["user_id"])
         logger.exception(
             "Build Brief generation failed",
             extra={"report_id": report_id, "error": str(e)},
@@ -158,17 +220,11 @@ def generate_brief(report_id: str):
                 "sk": f"REPORT#{report_id}",
             },
             UpdateExpression="SET build_brief_json = :b, build_brief_generated_at = :t",
-            # attribute_not_exists(build_brief_json) makes generation idempotent
-            # under concurrent POSTs: the first write wins; a racing second write
-            # fails the condition and returns the winner's brief below.
             ConditionExpression="attribute_exists(pk) AND attribute_not_exists(build_brief_json)",
             ExpressionAttributeValues={":b": brief_json, ":t": generated_at},
         )
     except ClientError as e:
         if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
-            # Either the report vanished, or a concurrent request already stored a
-            # brief. Read fresh (ConsistentRead) to tell them apart: if a brief is
-            # present, return that winner; otherwise the report is gone (404).
             existing = table.get_item(
                 Key={
                     "pk": f"ORG#{auth['org_id']}#REPORT#{report_id}",
@@ -178,12 +234,16 @@ def generate_brief(report_id: str):
                 ProjectionExpression="build_brief_json, build_brief_generated_at",
             ).get("Item")
             if existing and existing.get("build_brief_json"):
+                # A concurrent request already stored a brief for this report.
+                # The sample we reserved produced nothing of our own — give it back.
+                if reserved_free:
+                    _release_free_brief(auth["user_id"])
                 return {
                     "build_brief_json": existing["build_brief_json"],
-                    "build_brief_generated_at": existing.get(
-                        "build_brief_generated_at"
-                    ),
+                    "build_brief_generated_at": existing.get("build_brief_generated_at"),
                 }
+            if reserved_free:
+                _release_free_brief(auth["user_id"])
             return {"error": "Report not found"}, 404
         raise
 
