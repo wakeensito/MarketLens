@@ -107,7 +107,10 @@ def _opportunity_receipt(tam_usd, growth_pct, num_gaps: int) -> str:
         parts.append(f"growing {growth_pct:.0f}% a year")
     if num_gaps:
         parts.append(f"{num_gaps} clear gap{'s' if num_gaps != 1 else ''}")
-    return (", ".join(parts).capitalize() + ".") if parts else "Moderate room to enter."
+    if not parts:
+        return "Moderate room to enter."
+    s = ", ".join(parts)
+    return s[0].upper() + s[1:] + "."
 
 
 def score(parsed: dict, analysis: dict, search_results: dict) -> dict:

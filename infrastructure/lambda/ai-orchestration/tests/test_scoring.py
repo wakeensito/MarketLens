@@ -52,15 +52,18 @@ def test_bands_present_and_shaped():
         assert 0 <= b["score"] <= 100
 
 
-def test_band_tone_opportunity_inverted():
-    # opportunity: high score = good; saturation: high score = bad
-    _, analysis, search = _fixture()
-    parsed = {"industry": "fitness", "business_model": "b2c_saas",
-              "estimated_complexity": "low", "estimated_market_age_years": 1}
-    scores = score(parsed, analysis, search)
-    sat = next(b for b in scores["bands"] if b["axis"] == "saturation")
-    opp = next(b for b in scores["bands"] if b["axis"] == "opportunity")
-    if sat["score"] <= 40:
-        assert sat["tone"] == "good"
-    if opp["score"] > 65:
-        assert opp["tone"] == "good"
+def test_tone_inversion():
+    from scoring import _tone
+    # opportunity: higher is good
+    assert _tone(80, higher_is_good=True) == "good"
+    assert _tone(50, higher_is_good=True) == "mixed"
+    assert _tone(30, higher_is_good=True) == "bad"
+    # saturation / difficulty: higher is bad
+    assert _tone(30, higher_is_good=False) == "good"
+    assert _tone(50, higher_is_good=False) == "mixed"
+    assert _tone(80, higher_is_good=False) == "bad"
+    # boundaries
+    assert _tone(40, higher_is_good=False) == "good"
+    assert _tone(65, higher_is_good=False) == "mixed"
+    assert _tone(66, higher_is_good=True) == "good"
+    assert _tone(40, higher_is_good=True) == "bad"
