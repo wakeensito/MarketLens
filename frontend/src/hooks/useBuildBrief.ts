@@ -86,7 +86,8 @@ export function useBuildBrief({
           setStatus('idle');
         } else {
           // Free user, no brief yet: check whether they have their sample left.
-          if (res.free_brief_used) {
+          // Explicit === true: absent/undefined means "not yet spent" (sample available).
+          if (res.free_brief_used === true) {
             setStatus('locked');
           } else {
             setStatus('idle');
@@ -142,6 +143,10 @@ export function useBuildBrief({
           setFreeTaste(false);
           return;
         }
+        // Clear the free-sample flag on failure so the invariant "freeTaste is
+        // only true on an unused idle CTA" can't drift if an error→idle path is
+        // added later. A re-hydrate restores it from the server.
+        setFreeTaste(false);
         setStatus('error');
         const msg =
           e instanceof ApiError && e.message
