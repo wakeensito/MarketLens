@@ -84,7 +84,10 @@ def call_llm(prompt: str, model_id: str, max_tokens: int = 2048, temperature: fl
         except (ClientError, BotoCoreError, ValueError) as e:
             last_err = e
             code = e.response.get("Error", {}).get("Code") if isinstance(e, ClientError) else None
-            retryable = isinstance(e, ValueError) or (code in _TRANSIENT if code else True)
+            # Retry transient Bedrock errors (by code) and network failures
+            # (BotoCoreError). A JSON parse failure (ValueError) won't fix itself
+            # on retry, so fail fast to a 502 rather than re-spending.
+            retryable = (code in _TRANSIENT) if code else isinstance(e, BotoCoreError)
             if (not retryable) or attempt >= max_attempts:
                 logger.exception("Bedrock invoke failed", extra={"model_id": model_id})
                 raise

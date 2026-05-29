@@ -143,11 +143,30 @@ def generate_brief(report_id: str):
                 "sk": f"REPORT#{report_id}",
             },
             UpdateExpression="SET build_brief_json = :b, build_brief_generated_at = :t",
-            ConditionExpression="attribute_exists(pk)",
+            # attribute_not_exists(build_brief_json) makes generation idempotent
+            # under concurrent POSTs: the first write wins; a racing second write
+            # fails the condition and returns the winner's brief below.
+            ConditionExpression="attribute_exists(pk) AND attribute_not_exists(build_brief_json)",
             ExpressionAttributeValues={":b": brief_json, ":t": generated_at},
         )
     except ClientError as e:
         if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+            # Either the report vanished, or a concurrent request already stored a
+            # brief. Read fresh (ConsistentRead) to tell them apart: if a brief is
+            # present, return that winner; otherwise the report is gone (404).
+            existing = table.get_item(
+                Key={
+                    "pk": f"ORG#{auth['org_id']}#REPORT#{report_id}",
+                    "sk": f"REPORT#{report_id}",
+                },
+                ConsistentRead=True,
+                ProjectionExpression="build_brief_json, build_brief_generated_at",
+            ).get("Item")
+            if existing and existing.get("build_brief_json"):
+                return {
+                    "build_brief_json": existing["build_brief_json"],
+                    "build_brief_generated_at": existing.get("build_brief_generated_at"),
+                }
             return {"error": "Report not found"}, 404
         raise
 
