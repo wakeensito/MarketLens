@@ -114,8 +114,9 @@ def _release_free_brief(user_id: str) -> None:
             ExpressionAttributeValues={":f": False},
         )
     except ClientError:
-        logger.warning("Failed to release free build-brief sample",
-                       extra={"user_id": user_id})
+        logger.warning(
+            "Failed to release free build-brief sample", extra={"user_id": user_id}
+        )
 
 
 def _get_report(
@@ -151,9 +152,7 @@ def get_brief(report_id: str):
     report = _get_report(auth["org_id"], report_id)
     if report is None:
         return {"error": "Report not found"}, 404
-    free_used = (
-        auth["plan"] not in _PAID_PLANS and _free_brief_used(auth["user_id"])
-    )
+    free_used = auth["plan"] not in _PAID_PLANS and _free_brief_used(auth["user_id"])
     return {
         "build_brief_json": report.get("build_brief_json"),
         "build_brief_generated_at": report.get("build_brief_generated_at"),
@@ -240,7 +239,9 @@ def generate_brief(report_id: str):
                     _release_free_brief(auth["user_id"])
                 return {
                     "build_brief_json": existing["build_brief_json"],
-                    "build_brief_generated_at": existing.get("build_brief_generated_at"),
+                    "build_brief_generated_at": existing.get(
+                        "build_brief_generated_at"
+                    ),
                 }
             if reserved_free:
                 _release_free_brief(auth["user_id"])
