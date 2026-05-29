@@ -5187,3 +5187,436 @@ textarea:focus-visible {
   background: var(--border-mid);
   flex-shrink: 0;
 }
+
+/* ══════════════════════════════════════════════════════════════
+   Market Memo (v2 prototype) — /memo
+   Bands-as-hero + citation-grounded sections. Reuses .muse-cite,
+   .muse-sources, .brief-section-header, .divider, .reco-block,
+   and the original .comp-card / .gap-row / .gap-score treatments.
+   ══════════════════════════════════════════════════════════════ */
+
+.memo { padding: 8px 0 64px; }
+
+.memo-headline {
+  font-size: clamp(22px, 2.6vw, 30px);
+  line-height: 1.3;
+  max-width: 40rem;
+  margin-bottom: 14px;
+}
+
+/* ── Bands as hero ── */
+.memo-bands {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 24px;
+}
+@media (max-width: 720px) {
+  .memo-bands { grid-template-columns: 1fr; }
+}
+.memo-band {
+  position: relative;
+  padding: 16px 16px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--band-color);
+  border-radius: var(--radius-lg);
+}
+.memo-band-axis {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.memo-band-label {
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  margin-bottom: 8px;
+}
+.memo-band-receipt {
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  min-height: 2.4em;
+}
+.memo-band-score {
+  margin-top: 10px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.memo-band-denom { opacity: 0.6; font-weight: 400; }
+
+/* ── Section heads ── */
+.memo-section-head { margin-bottom: 16px; }
+.memo-section-q {
+  display: block;
+  margin-top: 6px;
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  font-style: italic;
+  color: var(--text-secondary);
+  letter-spacing: -0.005em;
+}
+
+/* ── Tier provenance tag ── */
+.memo-tier {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.125rem 0.4rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.memo-tier--fact {
+  color: var(--success);
+  background: var(--success-light, color-mix(in oklch, var(--success) 12%, transparent));
+  border-color: color-mix(in oklch, var(--success) 30%, transparent);
+}
+.memo-tier--estimate {
+  color: var(--warning);
+  background: var(--warning-light, color-mix(in oklch, var(--warning) 12%, transparent));
+  border-color: color-mix(in oklch, var(--warning) 30%, transparent);
+}
+.memo-tier--analysis {
+  color: var(--text-secondary);
+  background: var(--surface-alt);
+  border-color: var(--border-mid);
+}
+
+.memo-sources { margin-top: 12px; }
+
+/* ── 01 Market size & growth ── */
+.memo-prize-figure {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.memo-prize-tam {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 4vw, 2.75rem);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--signal);
+  line-height: 1;
+}
+.memo-prize-growth {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--success);
+}
+.memo-note {
+  margin: 12px 0 0;
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+  max-width: 38rem;
+}
+
+/* ── 02 Competitive landscape — additions atop the restored .comp-card ── */
+.memo-comp-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: inherit;
+  text-decoration: none;
+}
+.memo-comp-link svg { opacity: 0.4; }
+.memo-comp-link:hover { color: var(--accent); }
+.memo-comp-link:hover svg { opacity: 0.9; }
+.memo-comp-funding {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--signal);
+  margin-top: 2px;
+}
+.memo-comp-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+.memo-comp-footer .memo-comp-funding { margin-top: 0; }
+.memo-comp-position {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* ── 03 Why now / prose ── */
+.memo-prose {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.0625rem;
+  line-height: 1.7;
+  color: var(--text);
+  max-width: 38rem;
+}
+.memo-prose-foot {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+.memo-prose-foot .memo-sources { margin-top: 0; }
+
+/* ── 04 The opening — additions atop the restored .gap-row / .gap-score ── */
+.memo-gaps { display: flex; flex-direction: column; }
+.memo-gap-row { align-items: start; }
+.memo-gap-body { min-width: 0; }
+.memo-gap-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.memo-gap-head .gap-index { margin-bottom: 0; margin-left: auto; }
+.memo-sev {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.memo-sev-dot { width: 7px; height: 7px; border-radius: 50%; }
+.memo-sev--high   { color: var(--danger); }
+.memo-sev--high   .memo-sev-dot { background: var(--danger); }
+.memo-sev--medium { color: var(--warning); }
+.memo-sev--medium .memo-sev-dot { background: var(--warning); }
+.memo-sev--low    { color: var(--text-muted); }
+.memo-sev--low    .memo-sev-dot { background: var(--text-muted); }
+.memo-gap-underserved {
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  padding: 10px 12px;
+  margin-top: 10px;
+  background: var(--surface-alt);
+  border-radius: var(--radius-md);
+}
+.memo-gap-underserved-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 3px;
+}
+.memo-gap-row .gap-tags { margin-top: 10px; }
+.memo-quotes {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.memo-quote {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-left: 12px;
+  border-left: 2px solid var(--signal-border);
+}
+.memo-quote-text {
+  margin: 0;
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  flex: 1;
+  min-width: 12rem;
+}
+
+/* ── 05 Cost to enter ── */
+.memo-cost-list { display: flex; flex-direction: column; gap: 16px; }
+.memo-cost { padding-bottom: 16px; border-bottom: 1px solid var(--border); }
+.memo-cost:last-child { border-bottom: 0; padding-bottom: 0; }
+.memo-cost-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 5px;
+}
+.memo-cost-label {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+.memo-cost-value {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  max-width: 38rem;
+}
+.memo-cost .memo-sources { margin-top: 8px; }
+
+/* ── The Read (T3) ── */
+.memo-read-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.memo-read-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--signal);
+}
+.memo-read-synthesis {
+  margin: 0 0 20px;
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  line-height: 1.7;
+  color: var(--text);
+  max-width: 40rem;
+}
+.memo-reco { margin-bottom: 20px; }
+.memo-limit {
+  padding: 14px 16px;
+  background: var(--surface-alt);
+  border: 1px dashed var(--border-mid);
+  border-radius: var(--radius-lg);
+}
+.memo-limit-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 5px;
+}
+.memo-limit-text {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+  max-width: 40rem;
+}
+
+/* ── Preview shell (/memo, dev-only) ── */
+.memo-preview-shell {
+  min-height: 100vh;
+  background: var(--bg);
+}
+.memo-preview-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  max-width: 760px;
+  margin: 0 auto;
+}
+.memo-preview-home { text-decoration: none; }
+.memo-preview-nav-right { display: flex; align-items: center; gap: 16px; }
+.memo-preview-flag {
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.memo-preview-main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 8px 24px 80px;
+}
+
+/* ── Memo: plain-language helpers (market-size label + jargon gloss) ── */
+.memo-prize-label {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.memo-jargon {
+  margin: 14px 0 0;
+  font-family: var(--font-body);
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  max-width: 38rem;
+  padding-left: 12px;
+  border-left: 2px solid var(--signal-border);
+}
+.memo-jargon strong { color: var(--signal); font-weight: 600; }
+
+/* ── Memo: gap opportunity rating (replaces the count-up score) ── */
+.memo-gap-row { grid-template-columns: 1fr auto; }
+.gap-rating {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  padding-top: 2px;
+  text-align: right;
+  white-space: nowrap;
+}
+.gap-rating-word {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+.gap-rating-sub {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.gap-rating--high   .gap-rating-word { color: var(--success); }
+.gap-rating--medium .gap-rating-word { color: var(--warning); }
+.gap-rating--low    .gap-rating-word { color: var(--text-muted); }

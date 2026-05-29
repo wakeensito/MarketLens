@@ -6,6 +6,7 @@ import App from './App.tsx'
 import { AuthProvider } from './AuthContext.tsx'
 import PrivacyPage from './pages/PrivacyPage.tsx'
 import TermsPage from './pages/TermsPage.tsx'
+import MarketMemoPreview from './pages/MarketMemoPreview.tsx'
 import { initTheme } from './theme'
 
 initTheme()
@@ -16,6 +17,7 @@ createRoot(document.getElementById('root')!).render(
       <Routes>
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
+        <Route path="/memo" element={<MarketMemoPreview />} />
         <Route
           path="*"
           element={
