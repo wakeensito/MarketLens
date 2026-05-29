@@ -39,3 +39,28 @@ def test_score_shape_and_ranges():
         assert 0 <= scores[key] <= 100
     assert scores["saturation_label"]
     assert isinstance(scores["key_stats"], list)
+
+
+def test_bands_present_and_shaped():
+    scores = score(*_fixture())
+    bands = scores["bands"]
+    assert [b["axis"] for b in bands] == ["saturation", "difficulty", "opportunity"]
+    for b in bands:
+        assert b["label"]
+        assert b["receipt"]
+        assert b["tone"] in ("good", "mixed", "bad")
+        assert 0 <= b["score"] <= 100
+
+
+def test_band_tone_opportunity_inverted():
+    # opportunity: high score = good; saturation: high score = bad
+    _, analysis, search = _fixture()
+    parsed = {"industry": "fitness", "business_model": "b2c_saas",
+              "estimated_complexity": "low", "estimated_market_age_years": 1}
+    scores = score(parsed, analysis, search)
+    sat = next(b for b in scores["bands"] if b["axis"] == "saturation")
+    opp = next(b for b in scores["bands"] if b["axis"] == "opportunity")
+    if sat["score"] <= 40:
+        assert sat["tone"] == "good"
+    if opp["score"] > 65:
+        assert opp["tone"] == "good"

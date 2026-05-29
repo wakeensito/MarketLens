@@ -53,6 +53,63 @@ def _safe_number(val, default=None) -> float | None:
     return default
 
 
+def _tone(score_val: int, *, higher_is_good: bool) -> str:
+    """good/mixed/bad. For saturation & difficulty higher is bad;
+    for opportunity higher is good."""
+    if higher_is_good:
+        if score_val > 65:
+            return "good"
+        if score_val > 40:
+            return "mixed"
+        return "bad"
+    if score_val <= 40:
+        return "good"
+    if score_val <= 65:
+        return "mixed"
+    return "bad"
+
+
+def _saturation_receipt(num_direct: int, funding_maturity: int) -> str:
+    if funding_maturity >= 8:
+        funding = "with well-funded incumbents"
+    elif funding_maturity >= 5:
+        funding = "across a mix of funding stages"
+    else:
+        funding = "mostly early-stage"
+    n = "No direct" if num_direct == 0 else f"{num_direct}+"
+    return f"{n} competitors found, {funding}."
+
+
+def _difficulty_receipt(regulatory_score: int, capital_score: int,
+                        complexity: str) -> str:
+    drivers = []
+    if regulatory_score >= 18:
+        drivers.append("a regulated industry")
+    elif regulatory_score >= 9:
+        drivers.append("some regulation")
+    if capital_score >= 16:
+        drivers.append("high capital needs")
+    if complexity == "high":
+        drivers.append("real technical complexity")
+    if not drivers:
+        return "Few hard barriers to entry."
+    return "Entry is shaped by " + ", ".join(drivers) + "."
+
+
+def _opportunity_receipt(tam_usd, growth_pct, num_gaps: int) -> str:
+    parts = []
+    if tam_usd and tam_usd > 0:
+        if tam_usd >= 1e9:
+            parts.append(f"a ${tam_usd / 1e9:.1f}B market")
+        else:
+            parts.append(f"a ${tam_usd / 1e6:.0f}M market")
+    if growth_pct and growth_pct > 0:
+        parts.append(f"growing {growth_pct:.0f}% a year")
+    if num_gaps:
+        parts.append(f"{num_gaps} clear gap{'s' if num_gaps != 1 else ''}")
+    return (", ".join(parts).capitalize() + ".") if parts else "Moderate room to enter."
+
+
 def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
     """Compute saturation, difficulty, opportunity scores.
 
@@ -327,6 +384,18 @@ def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
     )
     opportunity_label = _band(opportunity, ["Low", "Modest", "Strong", "Excellent"])
 
+    bands = [
+        {"axis": "saturation", "label": saturation_label,
+         "receipt": _saturation_receipt(num_direct, funding_maturity),
+         "score": saturation, "tone": _tone(saturation, higher_is_good=False)},
+        {"axis": "difficulty", "label": difficulty_label,
+         "receipt": _difficulty_receipt(regulatory_score, capital_score, complexity),
+         "score": difficulty, "tone": _tone(difficulty, higher_is_good=False)},
+        {"axis": "opportunity", "label": opportunity_label,
+         "receipt": _opportunity_receipt(tam_usd, growth_pct, num_gaps),
+         "score": opportunity, "tone": _tone(opportunity, higher_is_good=True)},
+    ]
+
     return {
         "saturation_score": saturation,
         "saturation_label": saturation_label,
@@ -340,4 +409,5 @@ def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
             {"label": "Opportunity", "value": f"{opportunity}/100"},
             {"label": "Competitors Found", "value": str(num_direct)},
         ],
+        "bands": bands,
     }
