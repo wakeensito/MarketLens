@@ -30,6 +30,12 @@ Parameters:
     Type: String
     Default: us.amazon.nova-2-lite-v1:0
     Description: Bedrock inference profile for Muse chat (Pro tier). Nova 2 Lite is NOT invokable on-demand by bare FM ID — it requires a cross-region inference profile (us.* prefix). Same Nova family as Summarise; kept separate so the chat experience can be tuned independently.
+  BedrockModelIdBuildBrief:
+    Type: String
+    Default: anthropic.claude-3-haiku-20240307-v1:0
+    Description: >-
+      Bedrock model for Build Brief generation (Pro). Bare foundation-model ID,
+      invoked on-demand (no inference profile). Matches the live report pipeline.
   GoogleClientId:
     Type: String
     NoEcho: true
@@ -1046,6 +1052,49 @@ Resources:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub /aws/lambda/${MuseSyncFunction}
+      RetentionInDays: 90
+
+  # ─── Lambda: Build Brief (Pro) — synchronous generate + fetch ───
+  BuildBriefFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: app.lambda_handler
+      CodeUri: infrastructure/lambda/build-brief/
+      Description: Build Brief — GET/POST /api/reports/{report_id}/build-brief (Pro)
+      MemorySize: 512
+      # API Gateway integration caps at 29s; match it so the Lambda dies with
+      # the request rather than storing a brief after the client already 504'd.
+      Timeout: 29
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ReportsTable
+        - Statement:
+            - Effect: Allow
+              Action: bedrock:InvokeModel
+              Resource: !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/${BedrockModelIdBuildBrief}"
+      Environment:
+        Variables:
+          REPORTS_TABLE: !Ref ReportsTable
+          BEDROCK_MODEL_ID_BUILD_BRIEF: !Ref BedrockModelIdBuildBrief
+          POWERTOOLS_SERVICE_NAME: build-brief
+      Events:
+        GetBrief:
+          Type: Api
+          Properties:
+            Path: /api/reports/{report_id}/build-brief
+            Method: GET
+            RestApiId: !Ref ApiGatewayApi
+        GenerateBrief:
+          Type: Api
+          Properties:
+            Path: /api/reports/{report_id}/build-brief
+            Method: POST
+            RestApiId: !Ref ApiGatewayApi
+
+  BuildBriefFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${BuildBriefFunction}
       RetentionInDays: 90
 
   # ─── Lambda: Muse Chat (SSE streaming via Lambda Function URL) ───

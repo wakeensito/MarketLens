@@ -125,7 +125,7 @@ A Pro deliverable derived from a completed report; lives in its own tab/pane. St
 
 - **Locked (free/anon) / Idle (Pro, not generated):** a warm **invitation card** — `--signal-light` background + `--signal-border` (echoes the recommendation block), a serif headline, and a primary CTA (`Upgrade to Pro` / `Generate build brief`). Present and inviting, never a blurred teaser.
 - **Generating:** a content-shaped skeleton (no lingering spinner).
-- **Ready:** the brief — a complexity + effort strip; a **build/buy pill** where **BUILD carries `--signal`** ("the work that's yours") and **BUY stays neutral** (a vendor solved it); a vendor-neutral **foundation** list with cross-cloud mappings in mono (`S3 / Blob / Cloud Storage`, no vendor logos or colors); MVP scope; technical risks (mono `R1…` index in `--signal`); a fixed **`FOUNDATIONS & LIMITS`** block (product-voice principles + the "AI isn't always right, get professional review" limit); and an action row (`copy as markdown · regenerate`).
+- **Ready:** the brief — a complexity + effort strip; a **build/buy pill** where **BUILD carries `--signal`** ("the work that's yours") and **BUY stays neutral** (a vendor solved it); a vendor-neutral **foundation** list with cross-cloud mappings in mono (`S3 / Blob / Cloud Storage`, no vendor logos or colors); MVP scope; technical risks (mono `R1…` index in `--signal`); a fixed **`FOUNDATIONS & LIMITS`** block (product-voice principles + the "AI isn't always right, get professional review" limit); and an action row (`copy as markdown`).
 
 Generation is synchronous — a deliverable, not a chat reply. Type roles hold: serif for the conclusion-y headlines, mono for labels / data / cloud mappings, sans for prose.
 

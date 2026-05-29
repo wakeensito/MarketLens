@@ -1,0 +1,2 @@
+# boto3 is included in the Lambda runtime — do not add here
+# aws-lambda-powertools is provided via the Globals layer — do not add here

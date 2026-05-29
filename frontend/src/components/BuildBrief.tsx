@@ -180,14 +180,10 @@ function BriefBody({
   brief,
   idea,
   generatedAt,
-  capReached,
-  onRegenerate,
 }: {
   brief: BuildBrief;
   idea: string;
   generatedAt: string | null;
-  capReached: boolean;
-  onRegenerate: () => void;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -343,24 +339,11 @@ function BriefBody({
               </>
             )}
           </button>
-          <span className="bb-actions-dot" aria-hidden>
-            ·
-          </span>
-          <button type="button" className="bb-action-btn" onClick={onRegenerate}>
-            <RefreshCw size={12} strokeWidth={2} aria-hidden />
-            regenerate
-          </button>
         </div>
         {generatedAt && (
           <span className="bb-generated">Generated {formatGeneratedAt(generatedAt)}</span>
         )}
       </div>
-
-      {capReached && (
-        <div className="bb-cap-msg" role="status">
-          You have reached today's regenerate limit. Try again tomorrow.
-        </div>
-      )}
     </div>
   );
 }
@@ -371,7 +354,7 @@ function BriefBody({
    ────────────────────────────────────────────────────────── */
 
 export default function BuildBriefPane({ buildBrief, idea, onUpgrade }: Props) {
-  const { status, brief, generatedAt, error, capReached, generate, dismissError } = buildBrief;
+  const { status, brief, generatedAt, error, generate, dismissError } = buildBrief;
 
   if (status === 'locked') {
     return (
@@ -412,8 +395,6 @@ export default function BuildBriefPane({ buildBrief, idea, onUpgrade }: Props) {
           brief={brief}
           idea={idea}
           generatedAt={generatedAt}
-          capReached={capReached}
-          onRegenerate={generate}
         />
       )}
       {error && (
