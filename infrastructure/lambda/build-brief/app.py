@@ -245,6 +245,11 @@ def generate_brief(report_id: str):
             if reserved_free:
                 _release_free_brief(auth["user_id"])
             return {"error": "Report not found"}, 404
+        # Non-conditional store failure (e.g. throttling) after the sample was
+        # already spent and the brief generated: give the sample back before
+        # bubbling up, so a transient DynamoDB error doesn't burn the free taste.
+        if reserved_free:
+            _release_free_brief(auth["user_id"])
         raise
 
     logger.info("Build Brief generated", extra={"report_id": report_id})
