@@ -114,7 +114,7 @@ Same surface treatment across all cards: `--surface` background, `--border` bord
 
 A report workspace has three surfaces: **Report · Build Brief · Muse**, shown one at a time (single-attention; no split-screen). Two navigations, one state (`activeTab`, owned in `App.tsx`):
 
-- **Header tabs** (`WorkspaceTabs`) — the header row is the tab bar (mono uppercase labels; an animated `--accent` underline that slides via a `layoutId` *tween*, not a spring). Always shows all three. Gated tabs carry a small marker — `Pro` on Build Brief for free/anon, `Sign in` on Muse for anon — and open to a calm upsell pane, never a blurred teaser.
+- **Header tabs** (`WorkspaceTabs`) — the header row is the tab bar (mono uppercase labels; an animated `--accent` underline that slides via a `layoutId` *tween*, not a spring). Always shows all three. Gated tabs carry a small marker — `Pro` on Build Brief once the free sample is used (no marker while the sample is available), `Sign in` on Muse for anon — and open to a calm upsell pane, never a blurred teaser.
 - **Toolbar nav glyphs** (in the composer) — an always-on quick-switch shortcut; see *Navigation glyphs* under Muse patterns.
 
 Both routes call one shared `handleTabChange`, so they cannot diverge. Default tab on opening a report: Report for a fresh one; Muse if a saved thread exists. Tab/pane swaps are a plain opacity fade — no morph. Each pane is a `role="tabpanel"` (`.ws-pane`) wired to its tab.
@@ -123,7 +123,8 @@ Both routes call one shared `handleTabChange`, so they cannot diverge. Default t
 
 A Pro deliverable derived from a completed report; lives in its own tab/pane. States:
 
-- **Locked (free/anon) / Idle (Pro, not generated):** a warm **invitation card** — `--signal-light` background + `--signal-border` (echoes the recommendation block), a serif headline, and a primary CTA (`Upgrade to Pro` / `Generate build brief`). Present and inviting, never a blurred teaser.
+- **Free sample available / Idle (Pro, not generated):** a warm **invitation card** — `--signal-light` background + `--signal-border` (echoes the recommendation block), a serif headline, and a primary CTA (`Generate your free build brief · 1 sample` for a free user who hasn't used their sample; `Generate build brief` for paid). Present and inviting, never a blurred teaser.
+- **Locked (free, sample used):** the same invitation card surface with a `Upgrade to Pro` CTA — the single-sample taste has been consumed.
 - **Generating:** a content-shaped skeleton (no lingering spinner).
 - **Ready:** the brief — a complexity + effort strip; a **build/buy pill** where **BUILD carries `--signal`** ("the work that's yours") and **BUY stays neutral** (a vendor solved it); a vendor-neutral **foundation** list with cross-cloud mappings in mono (`S3 / Blob / Cloud Storage`, no vendor logos or colors); MVP scope; technical risks (mono `R1…` index in `--signal`); a fixed **`FOUNDATIONS & LIMITS`** block (product-voice principles + the "AI isn't always right, get professional review" limit); and an action row (`copy as markdown`).
 

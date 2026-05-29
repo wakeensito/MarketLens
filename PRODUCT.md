@@ -28,6 +28,8 @@ Success is the founder closing the laptop with a clear next move. Either "this i
 
 The interaction is shaped like a chat-LLM (familiar input, threaded sidebar of past reports, signed-in workspace) but the *output* is never a chat reply. The output is a structured deliverable. There is no streaming text bubble, no "let me think about that," no conversational framing. The user types a prompt, the system runs an analysis, the user reads a report.
 
+A second deliverable, **Build Brief**, lives in its own workspace tab. It translates the completed report into a practical build read: complexity and effort, build-vs-buy decisions, a vendor-neutral foundation stack, MVP scope, and technical risks. Build Brief is a Pro feature; free users get one lifetime sample as a taste, then the Pro upsell.
+
 ## Brand Personality
 
 Calm authority. The voice of a senior research analyst who has seen ten thousand markets and respects you enough to be brief.

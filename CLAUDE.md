@@ -199,6 +199,8 @@ Plinths is solo-only. The plan axis is power, not audience.
 
 **Max differentiators vs Pro**: unlimited reports, cross-report memory in Muse, Muse model selection (Claude, GPT, Gemini, Perplexity vs. Pro's default model). Stripe price IDs live in the SAM template (`STRIPE_PRICE_ID_PRO`, `STRIPE_PRICE_ID_PRO_ANNUAL`, `STRIPE_PRICE_ID_MAX`, `STRIPE_PRICE_ID_MAX_ANNUAL`).
 
+**Build Brief gating**: Build Brief is a Pro feature. Free users get **one lifetime sample** (tracked by `free_build_brief_used` on the `USER#{user_id}` row, reserved atomically on first POST); after that the pane shows the Pro upsell. GET `/api/build-brief/{report_id}` is open to all authenticated users and returns `free_brief_used` so the frontend can render the correct CTA. Paid plans (Pro, Max, admin) have no cap.
+
 **Things on the pricing page that are NOT plan-gated yet**: Brave Search + Wikipedia + Wikidata enrichment runs on every report regardless of plan (`infrastructure/lambda/ai-orchestration/app.py:133–246`). Model selection is unimplemented — every plan uses the same Bedrock pipeline (**Nova Micro** on Parse/Search, **DeepSeek V3.2** on Analyse, **Nova 2 Lite** on Summarise). Canonical IDs and deploy notes: `docs/operations/BEDROCK-MODEL-CONFIG.md`. If a future feature claims to gate either, verify the backend actually checks the plan before adding the row to PricingSection.
 
 There is no Team plan and no multi-seat workflow. Teams considering plinths are routed to a "Contact us" affordance (not built yet). If a future feature implies team usage, push back rather than scope-creeping it.

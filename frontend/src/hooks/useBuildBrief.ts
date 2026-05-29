@@ -21,6 +21,8 @@ export interface UseBuildBriefResult {
   brief: BuildBrief | null;
   generatedAt: string | null;
   error: string | null;
+  /** True when the user is free and has not yet spent their one lifetime sample. */
+  freeTaste: boolean;
   generate: () => void;
   dismissError: () => void;
 }
@@ -44,6 +46,7 @@ export function useBuildBrief({
   const [brief, setBrief] = useState<BuildBrief | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [freeTaste, setFreeTaste] = useState(false);
 
   /** Bumps on every reset/regenerate so a late async result can't write stale state. */
   const generationRef = useRef(0);
@@ -56,18 +59,17 @@ export function useBuildBrief({
     setError(null);
     setBrief(null);
     setGeneratedAt(null);
+    setFreeTaste(false);
 
     if (!reportId) {
       setStatus('idle');
       return;
     }
-    if (!paid) {
-      setStatus('locked');
-      return;
-    }
+
     if (USE_MOCK) {
-      // Start at the Generate CTA so the full flow is demoable.
+      // Paid → idle; free → idle + freeTaste so the free CTA is demoable.
       setStatus('idle');
+      if (!paid) setFreeTaste(true);
       return;
     }
 
@@ -80,24 +82,35 @@ export function useBuildBrief({
           setBrief(adaptBuildBrief(res.build_brief_json));
           setGeneratedAt(res.build_brief_generated_at);
           setStatus('ready');
-        } else {
+        } else if (paid) {
           setStatus('idle');
+        } else {
+          // Free user, no brief yet. Only an explicit false grants the free CTA;
+          // true OR absent/undefined (e.g. an older backend) fails closed to the
+          // upsell, so we never show a CTA that would 403 on click.
+          if (res.free_brief_used === false) {
+            setStatus('idle');
+            setFreeTaste(true);
+          } else {
+            setStatus('locked');
+          }
         }
       } catch (e) {
         if (generationRef.current !== gen) return;
-        if (e instanceof ApiError && e.status === 403) {
-          setStatus('locked'); // backend says free — stale plan in the client
+        if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+          setStatus('locked');
           return;
         }
-        // 404 (not generated) or any transient error → let them try generating.
-        setStatus('idle');
+        // 404 (not generated) or any transient error → let them try generating if paid,
+        // otherwise fail closed to the upsell (can't confirm taste availability).
+        setStatus(paid ? 'idle' : 'locked');
       }
     })();
   }, [reportId, paid]);
   /* eslint-enable react-hooks/set-state-in-effect */
 
   const generate = useCallback(() => {
-    if (!reportId || !paid) return;
+    if (!reportId || (!paid && !freeTaste)) return;
     generationRef.current += 1;
     const gen = generationRef.current;
     setError(null);
@@ -125,6 +138,15 @@ export function useBuildBrief({
         }
       } catch (e) {
         if (generationRef.current !== gen) return;
+        if (e instanceof ApiError && e.status === 403) {
+          // Free sample already spent (race or concurrent tab).
+          setStatus('locked');
+          setFreeTaste(false);
+          return;
+        }
+        // Non-403 (transient 5xx/network): the backend releases the reserved
+        // sample on a failed generation, so KEEP freeTaste — otherwise the
+        // error-state retry button would no-op against the generate() guard.
         setStatus('error');
         const msg =
           e instanceof ApiError && e.message
@@ -133,9 +155,9 @@ export function useBuildBrief({
         setError(msg);
       }
     })();
-  }, [reportId, paid]);
+  }, [reportId, paid, freeTaste]);
 
   const dismissError = useCallback(() => setError(null), []);
 
-  return { status, brief, generatedAt, error, generate, dismissError };
+  return { status, brief, generatedAt, error, freeTaste, generate, dismissError };
 }
