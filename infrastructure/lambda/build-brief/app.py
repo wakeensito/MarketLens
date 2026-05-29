@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from datetime import datetime, timezone
 
 import boto3
@@ -106,17 +107,33 @@ def _reserve_free_brief(user_id: str) -> bool:
 
 
 def _release_free_brief(user_id: str) -> None:
-    """Give the sample back (generation failed after we reserved it)."""
-    try:
-        table.update_item(
-            Key={"pk": f"USER#{user_id}", "sk": f"USER#{user_id}"},
-            UpdateExpression="SET free_build_brief_used = :f",
-            ExpressionAttributeValues={":f": False},
-        )
-    except ClientError:
-        logger.warning(
-            "Failed to release free build-brief sample", extra={"user_id": user_id}
-        )
+    """Give the sample back (generation failed after we reserved it).
+
+    Bounded retry (botocore already retries transient throttles beneath this);
+    on persistent failure emit a metric + error log so the lost entitlement is
+    alarmable and can be reconciled. A dedicated reconciliation queue/table is
+    out of scope here — disproportionate for a single free-sample flag."""
+    for attempt in range(3):
+        try:
+            table.update_item(
+                Key={"pk": f"USER#{user_id}", "sk": f"USER#{user_id}"},
+                UpdateExpression="SET free_build_brief_used = :f",
+                ExpressionAttributeValues={":f": False},
+            )
+            return
+        except ClientError:
+            if attempt < 2:
+                time.sleep(0.1 * (2**attempt))
+                continue
+            logger.error(
+                "Failed to release free build-brief sample after retries",
+                extra={"user_id": user_id},
+            )
+            metrics.add_metric(
+                name="BuildBriefSampleReleaseFailed",
+                unit=MetricUnit.Count,
+                value=1,
+            )
 
 
 def _get_report(

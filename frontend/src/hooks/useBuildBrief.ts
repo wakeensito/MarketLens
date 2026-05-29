@@ -85,13 +85,14 @@ export function useBuildBrief({
         } else if (paid) {
           setStatus('idle');
         } else {
-          // Free user, no brief yet: check whether they have their sample left.
-          // Explicit === true: absent/undefined means "not yet spent" (sample available).
-          if (res.free_brief_used === true) {
-            setStatus('locked');
-          } else {
+          // Free user, no brief yet. Only an explicit false grants the free CTA;
+          // true OR absent/undefined (e.g. an older backend) fails closed to the
+          // upsell, so we never show a CTA that would 403 on click.
+          if (res.free_brief_used === false) {
             setStatus('idle');
             setFreeTaste(true);
+          } else {
+            setStatus('locked');
           }
         }
       } catch (e) {
@@ -143,10 +144,9 @@ export function useBuildBrief({
           setFreeTaste(false);
           return;
         }
-        // Clear the free-sample flag on failure so the invariant "freeTaste is
-        // only true on an unused idle CTA" can't drift if an error→idle path is
-        // added later. A re-hydrate restores it from the server.
-        setFreeTaste(false);
+        // Non-403 (transient 5xx/network): the backend releases the reserved
+        // sample on a failed generation, so KEEP freeTaste — otherwise the
+        // error-state retry button would no-op against the generate() guard.
         setStatus('error');
         const msg =
           e instanceof ApiError && e.message

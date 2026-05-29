@@ -10,7 +10,7 @@
 
 ---
 
-### Task 1: Backend — relax gate + lifetime taste reserve/release + GET flag
+## Task 1: Backend — relax gate + lifetime taste reserve/release + GET flag
 
 **Files:**
 - Modify: `infrastructure/lambda/build-brief/app.py`
@@ -201,7 +201,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ---
 
-### Task 2: Frontend — free-taste state in the hook + Invitation CTA
+## Task 2: Frontend — free-taste state in the hook + Invitation CTA
 
 **Files:**
 - Modify: `frontend/src/api.ts` (BuildBriefResponse type)
@@ -239,7 +239,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 
 ---
 
-### Task 3: Docs — reposition Build Brief as "Pro, with one free sample"
+## Task 3: Docs — reposition Build Brief as "Pro, with one free sample"
 
 **Files:**
 - Modify: `PRODUCT.md`, `CLAUDE.md` (wherever Build Brief is described as Pro-only / locked)
