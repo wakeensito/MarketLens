@@ -79,6 +79,14 @@ def parse_and_validate(raw_text: str) -> dict:
     missing = [k for k in _REQUIRED_KEYS if k not in parsed]
     if missing:
         raise ValueError(f"Brief missing keys: {missing}")
+    # Container-type guard: generate-once (no regenerate) makes a malformed brief
+    # permanent, and the frontend adapter .map()s the array fields. Fail to a 502
+    # on a wrong container type so a retry can recover instead of storing garbage.
+    for key in ("complexity_drivers", "capabilities", "foundation", "technical_risks"):
+        if not isinstance(parsed[key], list):
+            raise ValueError(f"{key} must be a list")
+    if not isinstance(parsed["effort_estimate"], dict):
+        raise ValueError("effort_estimate must be an object")
     # Frontend adapter treats complexity_score via parseScore; keep it a string
     # to match the result_json string-number convention.
     if not isinstance(parsed["complexity_score"], str):

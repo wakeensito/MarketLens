@@ -65,9 +65,12 @@ def _fresh_plan(user_id: str, fallback: str) -> str:
         return fallback
 
 
-def _get_report(org_id: str, report_id: str) -> dict | None:
+def _get_report(
+    org_id: str, report_id: str, consistent_read: bool = False
+) -> dict | None:
     item = table.get_item(
-        Key={"pk": f"ORG#{org_id}#REPORT#{report_id}", "sk": f"REPORT#{report_id}"}
+        Key={"pk": f"ORG#{org_id}#REPORT#{report_id}", "sk": f"REPORT#{report_id}"},
+        ConsistentRead=consistent_read,
     ).get("Item")
     if not item or item.get("status") == "deleted":
         return None
@@ -111,7 +114,9 @@ def generate_brief(report_id: str):
     auth, err = _gate(report_id)
     if err:
         return err
-    report = _get_report(auth["org_id"], report_id)
+    # Strongly-consistent read so the idempotency check reflects a brief stored
+    # moments ago by a concurrent request — avoids a redundant model call.
+    report = _get_report(auth["org_id"], report_id, consistent_read=True)
     if report is None:
         return {"error": "Report not found"}, 404
 
