@@ -988,7 +988,9 @@ Return ONLY valid JSON with this exact structure:
   "market_gaps": [
     {{
       "title": "Gap title",
-      "description": "Why this gap exists and who it affects"
+      "description": "Why this gap exists and who it affects",
+      "severity": "high | medium | low (how big the opening is)",
+      "tags": ["2-3 short lowercase descriptors"]
     }}
   ],
   "positioning": "One sentence on how a new entrant should differentiate",
@@ -1006,6 +1008,7 @@ RULES:
 - Only include competitors from the provided list. Do NOT invent new ones.
 - Be honest about strengths and weaknesses. No generic filler.
 - market_gaps should identify 2-4 genuinely underserved areas.
+- For each gap: severity reflects how underserved the need is and how clearly incumbents miss it. Use all three levels across the gaps; don't mark everything "high".
 - Mark uncertainty explicitly — if you don't know a funding stage, say "unknown".
 - For the 1-10 scores: use the FULL range. A 3 and a 7 should feel meaningfully different. Don't default to 5.
 - estimated_tam_usd and estimated_growth_pct: infer from competitor scale, funding levels, and market context. Set to null ONLY if you truly cannot estimate."""
