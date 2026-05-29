@@ -1061,42 +1061,62 @@ def _floats_to_decimal(obj):
 # ---------------------------------------------------------------------------
 def summarise(analysis: dict, scores: dict, parsed: dict, search_results: dict) -> dict:
     """Generate beginner-friendly explanation and gap analysis via LLM."""
+    pain = search_results.get("user_pain_points", [])
+    pain_indexed = "\n".join(f"[{i}] {p}" for i, p in enumerate(pain)) or "(none)"
     prompt = f"""You are an experienced startup advisor talking to a first-time founder.
 Your job is to explain a market in plain language — like a friend who knows the industry well.
 
 VOICE GUIDELINES:
 - Use second person ("you", "your idea").
-- Avoid jargon. If you must use a term (TAM, churn, CAC), explain it inline in parentheses.
+- Extremely plain language. Assume a complete beginner. If you must use a term (TAM, CAC), explain it in plain words.
 - Be honest. If the market is brutal, say so. If it's promising, say so.
 - Short sentences. Specific numbers when available. No hedging filler.
-- Do NOT inflate numbers or make up data.
+- Do NOT inflate numbers or make up data. Do NOT invent sources or URLs.
 
 INPUT:
 Industry: {parsed.get("industry", "")} / {parsed.get("sub_industry", "")}
 Business model: {parsed.get("business_model", "")}
 Target customer: {parsed.get("target_customer", "")}
-Saturation score: {scores["saturation_score"]}/100 ({scores["saturation_label"]})
-Difficulty score: {scores["difficulty_score"]}/100 ({scores.get("difficulty_label", "")})
-Opportunity score: {scores["opportunity_score"]}/100 ({scores.get("opportunity_label", "")})
+Saturation: {scores["saturation_score"]}/100 ({scores["saturation_label"]})
+Difficulty: {scores["difficulty_score"]}/100 ({scores.get("difficulty_label", "")})
+Opportunity: {scores["opportunity_score"]}/100 ({scores.get("opportunity_label", "")})
 Market gaps: {json.dumps(analysis.get("market_gaps", []), indent=2)}
-User pain points from reviews: {json.dumps(search_results.get("user_pain_points", []))}
+Numbered user complaints (cite by index):
+{pain_indexed}
 Competitor count: {len(analysis.get("competitor_analysis", []))}
-Key positioning advice: {analysis.get("positioning", "")}
+Positioning advice: {analysis.get("positioning", "")}
 
 Return ONLY valid JSON with:
 {{
-  "oneliner": "One sentence summary of the market opportunity",
-  "gaps": [
-    {{"title": "Gap title", "description": "Why this gap matters and who it serves"}}
-  ],
+  "oneliner": "One plain sentence: the opportunity in a nutshell",
   "trend_signal": "One sentence on where this market is heading",
-  "recommendation": "2-3 sentence actionable recommendation for the founder",
+  "recommendation": "2-3 sentence actionable recommendation",
   "roadmap": [
-    {{"phase": "Phase 1 (0-3 months)", "title": "Step title", "description": "What to do"}}
-  ]
+    {{"phase": "Phase 1 (0-3 months)", "title": "Step", "description": "What to do"}}
+  ],
+  "why_now": "One or two sentences: what changed recently that makes this a good time",
+  "gaps": [
+    {{
+      "title": "Gap title (plain)",
+      "description": "What the big players miss, in plain words",
+      "underserved": "Who is left out by this gap",
+      "quote_indexes": [list of integers from the numbered complaints above that back this gap, or []]
+    }}
+  ],
+  "entry_cost": [
+    {{"label": "Rules & privacy", "value": "plain explanation"}},
+    {{"label": "Getting customers", "value": "plain explanation"}},
+    {{"label": "Money to start", "value": "plain explanation"}},
+    {{"label": "Keeping people", "value": "plain explanation"}}
+  ],
+  "read": {{
+    "synthesis": "3-4 plain sentences: the honest bottom line",
+    "recommendation": "What you'd do, in plain words",
+    "limit": "One sentence reminder that this is an AI read of public info, not advice, and figures are estimates"
+  }}
 }}
 
-Include 2-3 gaps, and 3-4 roadmap phases."""
+Include 2-4 gaps and 3-4 roadmap phases. quote_indexes must only use indexes shown above."""
 
     response = call_llm(
         prompt,
@@ -1110,10 +1130,14 @@ Include 2-3 gaps, and 3-4 roadmap phases."""
     except json.JSONDecodeError:
         return {
             "oneliner": "Analysis complete. Review the scores above for market positioning.",
-            "gaps": [],
             "trend_signal": "Market data analyzed.",
             "recommendation": "Review the competitor analysis for entry opportunities.",
             "roadmap": [],
+            "why_now": "",
+            "gaps": [],
+            "entry_cost": [],
+            "read": {"synthesis": "", "recommendation": "",
+                     "limit": "This is an AI-generated read of public information, not advice. Figures are estimates."},
         }
 
 
