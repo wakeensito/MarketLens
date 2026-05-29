@@ -2,6 +2,7 @@
 
 Adapted from infrastructure/lambda/ai-orchestration/app.py (token tracking
 dropped — the brief is a single one-shot call, not a metered pipeline)."""
+
 from __future__ import annotations
 
 import json
@@ -27,7 +28,9 @@ _TRANSIENT = {
 }
 
 
-def _build_payload(model_id: str, prompt: str, max_tokens: int, temperature: float) -> str:
+def _build_payload(
+    model_id: str, prompt: str, max_tokens: int, temperature: float
+) -> str:
     if "anthropic" in model_id:
         return json.dumps(
             {
@@ -48,7 +51,10 @@ def _build_payload(model_id: str, prompt: str, max_tokens: int, temperature: flo
     # Amazon Nova — Converse-style payload.
     return json.dumps(
         {
-            "inferenceConfig": {"max_new_tokens": max_tokens, "temperature": temperature},
+            "inferenceConfig": {
+                "max_new_tokens": max_tokens,
+                "temperature": temperature,
+            },
             "messages": [{"role": "user", "content": [{"text": prompt}]}],
         }
     )
@@ -62,7 +68,9 @@ def _extract_text(model_id: str, body: dict) -> str:
     return body["output"]["message"]["content"][0]["text"]
 
 
-def call_llm(prompt: str, model_id: str, max_tokens: int = 2048, temperature: float = 0.3) -> str:
+def call_llm(
+    prompt: str, model_id: str, max_tokens: int = 2048, temperature: float = 0.3
+) -> str:
     """Invoke a Bedrock model and return its text. Retries transient errors with
     exponential backoff + jitter. Raises on exhaustion / non-retryable errors."""
     max_attempts = int(os.environ.get("LLM_MAX_ATTEMPTS", "3"))
@@ -83,7 +91,11 @@ def call_llm(prompt: str, model_id: str, max_tokens: int = 2048, temperature: fl
             return _extract_text(model_id, parsed)
         except (ClientError, BotoCoreError, ValueError) as e:
             last_err = e
-            code = e.response.get("Error", {}).get("Code") if isinstance(e, ClientError) else None
+            code = (
+                e.response.get("Error", {}).get("Code")
+                if isinstance(e, ClientError)
+                else None
+            )
             # Retry transient Bedrock errors (by code) and network failures
             # (BotoCoreError). A JSON parse failure (ValueError) won't fix itself
             # on retry, so fail fast to a 502 rather than re-spending.

@@ -6,6 +6,7 @@ Behind the existing API Gateway + authorizer:
 
 Paid-gated (pro/max/admin). Report must be complete (result_json present).
 POST is idempotent: a stored brief is returned instead of re-generating."""
+
 from __future__ import annotations
 
 import os
@@ -82,7 +83,10 @@ def _gate(report_id: str):
     if not auth["is_authenticated"]:
         return auth, ({"error": "Authentication required"}, 401)
     if _fresh_plan(auth["user_id"], auth["plan"]) not in _PAID_PLANS:
-        return auth, ({"error": "Build Brief is a Pro feature", "code": "upgrade_required"}, 403)
+        return auth, (
+            {"error": "Build Brief is a Pro feature", "code": "upgrade_required"},
+            403,
+        )
     return auth, None
 
 
@@ -165,7 +169,9 @@ def generate_brief(report_id: str):
             if existing and existing.get("build_brief_json"):
                 return {
                     "build_brief_json": existing["build_brief_json"],
-                    "build_brief_generated_at": existing.get("build_brief_generated_at"),
+                    "build_brief_generated_at": existing.get(
+                        "build_brief_generated_at"
+                    ),
                 }
             return {"error": "Report not found"}, 404
         raise

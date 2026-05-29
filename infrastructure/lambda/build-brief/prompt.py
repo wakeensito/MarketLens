@@ -3,6 +3,7 @@
 `build_prompt` grounds a founder-altitude, vendor-neutral brief in the completed
 report. `parse_and_validate` extracts the JSON object the frontend adapter
 expects and makes it DynamoDB-safe (no floats)."""
+
 from __future__ import annotations
 
 import json
