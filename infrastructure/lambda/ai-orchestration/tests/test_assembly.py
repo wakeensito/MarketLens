@@ -60,3 +60,18 @@ def test_assemble_v2_keeps_legacy_and_structured_keys():
     assert out["entry_cost"][0]["tier"] == "fact"  # regulatory/rules&privacy defaults to fact
     assert out["read"]["limit"] == "l"
     assert out["gaps"][0]["severity"] == "medium"  # defaulted when summary omits it
+
+
+def test_assemble_v2_merges_analyse_severity_and_tags_by_index():
+    parsed, search_results, analysis, scores, summary = _fixtures()
+    analysis["market_gaps"] = [{"severity": "high", "tags": ["adaptive", "retention"]}]
+    out = assemble_v2(parsed, search_results, analysis, scores, summary)
+    assert out["gaps"][0]["severity"] == "high"
+    assert out["gaps"][0]["tags"] == ["adaptive", "retention"]
+
+
+def test_assemble_v2_coerces_string_quote_index():
+    parsed, search_results, analysis, scores, summary = _fixtures()
+    summary["gaps"][0]["quote_indexes"] = ["0"]  # LLM sometimes returns quoted ints
+    out = assemble_v2(parsed, search_results, analysis, scores, summary)
+    assert out["gaps"][0]["quotes"][0]["quote"] == "too expensive"

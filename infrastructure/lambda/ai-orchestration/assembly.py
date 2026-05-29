@@ -37,25 +37,31 @@ def _join_competitors(analysis: dict, search_results: dict) -> list[dict]:
     return out
 
 
-def _resolve_gap_quotes(summary_gaps: list, pain: list, pain_sources: list) -> list:
-    """Map each gap's quote_indexes to {quote, source} using real search data.
+def _resolve_gap_quotes(summary_gaps: list, pain: list, pain_sources: list,
+                        analysis_gaps: list | None = None) -> list:
+    """Map each gap's quote_indexes to {quote, source} using real search data,
+    and merge severity/tags from the analyse stage by positional index.
 
     CAVEAT: pain (user_pain_points, LLM-extracted) and pain_sources (raw Brave
     pain results) are NOT guaranteed index-aligned, so the attached source is
     best-effort — a real URL from the pain-point search, not provably the exact
-    origin of this specific quote. Acceptable for v2."""
+    origin of this specific quote. Likewise analyse gaps and summarise gaps are
+    aligned positionally (both ordered as analyse emitted them); acceptable for v2."""
     fallback_src = pain_sources[0] if pain_sources else {"label": "User review", "url": ""}
     out = []
-    for g in summary_gaps:
+    for i, g in enumerate(summary_gaps):
         quotes = []
         for idx in g.get("quote_indexes", []) or []:
+            if isinstance(idx, str) and idx.strip().isdigit():
+                idx = int(idx)
             if isinstance(idx, int) and 0 <= idx < len(pain):
                 src = pain_sources[idx] if idx < len(pain_sources) else fallback_src
                 quotes.append({"quote": str(pain[idx]), "source": src})
         merged = {k: v for k, v in g.items() if k != "quote_indexes"}
         merged["quotes"] = quotes
-        merged.setdefault("severity", "medium")
-        merged.setdefault("tags", [])
+        analysis_gap = analysis_gaps[i] if analysis_gaps and i < len(analysis_gaps) else {}
+        merged.setdefault("severity", analysis_gap.get("severity", "medium"))
+        merged.setdefault("tags", analysis_gap.get("tags", []))
         merged.setdefault("underserved", "")
         out.append(merged)
     return out
@@ -96,7 +102,10 @@ def assemble_v2(parsed: dict, search_results: dict, analysis: dict,
         **scores,                # bands + legacy score keys
         **summary,               # oneliner, trend_signal, recommendation, roadmap (+ raw why_now/gaps/entry_cost/read, overridden below)
         "competitors": _join_competitors(analysis, search_results),
-        "gaps": _resolve_gap_quotes(summary.get("gaps", []), pain, pain_sources),
+        "gaps": _resolve_gap_quotes(
+            summary.get("gaps", []), pain, pain_sources,
+            analysis.get("market_gaps", [])
+        ),
         "market_size": _fmt_tam(search_results.get("market_size_tam_usd")),  # legacy string key
         "market": market,
         "why_now": why_now,
