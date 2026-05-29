@@ -1137,8 +1137,11 @@ Include 2-4 gaps and 3-4 roadmap phases. quote_indexes must only use indexes sho
             "why_now": "",
             "gaps": [],
             "entry_cost": [],
-            "read": {"synthesis": "", "recommendation": "",
-                     "limit": "This is an AI-generated read of public information, not advice. Figures are estimates."},
+            "read": {
+                "synthesis": "",
+                "recommendation": "",
+                "limit": "This is an AI-generated read of public information, not advice. Figures are estimates.",
+            },
         }
 
 

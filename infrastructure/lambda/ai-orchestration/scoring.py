@@ -3,6 +3,7 @@
 Extracted from app.py so it can be unit-tested without importing the Lambda
 (which builds boto3 clients at module load). app.py imports back from here.
 """
+
 import math
 import logging
 from urllib.parse import urlparse
@@ -81,8 +82,9 @@ def _saturation_receipt(num_direct: int, funding_maturity: int) -> str:
     return f"{n} competitors found, {funding}."
 
 
-def _difficulty_receipt(regulatory_score: int, capital_score: int,
-                        complexity: str) -> str:
+def _difficulty_receipt(
+    regulatory_score: int, capital_score: int, complexity: str
+) -> str:
     drivers = []
     if regulatory_score >= 18:
         drivers.append("a regulated industry")
@@ -435,15 +437,27 @@ def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
     opportunity_label = _band(opportunity, ["Low", "Modest", "Strong", "Excellent"])
 
     bands = [
-        {"axis": "saturation", "label": saturation_label,
-         "receipt": _saturation_receipt(num_direct, funding_maturity),
-         "score": saturation, "tone": _tone(saturation, higher_is_good=False)},
-        {"axis": "difficulty", "label": difficulty_label,
-         "receipt": _difficulty_receipt(regulatory_score, capital_score, complexity),
-         "score": difficulty, "tone": _tone(difficulty, higher_is_good=False)},
-        {"axis": "opportunity", "label": opportunity_label,
-         "receipt": _opportunity_receipt(tam_usd, growth_pct, num_gaps),
-         "score": opportunity, "tone": _tone(opportunity, higher_is_good=True)},
+        {
+            "axis": "saturation",
+            "label": saturation_label,
+            "receipt": _saturation_receipt(num_direct, funding_maturity),
+            "score": saturation,
+            "tone": _tone(saturation, higher_is_good=False),
+        },
+        {
+            "axis": "difficulty",
+            "label": difficulty_label,
+            "receipt": _difficulty_receipt(regulatory_score, capital_score, complexity),
+            "score": difficulty,
+            "tone": _tone(difficulty, higher_is_good=False),
+        },
+        {
+            "axis": "opportunity",
+            "label": opportunity_label,
+            "receipt": _opportunity_receipt(tam_usd, growth_pct, num_gaps),
+            "score": opportunity,
+            "tone": _tone(opportunity, higher_is_good=True),
+        },
     ]
 
     return {

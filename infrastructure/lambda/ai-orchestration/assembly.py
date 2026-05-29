@@ -1,4 +1,5 @@
 """Pure assembly of the final result_json (v2). No AWS, no LLM, no I/O."""
+
 from scoring import _safe_number
 
 # entry_cost labels that are statements of fact (regulatory regime) vs estimates.
@@ -37,8 +38,12 @@ def _join_competitors(analysis: dict, search_results: dict) -> list[dict]:
     return out
 
 
-def _resolve_gap_quotes(summary_gaps: list, pain: list, pain_sources: list,
-                        analysis_gaps: list | None = None) -> list:
+def _resolve_gap_quotes(
+    summary_gaps: list,
+    pain: list,
+    pain_sources: list,
+    analysis_gaps: list | None = None,
+) -> list:
     """Map each gap's quote_indexes to {quote, source} using real search data,
     and merge severity/tags from the analyse stage by positional index.
 
@@ -47,7 +52,9 @@ def _resolve_gap_quotes(summary_gaps: list, pain: list, pain_sources: list,
     best-effort — a real URL from the pain-point search, not provably the exact
     origin of this specific quote. Likewise analyse gaps and summarise gaps are
     aligned positionally (both ordered as analyse emitted them); acceptable for v2."""
-    fallback_src = pain_sources[0] if pain_sources else {"label": "User review", "url": ""}
+    fallback_src = (
+        pain_sources[0] if pain_sources else {"label": "User review", "url": ""}
+    )
     out = []
     for i, g in enumerate(summary_gaps):
         quotes = []
@@ -59,7 +66,9 @@ def _resolve_gap_quotes(summary_gaps: list, pain: list, pain_sources: list,
                 quotes.append({"quote": str(pain[idx]), "source": src})
         merged = {k: v for k, v in g.items() if k != "quote_indexes"}
         merged["quotes"] = quotes
-        analysis_gap = analysis_gaps[i] if analysis_gaps and i < len(analysis_gaps) else {}
+        analysis_gap = (
+            analysis_gaps[i] if analysis_gaps and i < len(analysis_gaps) else {}
+        )
         merged.setdefault("severity", analysis_gap.get("severity", "medium"))
         merged.setdefault("tags", analysis_gap.get("tags", []))
         merged.setdefault("underserved", "")
@@ -70,14 +79,25 @@ def _resolve_gap_quotes(summary_gaps: list, pain: list, pain_sources: list,
 def _entry_cost_with_tiers(entry_cost: list) -> list:
     out = []
     for f in entry_cost or []:
-        tier = "fact" if (f.get("label", "").strip().lower() in _FACT_LABELS) else "estimate"
-        out.append({"label": f.get("label", ""), "value": f.get("value", ""),
-                    "tier": tier, "sources": f.get("sources", [])})
+        tier = (
+            "fact"
+            if (f.get("label", "").strip().lower() in _FACT_LABELS)
+            else "estimate"
+        )
+        out.append(
+            {
+                "label": f.get("label", ""),
+                "value": f.get("value", ""),
+                "tier": tier,
+                "sources": f.get("sources", []),
+            }
+        )
     return out
 
 
-def assemble_v2(parsed: dict, search_results: dict, analysis: dict,
-                scores: dict, summary: dict) -> dict:
+def assemble_v2(
+    parsed: dict, search_results: dict, analysis: dict, scores: dict, summary: dict
+) -> dict:
     pain = search_results.get("user_pain_points", [])
     pain_sources = search_results.get("pain_sources", [])
 
@@ -99,14 +119,15 @@ def assemble_v2(parsed: dict, search_results: dict, analysis: dict,
         "vertical": parsed.get("industry", ""),
         "geography": parsed.get("geography", ""),
         "business_model": parsed.get("business_model", ""),
-        **scores,                # bands + legacy score keys
-        **summary,               # oneliner, trend_signal, recommendation, roadmap (+ raw why_now/gaps/entry_cost/read, overridden below)
+        **scores,  # bands + legacy score keys
+        **summary,  # oneliner, trend_signal, recommendation, roadmap (+ raw why_now/gaps/entry_cost/read, overridden below)
         "competitors": _join_competitors(analysis, search_results),
         "gaps": _resolve_gap_quotes(
-            summary.get("gaps", []), pain, pain_sources,
-            analysis.get("market_gaps", [])
+            summary.get("gaps", []), pain, pain_sources, analysis.get("market_gaps", [])
         ),
-        "market_size": _fmt_tam(search_results.get("market_size_tam_usd")),  # legacy string key
+        "market_size": _fmt_tam(
+            search_results.get("market_size_tam_usd")
+        ),  # legacy string key
         "market": market,
         "why_now": why_now,
         "entry_cost": _entry_cost_with_tiers(summary.get("entry_cost", [])),
