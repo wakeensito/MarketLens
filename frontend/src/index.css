@@ -3326,6 +3326,20 @@ textarea:focus-visible {
   /* Touch targets */
   .header-btn-ghost   { min-height: 40px; }
   .report-footer      { padding-bottom: 8px; }
+  .report-export-btn       { height: 44px; }
+  .report-export-menu-item { height: 44px; }
+
+  /* Memo gaps stack — the rating drops below the body as an inline label.
+     Scoped to .memo so it outranks the base .memo-gap-row (1fr auto) which
+     sits later in the file. */
+  .memo .memo-gap-row { grid-template-columns: 1fr; }
+  .memo .memo-gap-row .gap-rating {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 6px;
+    text-align: left;
+    padding-top: 8px;
+  }
 }
 
 /* Desktop: rail mode + hide mobile-only elements */
@@ -5200,7 +5214,6 @@ textarea:focus-visible {
 .memo-headline {
   font-size: clamp(22px, 2.6vw, 30px);
   line-height: 1.3;
-  max-width: 40rem;
   margin-bottom: 14px;
 }
 
@@ -5208,8 +5221,13 @@ textarea:focus-visible {
 .memo-bands {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
   margin-top: 24px;
+  /* One connected pill — single outer border, internal dividers (matches
+     ReportView's .hero-metrics), not three free-floating cards. */
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
 }
 @media (max-width: 720px) {
   .memo-bands { grid-template-columns: 1fr; }
@@ -5217,10 +5235,12 @@ textarea:focus-visible {
 .memo-band {
   position: relative;
   padding: 16px 16px 14px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-left: 2px solid var(--band-color);
-  border-radius: var(--radius-lg);
+  border-right: 1px solid var(--border);
+}
+.memo-band:last-child { border-right: none; }
+@media (max-width: 720px) {
+  .memo-band { border-right: none; border-bottom: 1px solid var(--border); }
+  .memo-band:last-child { border-bottom: none; }
 }
 .memo-band-axis {
   font-family: var(--font-mono);
@@ -5254,9 +5274,27 @@ textarea:focus-visible {
   color: var(--text-muted);
 }
 .memo-band-denom { opacity: 0.6; font-weight: 400; }
+/* Score meter — same 3px track/fill treatment as ReportView's .metric-bar. */
+.memo-band-bar {
+  height: 3px;
+  margin: 12px 0 8px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.memo-band-bar-fill {
+  height: 100%;
+  width: 100%;
+  border-radius: 2px;
+  transform-origin: left;
+}
 
 /* ── Section heads ── */
 .memo-section-head { margin-bottom: 16px; }
+/* Section names + the bottom-line eyebrow are real <h2>s for screen-reader
+   navigation; the heading semantics are added without changing the visual. */
+.memo h2.brief-section-name,
+.memo h2.memo-read-eyebrow { margin: 0; }
 .memo-section-q {
   display: block;
   margin-top: 6px;
@@ -5326,10 +5364,17 @@ textarea:focus-visible {
   font-size: 0.8125rem;
   line-height: 1.55;
   color: var(--text-muted);
-  max-width: 38rem;
 }
 
 /* ── 02 Competitive landscape — additions atop the restored .comp-card ── */
+/* Restrained avatar: a neutral chip that adapts across light/stealth instead of
+   the hard-coded rainbow (which broke the palette and failed contrast). Initials
+   alone distinguish companies. Scoped to .memo so ReportView is untouched. */
+.memo .comp-avatar {
+  background: var(--surface-alt);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
 .memo-comp-link {
   display: inline-flex;
   align-items: center;
@@ -5374,7 +5419,6 @@ textarea:focus-visible {
   font-size: 1.0625rem;
   line-height: 1.7;
   color: var(--text);
-  max-width: 38rem;
 }
 .memo-prose-foot {
   display: flex;
@@ -5484,7 +5528,6 @@ textarea:focus-visible {
   font-size: 0.9375rem;
   line-height: 1.55;
   color: var(--text-secondary);
-  max-width: 38rem;
 }
 .memo-cost .memo-sources { margin-top: 8px; }
 
@@ -5509,7 +5552,6 @@ textarea:focus-visible {
   font-size: 1.125rem;
   line-height: 1.7;
   color: var(--text);
-  max-width: 40rem;
 }
 .memo-reco { margin-bottom: 20px; }
 .memo-limit {
@@ -5534,7 +5576,6 @@ textarea:focus-visible {
   font-size: 0.8125rem;
   line-height: 1.55;
   color: var(--text-muted);
-  max-width: 40rem;
 }
 
 /* ── Preview shell (/memo, dev-only) ── */
@@ -5547,7 +5588,8 @@ textarea:focus-visible {
   align-items: center;
   justify-content: space-between;
   padding: 18px 24px;
-  max-width: 760px;
+  /* Match the report's .ws-main content width so the memo isn't narrower. */
+  max-width: 860px;
   margin: 0 auto;
 }
 .memo-preview-home { text-decoration: none; }
@@ -5563,7 +5605,7 @@ textarea:focus-visible {
   border-radius: var(--radius-sm);
 }
 .memo-preview-main {
-  max-width: 760px;
+  max-width: 860px;
   margin: 0 auto;
   padding: 8px 24px 80px;
 }
@@ -5585,9 +5627,9 @@ textarea:focus-visible {
   font-size: 0.8125rem;
   line-height: 1.55;
   color: var(--text-secondary);
-  max-width: 38rem;
-  padding-left: 12px;
-  border-left: 2px solid var(--signal-border);
+  padding: 12px 14px;
+  background: var(--signal-light);
+  border-radius: var(--radius-md);
 }
 .memo-jargon strong { color: var(--signal); font-weight: 600; }
 

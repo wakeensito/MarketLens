@@ -1,8 +1,9 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import type { AppState, PipelineStage, MarketReport } from '../types';
-import { PIPELINE_STAGE_DEFS, TOTAL_PIPELINE_MS, MOCK_REPORT, MOCK_HISTORY } from '../mockData';
-import { createReport, getReport, ApiError } from '../api';
+import type { AppState, PipelineStage, MarketReport, MarketMemo } from '../types';
+import { PIPELINE_STAGE_DEFS, TOTAL_PIPELINE_MS, MOCK_REPORT, MOCK_HISTORY, MOCK_MEMO } from '../mockData';
+import { createReport, getReport, ApiError, type ResultJson } from '../api';
 import { adaptReport } from '../adapter';
+import { adaptMemo } from '../adapterMemo';
 
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 
@@ -57,6 +58,8 @@ export interface AnalysisState {
   query:                 string;
   stages:                PipelineStage[];
   report:                MarketReport | null;
+  /** Market Memo view of the same report — the live report surface renders this. */
+  memo:                  MarketMemo | null;
   error:                 string | null;
   reportId:              string | null;
   finalizing:            boolean;
@@ -75,6 +78,7 @@ export function useAnalysis(): AnalysisState {
   const [query,       setQuery]       = useState('');
   const [stages,      setStages]      = useState<PipelineStage[]>(freshStages);
   const [report,      setReport]      = useState<MarketReport | null>(null);
+  const [memo,        setMemo]        = useState<MarketMemo | null>(null);
   const [error,       setError]       = useState<string | null>(null);
   const [reportId,    setReportId]    = useState<string | null>(null);
   const [finalizing,  setFinalizing]  = useState(false);
@@ -89,6 +93,7 @@ export function useAnalysis(): AnalysisState {
     query:       string;
     stages:      PipelineStage[];
     report:      MarketReport | null;
+    memo:        MarketMemo | null;
     reportId:    string | null;
     error:       string | null;
     finalizing:  boolean;
@@ -114,7 +119,11 @@ export function useAnalysis(): AnalysisState {
     }
   }, [stopPolling]);
 
-  const showReport = useCallback((adapted: MarketReport, id: string) => {
+  // Adapts the raw result_json into both the classic report and the memo view
+  // (the live report surface renders the memo; report still feeds build-brief,
+  // Muse context, and the tab bar). `memoOverride` lets the mock path supply the
+  // rich hand-authored MOCK_MEMO instead of the fallback-adapted one.
+  const showReport = useCallback((json: ResultJson, idea: string, id: string, memoOverride?: MarketMemo) => {
     stopAll();
     const nextGen = generationRef.current;
     setFinalizing(true);
@@ -123,7 +132,8 @@ export function useAnalysis(): AnalysisState {
       transitionTimerRef.current = null;
       setFinalizing(false);
       setReportId(id);
-      setReport(adapted);
+      setReport(adaptReport(json, idea));
+      setMemo(memoOverride ?? adaptMemo(json, idea));
       setScreen('report');
     }, FINALIZING_MS);
   }, [stopAll]);
@@ -149,7 +159,7 @@ export function useAnalysis(): AnalysisState {
 
         if (data.status === 'complete' && data.result_json) {
           setStages(prev => deriveStages(prev, data.current_stage, true));
-          showReport(adaptReport(data.result_json, data.idea_text), id);
+          showReport(data.result_json, data.idea_text, id);
         } else if (data.status === 'failed') {
           stopAll();
           setFinalizing(false);
@@ -173,11 +183,12 @@ export function useAnalysis(): AnalysisState {
     // Capture the full pre-analysis view so a rate-limit can restore the
     // user's prior report/query, not just the screen.
     preAnalysisSnapshotRef.current = {
-      screen, query, stages, report, reportId, error, finalizing, rateLimited,
+      screen, query, stages, report, memo, reportId, error, finalizing, rateLimited,
     };
     setQuery(q);
     setStages(deriveStages(freshStages(), undefined, false));
     setReport(null);
+    setMemo(null);
     setError(null);
     setReportId(null);
     setFinalizing(false);
@@ -189,7 +200,7 @@ export function useAnalysis(): AnalysisState {
       transitionTimerRef.current = setTimeout(() => {
         if (generationRef.current !== gen) return;
         transitionTimerRef.current = null;
-        showReport(adaptReport(MOCK_REPORT, q), mockId);
+        showReport(MOCK_REPORT, q, mockId, { ...MOCK_MEMO, idea: q });
       }, TOTAL_PIPELINE_MS + 1200);
     } else {
       createReport(q)
@@ -214,6 +225,7 @@ export function useAnalysis(): AnalysisState {
               setQuery(snap.query);
               setStages(snap.stages);
               setReport(snap.report);
+              setMemo(snap.memo);
               setReportId(snap.reportId);
               setError(snap.error);
               setFinalizing(snap.finalizing);
@@ -226,7 +238,7 @@ export function useAnalysis(): AnalysisState {
           preAnalysisSnapshotRef.current = null;
         });
     }
-  }, [screen, query, stages, report, reportId, error, finalizing, rateLimited, stopAll, startPolling, showReport]);
+  }, [screen, query, stages, report, memo, reportId, error, finalizing, rateLimited, stopAll, startPolling, showReport]);
 
   const loadHistoricalReport = useCallback((id: string) => {
     stopAll();
@@ -241,6 +253,7 @@ export function useAnalysis(): AnalysisState {
         setQuery(item.idea_text);
         setReportId(id);
         setReport(adaptReport(item.result_json, item.idea_text));
+        setMemo(adaptMemo(item.result_json, item.idea_text));
         setScreen('report');
       } else if (generationRef.current === gen) {
         setError('Briefing not found.');
@@ -255,6 +268,7 @@ export function useAnalysis(): AnalysisState {
           setQuery(data.idea_text);
           setReportId(id);
           setReport(adaptReport(data.result_json, data.idea_text));
+          setMemo(adaptMemo(data.result_json, data.idea_text));
           setScreen('report');
         } else {
           setError('Briefing is not ready yet.');
@@ -272,6 +286,7 @@ export function useAnalysis(): AnalysisState {
     setQuery('');
     setStages(freshStages());
     setReport(null);
+    setMemo(null);
     setError(null);
     setReportId(null);
     setFinalizing(false);
@@ -283,6 +298,7 @@ export function useAnalysis(): AnalysisState {
     setQuery('');
     setStages(freshStages());
     setReport(null);
+    setMemo(null);
     setError(null);
     setReportId(null);
     setFinalizing(false);
@@ -297,7 +313,7 @@ export function useAnalysis(): AnalysisState {
   useEffect(() => () => stopAll(), [stopAll]);
 
   return {
-    screen, query, stages, report, error, reportId, finalizing, rateLimited,
+    screen, query, stages, report, memo, error, reportId, finalizing, rateLimited,
     startAnalysis, loadHistoricalReport, handleReset, handleRetry, startNewChat,
     dismissRateLimit,
   };

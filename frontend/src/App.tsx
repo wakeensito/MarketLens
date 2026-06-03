@@ -3,7 +3,9 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { PanelLeft } from 'lucide-react';
 import { initTheme } from './theme';
 import PipelineTracker from './components/PipelineTracker';
-import ReportView from './components/ReportView';
+import MarketMemo from './components/MarketMemo';
+import ReportActions from './components/ReportActions';
+import { buildMemoMarkdown } from './memoMarkdown';
 import AnimatedAiInput from './components/AnimatedAiInput';
 import RecentThreads from './components/RecentThreads';
 import SignInModal from './components/SignInModal';
@@ -33,7 +35,7 @@ const PENDING_QUERY_KEY = 'plinths-pending-query';
 export default function App() {
   const auth = useAuthContext();
   const {
-    screen, query, stages, report, error, reportId, finalizing, rateLimited,
+    screen, query, stages, report, memo, error, reportId, finalizing, rateLimited,
     startAnalysis, loadHistoricalReport, handleReset, handleRetry, startNewChat,
     dismissRateLimit,
   } = useAnalysis();
@@ -750,15 +752,21 @@ export default function App() {
                                 </button>
                               </div>
                             )}
-                            <ReportView
-                              report={report}
-                              reportId={reportId}
-                              onRequestUpgrade={() => setProactiveUpgrade(true)}
-                              onUpgradeToPro={upgradeToPro}
-                              onFeedback={async (rating, comment) => {
-                                await submitFeedback(reportId, rating, comment);
-                              }}
-                            />
+                            {memo && (
+                              <>
+                                <MarketMemo memo={memo} />
+                                <ReportActions
+                                  key={reportId}
+                                  reportId={reportId}
+                                  buildMarkdown={(briefId, dateStr) => buildMemoMarkdown(memo, briefId, dateStr)}
+                                  onRequestUpgrade={() => setProactiveUpgrade(true)}
+                                  onUpgradeToPro={upgradeToPro}
+                                  onFeedback={async (rating, comment) => {
+                                    await submitFeedback(reportId, rating, comment);
+                                  }}
+                                />
+                              </>
+                            )}
                           </div>
                         )}
 
