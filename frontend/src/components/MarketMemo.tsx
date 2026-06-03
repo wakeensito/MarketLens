@@ -9,6 +9,7 @@ import type {
   MemoGap,
   MemoCompetitor,
   CompetitorTier,
+  MemoRoadmapPhase,
 } from '../types';
 import './muse/muse.css';
 
@@ -335,6 +336,26 @@ function GapBlock({ gap, index }: { gap: MemoGap; index: number }) {
   );
 }
 
+/* ── Entry plan ──
+   Carries the stable `roadmap-N` citation anchor (1-indexed) so Muse pills
+   land here; mirrors ReportView's old roadmap rows in the memo's plainer voice. */
+function RoadmapStep({ phase, index }: { phase: MemoRoadmapPhase; index: number }) {
+  return (
+    <motion.div
+      className="memo-step"
+      data-muse-cell={`roadmap-${index + 1}`}
+      variants={fadeUp}
+    >
+      <div className="memo-step-num">{String(index + 1).padStart(2, '0')}</div>
+      <div className="memo-step-body">
+        <div className="memo-step-phase">{phase.phase}</div>
+        <div className="memo-step-title">{phase.title}</div>
+        {phase.description && <p className="memo-step-desc">{phase.description}</p>}
+      </div>
+    </motion.div>
+  );
+}
+
 export default function MarketMemo({ memo }: Props) {
   return (
     <div className="memo">
@@ -427,6 +448,20 @@ export default function MarketMemo({ memo }: Props) {
           ))}
         </div>
       </motion.section>
+
+      {memo.roadmap.length > 0 && (
+        <>
+          <div className="divider" />
+
+          {/* ── 06 · Entry Plan ── */}
+          <motion.section className="section" variants={fadeUp} initial="hidden" whileInView="show" viewport={VIEWPORT}>
+            <SectionHead num="06" name="Where to Start" question="What are the first moves to get going?" />
+            <motion.div className="memo-steps" variants={stagger} initial="hidden" whileInView="show" viewport={VIEWPORT}>
+              {memo.roadmap.map((p, i) => <RoadmapStep key={`${p.phase}-${i}`} phase={p} index={i} />)}
+            </motion.div>
+          </motion.section>
+        </>
+      )}
 
       <div className="divider" />
 

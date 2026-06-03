@@ -94,11 +94,20 @@ export default function ReportActions({ reportId, buildMarkdown, onFeedback, onR
     if (exportingFormat) return;
     setExportingFormat('csv');
     setExportError(null);
+    // Open the tab synchronously inside the user gesture so popup blockers
+    // don't swallow it; navigate it once the signed URL resolves.
+    const newWindow = window.open('', '_blank', 'noopener,noreferrer');
     try {
       const { download_url } = await exportReport(reportId);
-      window.open(download_url, '_blank', 'noopener,noreferrer');
+      if (newWindow && !newWindow.closed) {
+        newWindow.location.href = download_url;
+      } else {
+        window.open(download_url, '_blank', 'noopener,noreferrer');
+      }
       setMenuOpen(false);
     } catch {
+      // Close the pre-opened tab so a failed export doesn't strand a blank one.
+      if (newWindow && !newWindow.closed) newWindow.close();
       setExportError('Export failed. Please try again.');
     } finally {
       setExportingFormat(null);
