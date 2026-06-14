@@ -83,6 +83,9 @@ def _fresh_plan(user_id: str, fallback: str) -> str:
 def _free_brief_used(user_id: str) -> bool:
     """Has this free user spent today's full allowance (_FREE_DAILY_LIMIT)?
     The counter resets daily (UTC): a date that isn't today reads as 0 used."""
+    # A non-positive limit fully disables the free allowance (Pro-only).
+    if _FREE_DAILY_LIMIT <= 0:
+        return True
     try:
         row = (
             table.get_item(
@@ -109,6 +112,11 @@ def _reserve_free_brief(user_id: str) -> bool:
     Conditional writes prevent a free user racing multiple reports past the cap;
     the counter resets daily (UTC). Mirrors Muse's increment_muse_daily_count:
     same-day fast path, then new-day reset, then a single retry for the race."""
+    # A non-positive limit fully disables the free allowance: never grant. Without
+    # this, the new-day reset path would still hand out 1/day (the same-day path
+    # rejects via `count < :limit`, but the reset path is date-only).
+    if _FREE_DAILY_LIMIT <= 0:
+        return False
     today = _today_utc()
     key = {"pk": f"USER#{user_id}", "sk": f"USER#{user_id}"}
     vals = {":one": 1, ":today": today, ":limit": _FREE_DAILY_LIMIT}
