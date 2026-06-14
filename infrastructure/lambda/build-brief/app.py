@@ -4,8 +4,11 @@ Behind the existing API Gateway + authorizer:
   GET  /api/reports/{report_id}/build-brief  -> stored brief or nulls
   POST /api/reports/{report_id}/build-brief  -> generate-once, store, return
 
-Pro feature; **free users get one lifetime sample** (`free_build_brief_used`
-on the USER# row). Report must be complete (result_json present).
+Pro feature; **free users get a small daily allowance** (env
+`FREE_BUILD_BRIEF_DAILY_LIMIT`, default 3) tracked by `free_brief_count_today`
++ `free_brief_count_date` on the USER# row, reset daily (UTC). This is a
+temporary beta setting — the long-term product spec is one lifetime sample;
+see CLAUDE.md. Report must be complete (result_json present).
 POST is idempotent: a stored brief is returned instead of re-generating."""
 
 from __future__ import annotations
@@ -35,9 +38,18 @@ app = APIGatewayRestResolver(strip_prefixes=["/api"])
 _REPORT_ID_RE = re.compile(r"^[A-Za-z0-9_-]{6,80}$")
 _PAID_PLANS = {"pro", "max", "admin"}
 
+# Temporary beta setting: free users get this many Build Briefs per day (UTC),
+# instead of the long-term one-lifetime-sample. Revert by lowering this env /
+# reverting this commit. Mirrors Muse's MUSE_FREE_DAILY_LIMIT (code default).
+_FREE_DAILY_LIMIT = int(os.environ.get("FREE_BUILD_BRIEF_DAILY_LIMIT", "3"))
+
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(os.environ["REPORTS_TABLE"])
 MODEL_ID = os.environ["BEDROCK_MODEL_ID_BUILD_BRIEF"]
+
+
+def _today_utc() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
 def _auth() -> dict:
@@ -69,35 +81,76 @@ def _fresh_plan(user_id: str, fallback: str) -> str:
 
 
 def _free_brief_used(user_id: str) -> bool:
-    """Has this free user already spent their one lifetime sample?"""
+    """Has this free user spent today's full allowance (_FREE_DAILY_LIMIT)?
+    The counter resets daily (UTC): a date that isn't today reads as 0 used."""
     try:
         row = (
             table.get_item(
                 Key={"pk": f"USER#{user_id}", "sk": f"USER#{user_id}"},
                 ConsistentRead=True,
-                ProjectionExpression="free_build_brief_used",
+                ProjectionExpression="free_brief_count_today, free_brief_count_date",
             ).get("Item")
             or {}
         )
-        return bool(row.get("free_build_brief_used"))
     except ClientError:
-        # On read failure, fail CLOSED (treat as used) so we never over-grant.
+        # On read failure, fail CLOSED (treat as exhausted) so we never over-grant.
         return True
+    if row.get("free_brief_count_date") != _today_utc():
+        return False
+    try:
+        return int(row.get("free_brief_count_today", 0)) >= _FREE_DAILY_LIMIT
+    except (TypeError, ValueError):
+        return False
 
 
 def _reserve_free_brief(user_id: str) -> bool:
-    """Atomically consume the one free sample. Returns True if reserved (it was
-    available and is now spent), False if it was already used. Conditional write
-    prevents a free user racing two reports into two free briefs."""
+    """Atomically consume one of today's free briefs. Returns True if a slot was
+    reserved, False if today's limit (_FREE_DAILY_LIMIT) is already reached.
+    Conditional writes prevent a free user racing multiple reports past the cap;
+    the counter resets daily (UTC). Mirrors Muse's increment_muse_daily_count:
+    same-day fast path, then new-day reset, then a single retry for the race."""
+    today = _today_utc()
+    key = {"pk": f"USER#{user_id}", "sk": f"USER#{user_id}"}
+    vals = {":one": 1, ":today": today, ":limit": _FREE_DAILY_LIMIT}
+    same_day = (
+        "SET free_brief_count_today = free_brief_count_today + :one",
+        "free_brief_count_date = :today AND free_brief_count_today < :limit",
+    )
+    # (a) Same-day path: increment only while still under today's limit.
     try:
         table.update_item(
-            Key={"pk": f"USER#{user_id}", "sk": f"USER#{user_id}"},
-            UpdateExpression="SET free_build_brief_used = :t",
+            Key=key,
+            UpdateExpression=same_day[0],
+            ConditionExpression=same_day[1],
+            ExpressionAttributeValues=vals,
+        )
+        return True
+    except ClientError as e:
+        if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
+            raise  # fail-closed on unexpected errors: never over-grant
+    # (b) New-day path (or first-ever): reset to 1 and stamp today.
+    try:
+        table.update_item(
+            Key=key,
+            UpdateExpression="SET free_brief_count_today = :one, free_brief_count_date = :today",
             ConditionExpression=(
-                "attribute_not_exists(free_build_brief_used) "
-                "OR free_build_brief_used = :f"
+                "attribute_not_exists(free_brief_count_date) "
+                "OR free_brief_count_date <> :today"
             ),
-            ExpressionAttributeValues={":t": True, ":f": False},
+            ExpressionAttributeValues={":one": 1, ":today": today},
+        )
+        return True
+    except ClientError as e:
+        if e.response["Error"]["Code"] != "ConditionalCheckFailedException":
+            raise
+    # (c) A concurrent new-day reset landed between (a) and (b). Retry same-day
+    #     once; a ConditionalCheckFailed now means today's limit is truly reached.
+    try:
+        table.update_item(
+            Key=key,
+            UpdateExpression=same_day[0],
+            ConditionExpression=same_day[1],
+            ExpressionAttributeValues=vals,
         )
         return True
     except ClientError as e:
@@ -107,26 +160,35 @@ def _reserve_free_brief(user_id: str) -> bool:
 
 
 def _release_free_brief(user_id: str) -> None:
-    """Give the sample back (generation failed after we reserved it).
+    """Give a slot back (generation failed after we reserved it). Only decrements
+    if the counter still belongs to today and is above zero — a rollover to a new
+    day or a zeroed count is a no-op, not an error.
 
     Bounded retry (botocore already retries transient throttles beneath this);
-    on persistent failure emit a metric + error log so the lost entitlement is
-    alarmable and can be reconciled. A dedicated reconciliation queue/table is
-    out of scope here — disproportionate for a single free-sample flag."""
+    on persistent failure emit a metric + error log so the lost slot is alarmable
+    and can be reconciled. A dedicated reconciliation queue/table is out of scope
+    here — disproportionate for a daily free-allowance counter."""
+    today = _today_utc()
     for attempt in range(3):
         try:
             table.update_item(
                 Key={"pk": f"USER#{user_id}", "sk": f"USER#{user_id}"},
-                UpdateExpression="SET free_build_brief_used = :f",
-                ExpressionAttributeValues={":f": False},
+                UpdateExpression="SET free_brief_count_today = free_brief_count_today - :one",
+                ConditionExpression=(
+                    "free_brief_count_date = :today AND free_brief_count_today > :zero"
+                ),
+                ExpressionAttributeValues={":one": 1, ":today": today, ":zero": 0},
             )
             return
-        except ClientError:
+        except ClientError as e:
+            # Nothing to release (new day, or already 0) — expected, not a failure.
+            if e.response["Error"]["Code"] == "ConditionalCheckFailedException":
+                return
             if attempt < 2:
                 time.sleep(0.1 * (2**attempt))
                 continue
             logger.error(
-                "Failed to release free build-brief sample after retries",
+                "Failed to release free build-brief slot after retries",
                 extra={"user_id": user_id},
             )
             metrics.add_metric(
@@ -200,7 +262,7 @@ def generate_brief(report_id: str):
     if report.get("status") != "complete" or not result_json:
         return {"error": "Report is not complete yet", "code": "not_ready"}, 409
 
-    # --- Generation gate: paid proceeds; free reserves its one lifetime sample ---
+    # --- Generation gate: paid proceeds; free reserves one of today's allowance ---
     is_paid = auth["plan"] in _PAID_PLANS
     reserved_free = False
     if not is_paid:
