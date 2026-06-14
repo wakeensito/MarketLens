@@ -32,7 +32,7 @@ const PLAN_DATA: PlanRow[] = [
     features: [
       '3 reports per day',
       '3 Muse chats per day',
-      '7-day history',
+      'Report history',
       'Markdown export',
       'Live web search',
     ],
