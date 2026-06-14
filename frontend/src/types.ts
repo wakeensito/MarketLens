@@ -163,6 +163,12 @@ export interface MemoRead {
   limit:          string;  // honest disclaimer
 }
 
+export interface MemoRoadmapPhase {
+  phase:       string;  // e.g. "Phase 1" or a timeline label from the pipeline
+  title:       string;
+  description: string;
+}
+
 export interface MarketMemo {
   idea:        string;
   vertical:    string;
@@ -173,6 +179,7 @@ export interface MarketMemo {
   whyNow:      WhyNow;
   gaps:        MemoGap[];
   entryCost:   EntryCostFactor[];
+  roadmap:     MemoRoadmapPhase[];   // entry plan — carries roadmap-N citation anchors
   read:        MemoRead;
 }
 

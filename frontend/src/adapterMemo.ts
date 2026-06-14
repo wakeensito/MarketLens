@@ -1,7 +1,7 @@
 import type {
   MarketMemo, ScoreBand, BandTone, EvidenceTier, Source,
   MemoCompetitor, CompetitorTier, MemoGap, GapSeverity,
-  EntryCostFactor, MemoRead,
+  EntryCostFactor, MemoRead, MemoRoadmapPhase,
 } from './types';
 import type { ResultJson, BackendCompetitor, BackendGap, SourceJson } from './api';
 
@@ -135,6 +135,12 @@ export function adaptMemo(json: ResultJson, ideaText: string): MarketMemo {
     sources: asSources(f.sources),
   }));
 
+  const roadmap: MemoRoadmapPhase[] = (json.roadmap ?? []).map((r, i) => ({
+    phase: String(r.phase ?? '').trim() || `Phase ${i + 1}`,
+    title: String(r.title ?? ''),
+    description: String(r.description ?? ''),
+  }));
+
   const read: MemoRead = json.read
     ? {
         synthesis: String(json.read.synthesis ?? ''),
@@ -159,6 +165,7 @@ export function adaptMemo(json: ResultJson, ideaText: string): MarketMemo {
     whyNow,
     gaps,
     entryCost,
+    roadmap,
     read,
   };
 }

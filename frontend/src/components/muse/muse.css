@@ -146,6 +146,16 @@
   outline-offset: 2px;
 }
 
+/* Touch devices: grow the hit area well past the 24px WCAG floor. Inline pills
+   can't reach 44px without colliding with prose lines, so we trade a little
+   vertical padding (absorbed by the 1.7 prose line-height) plus more margin. */
+@media (pointer: coarse) {
+  .muse-cite {
+    padding: 0.4rem 0.6rem;
+    margin: 0.0625rem 0.1875rem;
+  }
+}
+
 .muse-cite__glyph {
   display: inline-block;
   margin-right: 0.25rem;

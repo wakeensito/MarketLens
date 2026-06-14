@@ -9,6 +9,7 @@ import type {
   MemoGap,
   MemoCompetitor,
   CompetitorTier,
+  MemoRoadmapPhase,
 } from '../types';
 import './muse/muse.css';
 
@@ -47,15 +48,6 @@ const STRENGTH_RANK: Record<CompetitorTier, number> = {
   moderate: 2,
   niche:    3,
 };
-
-const AVATAR_COLORS = [
-  'oklch(68% 0.24 268)',
-  'oklch(72% 0.18 60)',
-  'oklch(68% 0.20 155)',
-  'oklch(68% 0.22 22)',
-  'oklch(70% 0.22 305)',
-  'oklch(70% 0.20 215)',
-];
 
 function toneColor(tone: ScoreBand['tone']): string {
   if (tone === 'good') return 'var(--success)';
@@ -101,7 +93,7 @@ function SectionHead({ num, name, question }: { num: string; name: string; quest
       <div className="brief-section-header">
         <span className="brief-section-num">{num}</span>
         <span className="brief-section-sep" aria-hidden>·</span>
-        <span className="brief-section-name">{name}</span>
+        <h2 className="brief-section-name">{name}</h2>
       </div>
       <span className="memo-section-q">{question}</span>
     </div>
@@ -110,11 +102,23 @@ function SectionHead({ num, name, question }: { num: string; name: string; quest
 
 function BandCard({ band }: { band: ScoreBand }) {
   const color = toneColor(band.tone);
+  const pct = Math.max(0, Math.min(band.score, 100)) / 100;
   return (
-    <motion.div className="memo-band" variants={fadeUp} style={{ '--band-color': color } as React.CSSProperties}>
+    <motion.div className="memo-band" variants={fadeUp}>
       <div className="memo-band-axis">{BAND_AXIS_LABEL[band.axis]}</div>
       <div className="memo-band-label" style={{ color }}>{band.label}</div>
       <div className="memo-band-receipt">{band.receipt}</div>
+      {/* Proportional score meter, mirrors ReportView's .metric-bar — the bar IS
+          the band (a range, not a precise integer), so it carries the tone. */}
+      <div className="memo-band-bar" aria-hidden>
+        <motion.div
+          className="memo-band-bar-fill"
+          style={{ background: color }}
+          initial={{ scaleX: 0 }}
+          animate={{ scaleX: pct }}
+          transition={{ duration: 0.9, ease: 'easeOut' as const, delay: 0.15 }}
+        />
+      </div>
       <div className="memo-band-score">{band.score}<span className="memo-band-denom">/100</span></div>
     </motion.div>
   );
@@ -168,7 +172,7 @@ function CompetitorTable({ competitors }: { competitors: MemoCompetitor[] }) {
           >
             <td>
               <div className="comp-cell">
-                <div className="comp-avatar" style={{ background: AVATAR_COLORS[i % AVATAR_COLORS.length] }}>
+                <div className="comp-avatar">
                   {c.name.slice(0, 2).toUpperCase()}
                 </div>
                 <span>
@@ -198,7 +202,7 @@ function CompetitorCard({ c, index }: { c: MemoCompetitor; index: number }) {
       transition={{ duration: 0.35, ease: 'easeOut' as const, delay: index * 0.06 }}
     >
       <div className="comp-card-header">
-        <div className="comp-avatar comp-avatar--sm" style={{ background: AVATAR_COLORS[index % AVATAR_COLORS.length] }}>
+        <div className="comp-avatar comp-avatar--sm">
           {c.name.slice(0, 2).toUpperCase()}
         </div>
         <span className="comp-card-name"><CompName c={c} /></span>
@@ -332,6 +336,26 @@ function GapBlock({ gap, index }: { gap: MemoGap; index: number }) {
   );
 }
 
+/* ── Entry plan ──
+   Carries the stable `roadmap-N` citation anchor (1-indexed) so Muse pills
+   land here; mirrors ReportView's old roadmap rows in the memo's plainer voice. */
+function RoadmapStep({ phase, index }: { phase: MemoRoadmapPhase; index: number }) {
+  return (
+    <motion.div
+      className="memo-step"
+      data-muse-cell={`roadmap-${index + 1}`}
+      variants={fadeUp}
+    >
+      <div className="memo-step-num">{String(index + 1).padStart(2, '0')}</div>
+      <div className="memo-step-body">
+        <div className="memo-step-phase">{phase.phase}</div>
+        <div className="memo-step-title">{phase.title}</div>
+        {phase.description && <p className="memo-step-desc">{phase.description}</p>}
+      </div>
+    </motion.div>
+  );
+}
+
 export default function MarketMemo({ memo }: Props) {
   return (
     <div className="memo">
@@ -360,7 +384,7 @@ export default function MarketMemo({ memo }: Props) {
 
       {/* ── 01 · Market Size & Growth ── */}
       <motion.section className="section" variants={fadeUp} initial="hidden" whileInView="show" viewport={VIEWPORT}>
-        <SectionHead num="01" name="Market Size" question="How big is this market — and is it growing?" />
+        <SectionHead num="01" name="Market Size" question="How big is this market, and is it growing?" />
         <div className="memo-prize">
           <span className="memo-prize-label">Total market size</span>
           <div className="memo-prize-figure">
@@ -369,7 +393,7 @@ export default function MarketMemo({ memo }: Props) {
             <TierTag tier={memo.marketSize.tier} />
           </div>
           <p className="memo-jargon">
-            This is the whole pie — all the money spent on this kind of product each year if you reached every possible customer. Investors call it the <strong>TAM</strong> (total addressable market).
+            This is the whole pie: all the money spent on this kind of product each year if you reached every possible customer. Investors call it the <strong>TAM</strong> (total addressable market).
           </p>
           {memo.marketSize.note && <p className="memo-note">{memo.marketSize.note}</p>}
           <SourcesRow sources={memo.marketSize.sources} />
@@ -425,12 +449,26 @@ export default function MarketMemo({ memo }: Props) {
         </div>
       </motion.section>
 
+      {memo.roadmap.length > 0 && (
+        <>
+          <div className="divider" />
+
+          {/* ── 06 · Entry Plan ── */}
+          <motion.section className="section" variants={fadeUp} initial="hidden" whileInView="show" viewport={VIEWPORT}>
+            <SectionHead num="06" name="Where to Start" question="What are the first moves to get going?" />
+            <motion.div className="memo-steps" variants={stagger} initial="hidden" whileInView="show" viewport={VIEWPORT}>
+              {memo.roadmap.map((p, i) => <RoadmapStep key={`${p.phase}-${i}`} phase={p} index={i} />)}
+            </motion.div>
+          </motion.section>
+        </>
+      )}
+
       <div className="divider" />
 
       {/* ── The Read (T3) ── */}
       <motion.section className="section" variants={fadeUp} initial="hidden" whileInView="show" viewport={VIEWPORT}>
         <div className="memo-read-head">
-          <span className="memo-read-eyebrow">The Bottom Line</span>
+          <h2 className="memo-read-eyebrow">The Bottom Line</h2>
           <TierTag tier="analysis" />
         </div>
         <p className="memo-read-synthesis">{memo.read.synthesis}</p>

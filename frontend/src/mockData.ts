@@ -442,6 +442,24 @@ export const MOCK_MEMO: MarketMemo = {
     },
   ],
 
+  roadmap: [
+    {
+      phase: 'Phase 1 · 0–3 months',
+      title: 'Prove the loop',
+      description: 'Ship a single adaptive coaching flow to a small cohort and measure week-4 retention before anything else. The whole thesis rests on people coming back.',
+    },
+    {
+      phase: 'Phase 2 · 3–9 months',
+      title: 'Earn trust with results',
+      description: 'Instrument outcomes and surface real progress publicly. Let demonstrated results — not paid acquisition — drive word-of-mouth growth.',
+    },
+    {
+      phase: 'Phase 3 · 9–18 months',
+      title: 'Widen the wedge',
+      description: 'Once retention holds, expand the program library and lean into the compounding advantage of getting smarter the more each person uses it.',
+    },
+  ],
+
   read: {
     synthesis: 'The market is big and growing, and the leaders have left a clear opening: a coaching app that\'s affordable and gets smarter the more you use it. The crowded part is the expensive, hardware-heavy end — not the affordable, AI-first space. The hardest part isn\'t beating competitors; it\'s getting people to keep coming back. Whoever proves people stick around, and actually get results, wins this opening.',
     recommendation: 'Start with affordable coaching that adapts to each person in real time. Treat "keeping people coming back" as the real product: measure it from day one, share real results to build trust, and let those results — not ad spending — be what sets you apart.',
