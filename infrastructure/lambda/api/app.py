@@ -15,7 +15,7 @@ import re
 import boto3
 from botocore.exceptions import ClientError
 from uuid import uuid4
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 from aws_lambda_powertools import Logger, Tracer, Metrics
 from aws_lambda_powertools.event_handler import APIGatewayRestResolver
@@ -185,14 +185,14 @@ def get_me():
 @app.get("/reports")
 @tracer.capture_method
 def list_reports():
-    """List reports scoped to the user's org. Free tier sees last 7 days only."""
+    """List reports scoped to the user's org. All authenticated users — including
+    free tier — see their full history (the prior free-tier 7-day cap was lifted
+    to open up access during beta)."""
     auth = _get_auth_context()
     org_id = auth["org_id"]
 
     if not auth["is_authenticated"]:
         return {"reports": []}
-
-    plan = auth.get("plan", "free")
 
     query_params = {
         "IndexName": "gsi1",
@@ -206,12 +206,6 @@ def list_reports():
         "ScanIndexForward": False,
     }
 
-    # Free tier: limit to last 7 days via sort key range on gsi1sk (ISO timestamp)
-    if plan == "free":
-        cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
-        query_params["KeyConditionExpression"] = "gsi1pk = :pk AND gsi1sk >= :cutoff"
-        query_params["ExpressionAttributeValues"][":cutoff"] = cutoff
-
     # Paginate until all results are fetched
     reports = []
     while True:
@@ -222,10 +216,10 @@ def list_reports():
             break
         query_params["ExclusiveStartKey"] = last_key
 
-    # Add metadata so frontend knows if history is truncated
+    # No tier is truncated anymore; keep the field for API compatibility.
     return {
         "reports": reports,
-        "history_limited": plan == "free",
+        "history_limited": False,
     }
 
 
