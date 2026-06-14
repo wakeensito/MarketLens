@@ -143,7 +143,7 @@ function Invite({
         <>
           {freeTaste && (
             <div className="bb-eyebrow" style={{ marginBottom: '0.75rem' }}>
-              Your free build brief · 1 sample
+              Your free build brief
             </div>
           )}
           <button type="button" className="bb-cta" onClick={onGenerate}>
