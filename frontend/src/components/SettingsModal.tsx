@@ -54,8 +54,9 @@ export default function SettingsModal({
   onPersonalizationSaved,
 }: Props) {
   const auth = useAuthContext();
+  const userId = auth.user?.user_id;
   const [section, setSection] = useState<SettingsSection>(initialSection);
-  const [fields, setFields] = useState<Personalization>(getPersonalization);
+  const [fields, setFields] = useState<Personalization>(() => getPersonalization(userId));
   const closeBtnRef = useRef<HTMLButtonElement>(null);
 
   // Re-read persisted personalization whenever the modal opens, so external
@@ -64,12 +65,15 @@ export default function SettingsModal({
   const [wasOpen, setWasOpen] = useState(isOpen);
   if (isOpen !== wasOpen) {
     setWasOpen(isOpen);
-    if (isOpen) setFields(getPersonalization());
+    if (isOpen) setFields(getPersonalization(userId));
   }
 
-  // Persist a single field on blur and notify the parent of live consumers.
-  const commitField = (key: keyof Personalization) => {
-    const next = setPersonalization({ [key]: fields[key] });
+  // Persist on every change (not on blur), so closing via Escape — which never
+  // fires a blur — can't drop an in-flight edit. localStorage writes are cheap
+  // for four short fields.
+  const updateField = (key: keyof Personalization, value: string) => {
+    setFields(f => ({ ...f, [key]: value }));
+    const next = setPersonalization({ [key]: value }, userId);
     onPersonalizationSaved?.(next);
   };
 
@@ -181,8 +185,7 @@ export default function SettingsModal({
                       hint="What we call you in the workspace."
                       value={fields.preferredName}
                       placeholder="e.g. Sito"
-                      onChange={v => setFields(f => ({ ...f, preferredName: v }))}
-                      onBlur={() => commitField('preferredName')}
+                      onChange={v => updateField('preferredName', v)}
                       maxLength={40}
                     />
                     <Field
@@ -190,8 +193,7 @@ export default function SettingsModal({
                       hint="Frames how your reports read."
                       value={fields.building}
                       placeholder="e.g. Solo founder, B2B SaaS"
-                      onChange={v => setFields(f => ({ ...f, building: v }))}
-                      onBlur={() => commitField('building')}
+                      onChange={v => updateField('building', v)}
                       maxLength={120}
                     />
                     <Field
@@ -199,8 +201,7 @@ export default function SettingsModal({
                       hint="The space you most often research."
                       value={fields.marketFocus}
                       placeholder="e.g. US fintech, climate hardware"
-                      onChange={v => setFields(f => ({ ...f, marketFocus: v }))}
-                      onBlur={() => commitField('marketFocus')}
+                      onChange={v => updateField('marketFocus', v)}
                       maxLength={120}
                     />
                     <Field
@@ -210,8 +211,7 @@ export default function SettingsModal({
                       multiline
                       value={fields.museInstructions}
                       placeholder="e.g. Be concise. Lead with the verdict, then the reasoning."
-                      onChange={v => setFields(f => ({ ...f, museInstructions: v }))}
-                      onBlur={() => commitField('museInstructions')}
+                      onChange={v => updateField('museInstructions', v)}
                       maxLength={600}
                     />
                   </Group>
@@ -335,14 +335,13 @@ interface FieldProps {
   value:        string;
   placeholder?: string;
   onChange:     (value: string) => void;
-  onBlur:       () => void;
   maxLength?:   number;
   multiline?:   boolean;
   /** Captured-but-not-yet-consumed — shows a "Soon" tag next to the label. */
   soon?:        boolean;
 }
 
-function Field({ label, hint, value, placeholder, onChange, onBlur, maxLength, multiline, soon }: FieldProps) {
+function Field({ label, hint, value, placeholder, onChange, maxLength, multiline, soon }: FieldProps) {
   return (
     <div className="settings-field">
       <div className="settings-field-text">
@@ -360,7 +359,6 @@ function Field({ label, hint, value, placeholder, onChange, onBlur, maxLength, m
           maxLength={maxLength}
           rows={3}
           onChange={e => onChange(e.target.value)}
-          onBlur={onBlur}
         />
       ) : (
         <input
@@ -370,7 +368,6 @@ function Field({ label, hint, value, placeholder, onChange, onBlur, maxLength, m
           placeholder={placeholder}
           maxLength={maxLength}
           onChange={e => onChange(e.target.value)}
-          onBlur={onBlur}
         />
       )}
     </div>

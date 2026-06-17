@@ -23,10 +23,18 @@ export const EMPTY_PERSONALIZATION: Personalization = {
 
 const KEY = 'plinths-personalization';
 
-export function getPersonalization(): Personalization {
+// Personalization is identity-bearing (name, framing), so it is namespaced per
+// user_id. Without this, a shared browser would bleed one account's preferred
+// name / framing into the next account that signs in. Anonymous/legacy callers
+// fall back to the bare key (the settings UI is only reachable when signed in).
+function storageKey(userId?: string): string {
+  return userId ? `${KEY}:${userId}` : KEY;
+}
+
+export function getPersonalization(userId?: string): Personalization {
   if (typeof window === 'undefined') return { ...EMPTY_PERSONALIZATION };
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(storageKey(userId));
     if (!raw) return { ...EMPTY_PERSONALIZATION };
     const parsed = JSON.parse(raw) as Partial<Personalization>;
     // Merge over defaults so a partial/older blob never yields undefined fields.
@@ -41,11 +49,11 @@ export function getPersonalization(): Personalization {
   }
 }
 
-export function setPersonalization(patch: Partial<Personalization>): Personalization {
-  const next = { ...getPersonalization(), ...patch };
+export function setPersonalization(patch: Partial<Personalization>, userId?: string): Personalization {
+  const next = { ...getPersonalization(userId), ...patch };
   if (typeof window !== 'undefined') {
     try {
-      localStorage.setItem(KEY, JSON.stringify(next));
+      localStorage.setItem(storageKey(userId), JSON.stringify(next));
     } catch {
       // Storage full / unavailable (private mode) — fail silently; the in-memory
       // value still drives the current session.

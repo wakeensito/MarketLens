@@ -54,8 +54,17 @@ export default function App() {
   const [proactiveUpgrade, setProactiveUpgrade] = useState(false);
   /** Settings modal: null = closed, otherwise the section to open on. */
   const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null);
-  /** Preferred name from personalization — drives the workspace greeting. */
-  const [preferredName, setPreferredName] = useState<string>(() => getPersonalization().preferredName);
+  /** Preferred name from personalization — drives the workspace greeting.
+   *  Namespaced per user_id and re-synced below when the signed-in user changes,
+   *  so a shared browser never greets one account with another's name. */
+  const [preferredName, setPreferredName] = useState<string>(() => getPersonalization(auth.user?.user_id).preferredName);
+  // Re-read the greeting name when the signed-in user changes (login / logout /
+  // account switch on a shared browser). Render-phase sync — no effect.
+  const [pnUserId, setPnUserId] = useState(auth.user?.user_id);
+  if (auth.user?.user_id !== pnUserId) {
+    setPnUserId(auth.user?.user_id);
+    setPreferredName(getPersonalization(auth.user?.user_id).preferredName);
+  }
   const shellRef = useRef<HTMLDivElement>(null);
 
   const pendingQueryRef = useRef<string | null>(null);
