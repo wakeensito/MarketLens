@@ -242,6 +242,8 @@ Workspace:  flex-row         |  shell--workspace  |  sidebar + workspace-body
 - Open: fixed overlay, `transform: translateX(0)`, backdrop
 - Closed: `transform: translateX(-100%)`
 
+**Sidebar report search (`.thread-search`):** live client-side filter over the already-loaded `reports` list — no backend call, no debounce. Real `<input>` (no longer a `soon` affordance). Case-insensitive `matchesQuery` matches `idea_text` + key result fields (vertical, geography, business_model, oneliner, saturation_label, recommendation) + competitor names + gap titles. `:focus-within` lifts the border to `--border-mid` + a 2px `--border-focus` ring; the search icon brightens to `--text-secondary` when active/focused. A 20px `.thread-search-clear` (×) appears once there's text. The `threads-count` badge and the `01 — REPORTS` sub-header reflect the **filtered** count; zero matches show a "No matches" empty state (distinct from the first-run "No reports yet"). No match-term highlighting or result snippets — deliberately chrome-free.
+
 **`ws-input-wrap` left offset:**
 - Sidebar expanded: `left: 260px`
 - Sidebar rail (desktop): `left: 52px`
@@ -310,6 +312,26 @@ transition: background 0.15s, border-color 0.15s;
 
 ### Pipeline — Active Stage
 Running stage: `border-left: 2px solid --accent`.
+
+### Settings Modal (two-pane preferences)
+`SettingsModal.tsx` — opened from the profile menu's "Settings" (→General) and "Profile" (→Account) items. `App.tsx` holds `settingsSection: SettingsSection | null` (null = closed); RecentThreads fires `onOpenSettings(section)`.
+
+- **Backdrop:** `.settings-backdrop` — `accent 22%` + `blur(6px)`, `z-index 960` (one above the upgrade modal's 950). Click-outside + Escape close; focus moves to the close button on open and restores on close (matches `UpgradeModal`).
+- **Card:** `.settings-card` — flex row, `max-width 720px`, `height min(540px, 86vh)`, `border-radius 16px`, `--border-mid`, and the same soft lift as `upgrade-modal-card` (`0 14px 40px accent/14%`). The shadow is the one sanctioned exception to borders-only — floating dialogs only, never inner cards.
+- **Left nav** (`.settings-nav`, `flex 0 0 196px`, `border-right`): mono `Settings` eyebrow header + vertical `role="tablist"` of 32px items (icon + 13px/500 label). Active = `--surface-alt` fill + 600 weight (same language as profile-menu hover); icons step `--text-muted`→`--text`. Tabs: General · Personalization · Account · Billing · Privacy · Help. The profile menu wires Settings→General, Profile→Account, Personalization→Personalization, Help & Support→Help; all formerly-`soon` items are now live.
+- **Right detail** (`.settings-detail`): absolute close button top-right (28px, mirrors `upgrade-modal-close`); `.settings-detail-scroll` owns overflow (`28px 32px 32px` padding).
+- **Groups & rows:** `.settings-group-title` is IBM Plex Serif 19/600. `.settings-row` is `space-between`, `16px 0` vertical padding, hairline `--border` bottom (last row none). Label 13/500 `--text` + optional `.settings-row-hint` 12/400 `--text-muted`. Right-aligned control slot.
+- **Row controls:** `.settings-value` (`--mono` / `--muted` variants); `.settings-plan-badge` (mono pill, `--paid` variant flips to signal tokens); `.settings-action-btn` (32px ghost, `--primary` = ink-filled for the single conversion action). Unwired rows use `SoonPill` in `.settings-soon-slot`.
+- **Avatar:** `.settings-avatar` 40px ink circle; gets the stealth amber override alongside `.sidebar-profile-avatar`.
+- **Mobile (≤600px):** card goes fullscreen (no radius/border), nav becomes a horizontal scroll strip above the detail, items bump to 40px.
+- **Tabs are honest:** every row binds real data (`auth.user`, `plan_limits`, `/privacy` route, billing flow). No decorative/fake toggles — a deliberately minimal tab beats padded chrome.
+
+#### Personalization tab — stacked form fields
+The settings-list tabs use inline `space-between` rows; the **Personalization** tab uses a *form* layout instead — `.settings-field` stacks a `.settings-field-text` group (label + optional `SoonPill` + hint, 4px gap) above a full-width control, hairline `--border` between fields.
+- **Inputs:** `.settings-input` / `.settings-textarea` — inset `--surface-alt` bg, `--border-mid`, 8px radius, `8px 12px` padding, 13/400. Focus: `--accent-border` + `--surface` bg + `0 0 0 3px --border-focus` ring. Textarea `resize: vertical`, `min-height 72px`.
+- **Intro line** (`.settings-intro`): one quiet `--text-muted` 12px sentence, `border-bottom` hairline — sets honest expectations for partially-wired tabs.
+- **Save model:** silent persist on **blur** (`commitField`), no Save button / no toast — the retained value on reopen is the confirmation (less-chrome). Captured-but-unconsumed fields carry a `SoonPill` and a self-contained hint ("Saved now — Muse will use it soon").
+- **Data layer:** `src/personalization.ts` mirrors `theme.ts` — `getPersonalization()` / `setPersonalization(patch)` over `localStorage['plinths-personalization']`, defaults-merged so partial/older blobs never yield `undefined`. The `Personalization` interface *is* the schema the backend/pipeline/Muse later consume (frontend-first). Live consumer today: `preferredName` → `.ws-empty-greeting` ("Welcome back, {name}.") via `onPersonalizationSaved` lifting to App state. `building` / `marketFocus` (report framing) and `museInstructions` (Muse prompt) are captured-only until that work lands.
 
 ---
 

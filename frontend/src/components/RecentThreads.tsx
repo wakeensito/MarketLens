@@ -57,6 +57,24 @@ function bucketReport(iso: string): GroupKey {
   return 'older';
 }
 
+/** Case-insensitive keyword match across a report's idea text and the most
+ *  searchable result fields (vertical, geography, model, verdict, competitor
+ *  names, gap titles). Runs client-side over the already-loaded list. */
+function matchesQuery(report: ApiReport, needle: string): boolean {
+  if (!needle) return true;
+  const hay: (string | undefined)[] = [report.idea_text];
+  const rj = report.result_json;
+  if (rj) {
+    hay.push(
+      rj.vertical, rj.geography, rj.business_model,
+      rj.oneliner, rj.saturation_label, rj.recommendation,
+    );
+    rj.competitors?.forEach(c => hay.push(c.name));
+    rj.gaps?.forEach(g => hay.push(g.title));
+  }
+  return hay.some(s => s != null && s.toLowerCase().includes(needle));
+}
+
 function groupReports(reports: ApiReport[]): { key: GroupKey; items: ApiReport[] }[] {
   const buckets = new Map<GroupKey, ApiReport[]>();
   for (const r of reports) {
@@ -82,6 +100,8 @@ interface Props {
   onUpgradeClick:       () => void;
   /** Fires when a paid-plan user clicks "Manage subscription" in the profile menu. */
   onManageSubscription: () => void;
+  /** Opens the settings modal at the given section (defaults to General). */
+  onOpenSettings:       (section?: 'general' | 'personalization' | 'account' | 'billing' | 'privacy' | 'help') => void;
   /** Fires when the currently-open report is deleted from the sidebar.
    *  Privacy fix: parent must clear the workspace so the report's content
    *  isn't left on-screen after the user asked for it to go away. */
@@ -90,10 +110,10 @@ interface Props {
 
 const PROFILE_MENU_ITEMS = [
   { id: 'upgrade',         label: 'Upgrade Plan',    Icon: Zap,        danger: false, soon: false },
-  { id: 'personalization', label: 'Personalization', Icon: Palette,    danger: false, soon: true  },
-  { id: 'profile',         label: 'Profile',         Icon: User,       danger: false, soon: true  },
-  { id: 'settings',        label: 'Settings',        Icon: Settings2,  danger: false, soon: true  },
-  { id: 'help',            label: 'Help & Support',  Icon: HelpCircle, danger: false, soon: true  },
+  { id: 'personalization', label: 'Personalization', Icon: Palette,    danger: false, soon: false },
+  { id: 'profile',         label: 'Profile',         Icon: User,       danger: false, soon: false },
+  { id: 'settings',        label: 'Settings',        Icon: Settings2,  danger: false, soon: false },
+  { id: 'help',            label: 'Help & Support',  Icon: HelpCircle, danger: false, soon: false },
   { id: 'logout',          label: 'Log Out',         Icon: LogOut,     danger: true,  soon: false },
 ];
 
@@ -223,9 +243,10 @@ function ThreadItem({
   );
 }
 
-export default function RecentThreads({ isOpen, onClose, onOpen, onNewChat, activeId, screen, onSelect, onUpgradeClick, onManageSubscription, onActiveDeleted }: Props) {
+export default function RecentThreads({ isOpen, onClose, onOpen, onNewChat, activeId, screen, onSelect, onUpgradeClick, onManageSubscription, onOpenSettings, onActiveDeleted }: Props) {
   const auth = useAuthContext();
   const [reports, setReports] = useState<ApiReport[]>([]);
+  const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
@@ -351,7 +372,9 @@ export default function RecentThreads({ isOpen, onClose, onOpen, onNewChat, acti
     ? (auth.user.name || auth.user.email || '?').slice(0, 2).toUpperCase()
     : '?';
 
-  const grouped = groupReports(reports);
+  const trimmedQuery = query.trim().toLowerCase();
+  const filtered = trimmedQuery ? reports.filter(r => matchesQuery(r, trimmedQuery)) : reports;
+  const grouped = groupReports(filtered);
 
   return (
     <>
@@ -455,18 +478,34 @@ export default function RecentThreads({ isOpen, onClose, onOpen, onNewChat, acti
             </div>
           </div>
 
-          {/* Search (Soon) — non-interactive affordance until search is wired */}
-          <div className="thread-search soon-affordance is-soon" title="Search coming soon" aria-hidden="true">
+          {/* Search — client-side filter over the loaded report list */}
+          <div className={`thread-search${query ? ' thread-search--active' : ''}`}>
             <Search size={11} strokeWidth={2} className="thread-search-icon" />
-            <span className="thread-search-input">Search reports</span>
-            <SoonPill />
+            <input
+              type="text"
+              className="thread-search-input"
+              placeholder="Search reports"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              aria-label="Search reports"
+            />
+            {query && (
+              <button
+                type="button"
+                className="thread-search-clear"
+                onClick={() => setQuery('')}
+                aria-label="Clear search"
+              >
+                <X size={12} strokeWidth={2.25} />
+              </button>
+            )}
           </div>
 
           {/* Reports sub-header */}
           <div className="threads-subheader">
             <span className="threads-title">Reports</span>
-            {reports.length > 0 && (
-              <span className="threads-count">{reports.length}</span>
+            {filtered.length > 0 && (
+              <span className="threads-count">{filtered.length}</span>
             )}
           </div>
 
@@ -503,6 +542,11 @@ export default function RecentThreads({ isOpen, onClose, onOpen, onNewChat, acti
               <div className="threads-empty">
                 <p className="threads-empty-text">No reports yet.</p>
                 <p className="threads-empty-sub">Your analyses will appear here once complete.</p>
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="threads-empty">
+                <p className="threads-empty-text">No matches.</p>
+                <p className="threads-empty-sub">Nothing matches “{query.trim()}”.</p>
               </div>
             ) : (
               <div role="list">
@@ -565,6 +609,10 @@ export default function RecentThreads({ isOpen, onClose, onOpen, onNewChat, acti
                               if (isPaidUser) onManageSubscription();
                               else onUpgradeClick();
                             }
+                            else if (item.id === 'settings') onOpenSettings('general');
+                            else if (item.id === 'profile') onOpenSettings('account');
+                            else if (item.id === 'personalization') onOpenSettings('personalization');
+                            else if (item.id === 'help') onOpenSettings('help');
                           }}
                         >
                           <Icon size={13} strokeWidth={2} />

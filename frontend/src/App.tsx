@@ -11,6 +11,8 @@ import RecentThreads from './components/RecentThreads';
 import SignInModal from './components/SignInModal';
 import PricingSection from './components/PricingSection';
 import UpgradeModal from './components/UpgradeModal';
+import SettingsModal, { type SettingsSection } from './components/SettingsModal';
+import { getPersonalization } from './personalization';
 import ActivatingPlan from './components/ActivatingPlan';
 import { BrandWordmarkInner } from './components/BrandWordmark';
 import { ThemePicker } from './components/ThemePicker';
@@ -50,6 +52,10 @@ export default function App() {
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   /** True when the user clicked "Upgrade Plan" in the profile menu (vs. hitting the rate limit). */
   const [proactiveUpgrade, setProactiveUpgrade] = useState(false);
+  /** Settings modal: null = closed, otherwise the section to open on. */
+  const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null);
+  /** Preferred name from personalization — drives the workspace greeting. */
+  const [preferredName, setPreferredName] = useState<string>(() => getPersonalization().preferredName);
   const shellRef = useRef<HTMLDivElement>(null);
 
   const pendingQueryRef = useRef<string | null>(null);
@@ -597,6 +603,16 @@ export default function App() {
         }}
       />
 
+      {/* ── Settings modal ─────────────────────────────────── */}
+      <SettingsModal
+        isOpen={settingsSection !== null}
+        initialSection={settingsSection ?? 'general'}
+        onClose={() => setSettingsSection(null)}
+        onUpgrade={() => { setSettingsSection(null); setProactiveUpgrade(true); }}
+        onManageSubscription={() => { setSettingsSection(null); void billing.openPortal(); }}
+        onPersonalizationSaved={p => setPreferredName(p.preferredName)}
+      />
+
       {/* ── Workspace ──────────────────────────────────────── */}
       {inWorkspace && (
         <>
@@ -615,6 +631,7 @@ export default function App() {
             }}
             onUpgradeClick={() => setProactiveUpgrade(true)}
             onManageSubscription={() => { void billing.openPortal(); }}
+            onOpenSettings={(section = 'general') => setSettingsSection(section)}
             onActiveDeleted={() => {
               setShowSavePrompt(false);
               setInputValue('');
@@ -662,6 +679,15 @@ export default function App() {
                     exit={{ opacity: 0, transition: { duration: 0.15 } }}
                   >
                     <div className="ws-empty-inner">
+                      {preferredName.trim() && (
+                        <motion.p
+                          className="ws-empty-greeting"
+                          initial={{ opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0, transition: { delay: 0.08, duration: 0.34, ease: 'easeOut' as const } }}
+                        >
+                          Welcome back, {preferredName.trim()}.
+                        </motion.p>
+                      )}
                       <motion.h1
                         className="ws-empty-headline"
                         initial={{ opacity: 0, y: 10 }}
