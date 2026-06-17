@@ -348,6 +348,26 @@ export default function App() {
     setShowSavePrompt(false);
   }, [screen, report, reportId, museEligible, museCapped, muse, auth.isAuthenticated, startAnalysis]);
 
+  // Open the sign-in modal, first stashing any idea the user has typed but not
+  // submitted. Google SSO is a full-page redirect that wipes React state, so
+  // without this the typed idea is lost and must be retyped after login. The
+  // post-login effect restores it (sessionStorage survives the SSO round-trip).
+  const requestSignIn = useCallback(() => {
+    const text = inputValue.trim();
+    if (!pendingCheckoutPlanRef.current) {
+      if (text.length > 4) {
+        pendingQueryRef.current = text;
+        try { sessionStorage.setItem(PENDING_QUERY_KEY, text); } catch { /* private mode */ }
+      } else {
+        // Signing in with no idea in the box — drop any stale stash from an
+        // earlier abandoned attempt so we don't auto-run a forgotten idea.
+        pendingQueryRef.current = null;
+        try { sessionStorage.removeItem(PENDING_QUERY_KEY); } catch { /* private mode */ }
+      }
+    }
+    setShowSignIn(true);
+  }, [inputValue]);
+
   // ── Loading ─────────────────────────────────────────────
   if (auth.loading) {
     return (
@@ -504,7 +524,7 @@ export default function App() {
                   Pricing
                 </button>
                 <ThemePicker />
-                <button className="lnd-nav-signin" onClick={() => setShowSignIn(true)}>
+                <button className="lnd-nav-signin" onClick={requestSignIn}>
                   Sign in
                 </button>
               </div>
