@@ -11,6 +11,8 @@ import RecentThreads from './components/RecentThreads';
 import SignInModal from './components/SignInModal';
 import PricingSection from './components/PricingSection';
 import UpgradeModal from './components/UpgradeModal';
+import SettingsModal, { type SettingsSection } from './components/SettingsModal';
+import { getPersonalization } from './personalization';
 import ActivatingPlan from './components/ActivatingPlan';
 import { BrandWordmarkInner } from './components/BrandWordmark';
 import { ThemePicker } from './components/ThemePicker';
@@ -50,6 +52,19 @@ export default function App() {
   const [showSavePrompt, setShowSavePrompt] = useState(false);
   /** True when the user clicked "Upgrade Plan" in the profile menu (vs. hitting the rate limit). */
   const [proactiveUpgrade, setProactiveUpgrade] = useState(false);
+  /** Settings modal: null = closed, otherwise the section to open on. */
+  const [settingsSection, setSettingsSection] = useState<SettingsSection | null>(null);
+  /** Preferred name from personalization — drives the workspace greeting.
+   *  Namespaced per user_id and re-synced below when the signed-in user changes,
+   *  so a shared browser never greets one account with another's name. */
+  const [preferredName, setPreferredName] = useState<string>(() => getPersonalization(auth.user?.user_id).preferredName);
+  // Re-read the greeting name when the signed-in user changes (login / logout /
+  // account switch on a shared browser). Render-phase sync — no effect.
+  const [pnUserId, setPnUserId] = useState(auth.user?.user_id);
+  if (auth.user?.user_id !== pnUserId) {
+    setPnUserId(auth.user?.user_id);
+    setPreferredName(getPersonalization(auth.user?.user_id).preferredName);
+  }
   const shellRef = useRef<HTMLDivElement>(null);
 
   const pendingQueryRef = useRef<string | null>(null);
@@ -342,6 +357,26 @@ export default function App() {
     setShowSavePrompt(false);
   }, [screen, report, reportId, museEligible, museCapped, muse, auth.isAuthenticated, startAnalysis]);
 
+  // Open the sign-in modal, first stashing any idea the user has typed but not
+  // submitted. Google SSO is a full-page redirect that wipes React state, so
+  // without this the typed idea is lost and must be retyped after login. The
+  // post-login effect restores it (sessionStorage survives the SSO round-trip).
+  const requestSignIn = useCallback(() => {
+    const text = inputValue.trim();
+    if (!pendingCheckoutPlanRef.current) {
+      if (text.length > 4) {
+        pendingQueryRef.current = text;
+        try { sessionStorage.setItem(PENDING_QUERY_KEY, text); } catch { /* private mode */ }
+      } else {
+        // Signing in with no idea in the box — drop any stale stash from an
+        // earlier abandoned attempt so we don't auto-run a forgotten idea.
+        pendingQueryRef.current = null;
+        try { sessionStorage.removeItem(PENDING_QUERY_KEY); } catch { /* private mode */ }
+      }
+    }
+    setShowSignIn(true);
+  }, [inputValue]);
+
   // ── Loading ─────────────────────────────────────────────
   if (auth.loading) {
     return (
@@ -498,7 +533,7 @@ export default function App() {
                   Pricing
                 </button>
                 <ThemePicker />
-                <button className="lnd-nav-signin" onClick={() => setShowSignIn(true)}>
+                <button className="lnd-nav-signin" onClick={requestSignIn}>
                   Sign in
                 </button>
               </div>
@@ -597,6 +632,16 @@ export default function App() {
         }}
       />
 
+      {/* ── Settings modal ─────────────────────────────────── */}
+      <SettingsModal
+        isOpen={settingsSection !== null}
+        initialSection={settingsSection ?? 'general'}
+        onClose={() => setSettingsSection(null)}
+        onUpgrade={() => { setSettingsSection(null); setProactiveUpgrade(true); }}
+        onManageSubscription={() => { setSettingsSection(null); void billing.openPortal(); }}
+        onPersonalizationSaved={p => setPreferredName(p.preferredName)}
+      />
+
       {/* ── Workspace ──────────────────────────────────────── */}
       {inWorkspace && (
         <>
@@ -615,6 +660,7 @@ export default function App() {
             }}
             onUpgradeClick={() => setProactiveUpgrade(true)}
             onManageSubscription={() => { void billing.openPortal(); }}
+            onOpenSettings={(section = 'general') => setSettingsSection(section)}
             onActiveDeleted={() => {
               setShowSavePrompt(false);
               setInputValue('');
@@ -662,6 +708,15 @@ export default function App() {
                     exit={{ opacity: 0, transition: { duration: 0.15 } }}
                   >
                     <div className="ws-empty-inner">
+                      {preferredName.trim() && (
+                        <motion.p
+                          className="ws-empty-greeting"
+                          initial={{ opacity: 0, y: 6 }}
+                          animate={{ opacity: 1, y: 0, transition: { delay: 0.08, duration: 0.34, ease: 'easeOut' as const } }}
+                        >
+                          Welcome back, {preferredName.trim()}.
+                        </motion.p>
+                      )}
                       <motion.h1
                         className="ws-empty-headline"
                         initial={{ opacity: 0, y: 10 }}
