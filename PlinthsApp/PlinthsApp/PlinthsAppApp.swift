@@ -15,7 +15,7 @@ struct PlinthsAppApp: App {
 
     var body: some Scene {
         WindowGroup {
-            OnboardingFlow()
+            SplashSignInView()
         }
     }
 }

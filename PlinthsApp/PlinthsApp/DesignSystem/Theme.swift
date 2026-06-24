@@ -30,6 +30,22 @@ enum Theme {
         static let label = Font.custom(monoMedium, size: 15, relativeTo: .callout)
         static let caption = Font.custom(monoMedium, size: 13, relativeTo: .footnote)
         static let badge = Font.custom(monoMedium, size: 11, relativeTo: .caption2)
+
+        // Display roles for the dark splash hero.
+        static let splashWordmark = Font.custom(monoMedium, size: 38, relativeTo: .largeTitle)
+        static let splashTagline = Font.custom(monoMedium, size: 16, relativeTo: .body)
+    }
+
+    /// Stealth-desert palette for the dark splash / sign-in moment. Intentionally
+    /// dark (a brand moment) even though the main app uses the light Palette.
+    /// Near-black night sky, warm amber dusk light, sand tones.
+    enum Stealth {
+        static let skyTop = Color(hex: "0B0B0D")
+        static let skyMid = Color(hex: "1A1411")
+        static let amber = Color(hex: "C9965A")
+        static let text = Color(hex: "F2EEE9")
+        static let textSecondary = Color(hex: "9C8F80")
+        static let sand = Color(hex: "E8D9C4")
     }
 }
 

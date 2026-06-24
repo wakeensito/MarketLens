@@ -1,6 +1,19 @@
-# iOS Milestone 1 — Onboarding → Login Prompt Implementation Plan
+# iOS Milestone 1 — App-Open Splash & Sign-In Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+> **⟳ Revision (2026-06-24):** Tasks 1–7 below (the 3-page onboarding) were executed and
+> working, then the screen was **replaced** by a single animated **Stealth-Desert splash
+> sign-in** at the user's direction. The reusable foundation from Tasks 1, 2, 6 (`Color+Hex`,
+> `Theme`, bundled IBM Plex fonts via `FontRegistrar`) carried over unchanged; the onboarding
+> views (Tasks 3–5: `OnboardingFlow`/`OnboardingPage`/`OfferPage`/`LoginPromptView`) and
+> `BrandWordmark` were deleted. New work: `Theme.Stealth` palette + `splashWordmark`/
+> `splashTagline` roles, `PlinthsMark` (logo), `TypingText`, and the `Splash/` group
+> (`DesertSkyBackground`, `SandParticleField`, `SplashPillButton`, `SplashSignInControls`,
+> `SplashSignInView`). Sign-in: Google default + email under "Other options"; **Sign in with
+> Apple** is required by App Store guideline 4.8 when Google is offered and joins later via
+> Apple's official `SignInWithAppleButton`. See the design spec's revision note for detail.
+> The original task list below is retained for history.
 
 **Goal:** Build a native SwiftUI onboarding flow — three swipeable "offer" pages ending at a login prompt — using mock data only, as the first screen of the Plinths iOS app and the user's first SwiftUI build.
 

@@ -1,8 +1,56 @@
-# iOS Milestone 1 — Onboarding → Login Prompt (SwiftUI, mock-only)
+# iOS Milestone 1 — App-Open Splash & Sign-In (SwiftUI, mock-only)
 
 **Date:** 2026-06-24
-**Status:** Approved design, pre-implementation
+**Status:** Built (pivoted from 3-page onboarding to a single splash sign-in)
 **Project:** `PlinthsApp/` — native SwiftUI iOS client for Plinths (learn-Swift vehicle)
+
+---
+
+## ⟳ Revision (2026-06-24): pivot from 3-page onboarding → Stealth-Desert splash sign-in
+
+The original M1 (below, kept for history) was a 3-page swipeable onboarding carousel
+ending at a login prompt. It was built and working, then **replaced** by a single
+animated splash sign-in modeled on Grok's app-open, executed in a Plinths "Stealth Desert"
+identity. Reason: the carousel felt like "fake progress"; a confident branded splash reads
+as a real product and fits the brand (the name *plinths* is architectural; the logo mark is
+a stepped pyramid; the palette is already sand/amber).
+
+**What shipped instead — `SplashSignInView`:**
+- **Dark "Stealth Desert" scene** (intentional dark brand moment, even though the main app
+  is light): near-black dusk sky with a low amber horizon glow (`DesertSkyBackground`), an
+  animated drifting **sand-particle field** (`SandParticleField`, Canvas + TimelineView,
+  honors Reduce Motion).
+- **Monument:** the `PlinthsMark` stepped pyramid, scaled up with an amber glow.
+- **Wordmark + typing tagline:** `plinths` then **"Build on solid ground"** revealed
+  character-by-character with a blinking cursor (`TypingText`, honors Reduce Motion).
+- **Sign-in (`SplashSignInControls`):** **Continue with Google** (default) with a leading
+  `g.circle` icon; **Other options** (kept as a persistent toggle) reveals **Continue with
+  email** (`envelope` icon). Auth stubbed — actions only print.
+
+**Auth direction (important):** offering Google triggers **App Store Guideline 4.8** — the
+app must **also** offer **Sign in with Apple**, using Apple's official `SignInWithAppleButton`
+(not a custom Apple-logo button). Apple SSO will join the "Other options" group when real
+auth lands, and needs a Cognito Apple IdP on the backend. The `g.circle` Google glyph and
+monochrome treatment are placeholders; production should use Google's official brand asset.
+
+**New design tokens:** `Theme.Stealth` (dark dusk palette: `skyTop`, `skyMid`, `amber`,
+`text`, `textSecondary`, `sand`) and two display type roles (`splashWordmark`,
+`splashTagline`).
+
+**Removed (dead code):** `OnboardingFlow`, `OnboardingPage`, `OfferPage`, `LoginPromptView`,
+and the now-orphaned `BrandWordmark` were deleted. `PlinthsMark`, `Theme`, `Color+Hex`,
+`FontRegistrar`, and the bundled IBM Plex fonts all carried over unchanged.
+
+**New file layout:**
+```
+DesignSystem/  Color+Hex · Theme (+Stealth) · FontRegistrar · PlinthsMark · TypingText
+Splash/        DesertSkyBackground · SandParticleField · SplashPillButton
+               · SplashSignInControls · SplashSignInView
+```
+
+Everything below this line is the **original onboarding spec**, retained for history.
+
+---
 
 ## Context
 
