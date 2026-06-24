@@ -1,35 +1,10 @@
 import SwiftUI
 
-/// A single drifting sand/dust mote.
-private struct Mote {
-    var x: CGFloat          // 0...1 horizontal position
-    var y: CGFloat          // 0...1 vertical seed
-    var size: CGFloat       // point diameter
-    var speed: Double       // vertical drift, fraction of height per second
-    var baseOpacity: Double
-    var twinkleSpeed: Double
-    var phase: Double
-    var warm: Bool          // amber vs pale sand
-
-    static func random() -> Mote {
-        Mote(
-            x: .random(in: 0...1),
-            y: .random(in: 0...1),
-            size: .random(in: 1...2.6),
-            speed: .random(in: 0.004...0.018),
-            baseOpacity: .random(in: 0.15...0.7),
-            twinkleSpeed: .random(in: 0.4...1.6),
-            phase: .random(in: 0...(2 * .pi)),
-            warm: Bool.random()
-        )
-    }
-}
-
 /// An animated field of faint sand motes drifting slowly upward and twinkling.
 /// Honors Reduce Motion by rendering a still field.
 struct SandParticleField: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private let motes: [Mote] = (0..<80).map { _ in Mote.random() }
+    private let motes: [SandMote] = (0..<80).map { _ in SandMote.random() }
 
     var body: some View {
         TimelineView(.animation(paused: reduceMotion)) { timeline in
