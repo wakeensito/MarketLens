@@ -10,7 +10,7 @@ struct SplashSignInControls: View {
         VStack(spacing: 14) {
             SplashPillButton(
                 title: "Continue with Google",
-                systemImage: "g.circle",
+                icon: Image("GoogleLogo"),
                 action: handleGoogle
             )
 
@@ -20,12 +20,19 @@ struct SplashSignInControls: View {
                 .frame(minHeight: 44)
 
             if showMoreOptions {
-                // Email today; a future "Sign in with Apple" (Apple's official
-                // SignInWithAppleButton, required by App Store guideline 4.8 when
-                // offering Google) joins this group.
+                // MOCK: real Sign in with Apple MUST use Apple's official
+                // SignInWithAppleButton (App Store guideline 4.8, required once
+                // Google is offered) — this custom pill is a placeholder only.
+                SplashPillButton(
+                    title: "Sign in with Apple",
+                    icon: Image(systemName: "apple.logo"),
+                    action: handleApple
+                )
+                .transition(.move(edge: .top).combined(with: .opacity))
+
                 SplashPillButton(
                     title: "Continue with email",
-                    systemImage: "envelope",
+                    icon: Image(systemName: "envelope"),
                     action: handleEmail
                 )
                 .transition(.move(edge: .top).combined(with: .opacity))
@@ -46,6 +53,10 @@ struct SplashSignInControls: View {
 
     private func handleGoogle() {
         print("continue with google tapped")
+    }
+
+    private func handleApple() {
+        print("sign in with apple tapped")
     }
 
     private func handleEmail() {

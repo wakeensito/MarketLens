@@ -23,9 +23,11 @@ a stepped pyramid; the palette is already sand/amber).
 - **Monument:** the `PlinthsMark` stepped pyramid, scaled up with an amber glow.
 - **Wordmark + typing tagline:** `plinths` then **"Build on solid ground"** revealed
   character-by-character with a blinking cursor (`TypingText`, honors Reduce Motion).
-- **Sign-in (`SplashSignInControls`):** **Continue with Google** (default) with a leading
-  `g.circle` icon; **Other options** (kept as a persistent toggle) reveals **Continue with
-  email** (`envelope` icon). Auth stubbed — actions only print.
+- **Sign-in (`SplashSignInControls`):** **Continue with Google** (default, official Google
+  "G" vector asset `GoogleLogo`); **Other options** (kept as a persistent toggle) reveals
+  **Sign in with Apple** (`apple.logo`) and **Continue with email** (`envelope`). All auth is
+  **mocked** — actions only print. The Apple pill is a placeholder; real Sign in with Apple
+  must use Apple's official `SignInWithAppleButton` (see below).
 
 **Auth direction (important):** offering Google triggers **App Store Guideline 4.8** — the
 app must **also** offer **Sign in with Apple**, using Apple's official `SignInWithAppleButton`
