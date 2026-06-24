@@ -1,0 +1,24 @@
+# Xcode — per-user state (editor layout, breakpoints, open files). Never commit.
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad
+
+# Build artifacts
+build/
+DerivedData/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# macOS
+.DS_Store
+
+# CocoaPods / Carthage (unused now; harmless guards)
+Pods/
+Carthage/Build/
