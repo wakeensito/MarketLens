@@ -12,22 +12,24 @@ enum Theme {
         static let logoAccent = Color(hex: "C68A4E")
     }
 
+    /// Semantic type roles backed by bundled IBM Plex fonts (registered at launch
+    /// by FontRegistrar). PostScript names verified from the files — note
+    /// "SmBld", not "SemiBold". Each role uses `relativeTo:` so the custom fonts
+    /// scale with the user's Dynamic Type setting.
     enum Typeface {
-        // Bundled IBM Plex fonts, referenced by their exact PostScript names
-        // (verified from the font files — note "SmBld", not "SemiBold").
-        // Registered at launch by FontRegistrar.
-        static func serif(_ size: CGFloat) -> Font {
-            .custom("IBMPlexSerif-Medium", size: size)
-        }
-        static func body(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-            let name = (weight == .semibold || weight == .bold)
-                ? "IBMPlexSans-SmBld"
-                : "IBMPlexSans"
-            return .custom(name, size: size)
-        }
-        static func mono(_ size: CGFloat) -> Font {
-            .custom("IBMPlexMono-Medium", size: size)
-        }
+        private static let serifMedium = "IBMPlexSerif-Medium"
+        private static let sansRegular = "IBMPlexSans"
+        private static let sansSemiBold = "IBMPlexSans-SmBld"
+        private static let monoMedium = "IBMPlexMono-Medium"
+
+        static let largeTitle = Font.custom(serifMedium, size: 34, relativeTo: .largeTitle)
+        static let title = Font.custom(serifMedium, size: 24, relativeTo: .title)
+        static let body = Font.custom(sansRegular, size: 17, relativeTo: .body)
+        static let bodyEmphasized = Font.custom(sansSemiBold, size: 17, relativeTo: .body)
+        static let wordmark = Font.custom(monoMedium, size: 28, relativeTo: .title)
+        static let label = Font.custom(monoMedium, size: 15, relativeTo: .callout)
+        static let caption = Font.custom(monoMedium, size: 13, relativeTo: .footnote)
+        static let badge = Font.custom(monoMedium, size: 11, relativeTo: .caption2)
     }
 }
 

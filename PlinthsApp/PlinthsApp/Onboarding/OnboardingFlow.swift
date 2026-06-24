@@ -14,8 +14,8 @@ struct OnboardingFlow: View {
             Theme.Palette.bg.ignoresSafeArea()
 
             TabView(selection: $page) {
-                ForEach(Array(pages.enumerated()), id: \.element.id) { index, offer in
-                    OnboardingPage(page: offer)
+                ForEach(pages.indices, id: \.self) { index in
+                    OnboardingPage(page: pages[index])
                         .tag(index)
                 }
                 LoginPromptView()
@@ -25,13 +25,18 @@ struct OnboardingFlow: View {
             .indexViewStyle(.page(backgroundDisplayMode: .always))
 
             if page < loginIndex {
-                Button("Skip") {
-                    withAnimation { page = loginIndex }
-                }
-                .font(Theme.Typeface.mono(15))
-                .foregroundStyle(Theme.Palette.textSecondary)
-                .padding(24)
+                Button("Skip", action: skipToLogin)
+                    .font(Theme.Typeface.label)
+                    .foregroundStyle(Theme.Palette.textSecondary)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .padding(12)
             }
+        }
+    }
+
+    private func skipToLogin() {
+        withAnimation {
+            page = loginIndex
         }
     }
 }

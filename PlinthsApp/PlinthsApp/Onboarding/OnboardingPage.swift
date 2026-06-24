@@ -12,11 +12,11 @@ struct OnboardingPage: View {
                 .accessibilityHidden(true)
 
             Text(page.headline)
-                .font(Theme.Typeface.serif(34))
+                .font(Theme.Typeface.largeTitle)
                 .foregroundStyle(Theme.Palette.text)
 
             Text(page.subtext)
-                .font(Theme.Typeface.body(17))
+                .font(Theme.Typeface.body)
                 .foregroundStyle(Theme.Palette.textSecondary)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: 320)
