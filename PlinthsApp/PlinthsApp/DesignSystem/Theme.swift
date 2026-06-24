@@ -13,16 +13,20 @@ enum Theme {
     }
 
     enum Typeface {
-        // System fonts for now. Task 6 replaces these with bundled IBM Plex,
-        // with no change required at any call site.
+        // Bundled IBM Plex fonts, referenced by their exact PostScript names
+        // (verified from the font files — note "SmBld", not "SemiBold").
+        // Registered at launch by FontRegistrar.
         static func serif(_ size: CGFloat) -> Font {
-            .system(size: size, weight: .medium, design: .serif)
+            .custom("IBMPlexSerif-Medium", size: size)
         }
         static func body(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-            .system(size: size, weight: weight, design: .default)
+            let name = (weight == .semibold || weight == .bold)
+                ? "IBMPlexSans-SmBld"
+                : "IBMPlexSans"
+            return .custom(name, size: size)
         }
         static func mono(_ size: CGFloat) -> Font {
-            .system(size: size, weight: .medium, design: .monospaced)
+            .custom("IBMPlexMono-Medium", size: size)
         }
     }
 }

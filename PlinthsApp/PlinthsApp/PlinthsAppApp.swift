@@ -9,6 +9,10 @@ import SwiftUI
 
 @main
 struct PlinthsAppApp: App {
+    init() {
+        FontRegistrar.registerBundledFonts()
+    }
+
     var body: some Scene {
         WindowGroup {
             OnboardingFlow()
