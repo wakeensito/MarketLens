@@ -4,7 +4,7 @@ import SwiftUI
 /// Honors Reduce Motion by rendering a still field.
 struct SandParticleField: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private let motes: [SandMote] = (0..<80).map { _ in SandMote.random() }
+    @State private var motes: [SandMote] = (0..<80).map { _ in SandMote.random() }
 
     var body: some View {
         TimelineView(.animation(paused: reduceMotion)) { timeline in

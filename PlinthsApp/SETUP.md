@@ -28,19 +28,22 @@ sudo xcodebuild -license accept
   App Store submission (a later milestone).
 
 ## Project structure (feature folders)
-```
+```text
 PlinthsApp/PlinthsApp/
-  PlinthsAppApp.swift        # entry; registers fonts, shows OnboardingFlow
+  PlinthsAppApp.swift        # entry; registers fonts, shows SplashSignInView
   DesignSystem/
     Color+Hex.swift          # Color(hex:) initializer
-    Theme.swift              # Palette (colors) + Typeface (semantic font roles)
+    Theme.swift              # Palette + Stealth palette + Typeface (font roles)
     FontRegistrar.swift      # registers bundled fonts at launch
-    BrandWordmark.swift      # reusable "plinths" + Beta wordmark
-  Onboarding/
-    OfferPage.swift          # data model + the 3 offer pages
-    OnboardingPage.swift     # one offer page
-    LoginPromptView.swift    # page 4 (stubbed login)
-    OnboardingFlow.swift     # 4-page TabView + Skip
+    PlinthsMark.swift        # native stepped-pyramid logo mark
+    TypingText.swift         # typewriter reveal (honors Reduce Motion)
+  Splash/
+    SplashSignInView.swift   # the app-open splash + sign-in moment
+    SplashSignInControls.swift # Google default + "Other options" (Apple/email)
+    SplashPillButton.swift   # reusable capsule sign-in button
+    DesertSkyBackground.swift  # Stealth-Desert dusk gradient backdrop
+    SandParticleField.swift  # animated drifting sand motes (Canvas)
+    SandMote.swift           # one mote's seed data
   Resources/Fonts/           # IBM Plex Serif/Sans/Mono .ttf
 ```
 
@@ -76,6 +79,9 @@ xcrun simctl launch booted Plinths.PlinthsApp
 Or just press ▶ in Xcode.
 
 ## Status
-Milestone 1 complete: onboarding (3 offer pages) → stubbed login prompt, mock-only.
+Milestone 1 complete: animated Stealth-Desert splash → sign-in (Google default,
+Apple + email under "Other options"), auth stubbed/mock-only. Sign in with Apple
+is a placeholder pill — App Store guideline 4.8 requires Apple's official
+`SignInWithAppleButton` once Google is offered; wire it with real auth in M5.
 Next milestones: idea-input screen, report UI, wire real API, real auth.
 See `docs/superpowers/specs/` and `docs/superpowers/plans/` for the milestone arc.

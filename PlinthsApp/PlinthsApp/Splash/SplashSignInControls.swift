@@ -4,6 +4,7 @@ import SwiftUI
 /// future Sign in with Apple) revealed under "Other options". Owns its own
 /// expand state; auth is stubbed for now (the actions only print).
 struct SplashSignInControls: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showMoreOptions = false
 
     var body: some View {
@@ -46,8 +47,12 @@ struct SplashSignInControls: View {
     }
 
     private func toggleMoreOptions() {
-        withAnimation(.easeOut(duration: 0.25)) {
+        if reduceMotion {
             showMoreOptions.toggle()
+        } else {
+            withAnimation(.easeOut(duration: 0.25)) {
+                showMoreOptions.toggle()
+            }
         }
     }
 
