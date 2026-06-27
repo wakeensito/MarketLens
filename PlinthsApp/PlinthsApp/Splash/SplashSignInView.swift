@@ -3,6 +3,8 @@ import SwiftUI
 /// The app-open splash and sign-in moment: a dark Stealth-Desert scene with the
 /// Plinths monument, brand wordmark, a typing tagline, and the sign-in controls.
 struct SplashSignInView: View {
+    let onSignIn: () -> Void
+
     var body: some View {
         ZStack {
             DesertSkyBackground()
@@ -32,7 +34,7 @@ struct SplashSignInView: View {
 
                 Spacer()
 
-                SplashSignInControls()
+                SplashSignInControls(onSignIn: onSignIn)
             }
             .padding(.horizontal, 36)
             .padding(.bottom, 28)
@@ -42,5 +44,5 @@ struct SplashSignInView: View {
 }
 
 #Preview {
-    SplashSignInView()
+    SplashSignInView(onSignIn: {})
 }
