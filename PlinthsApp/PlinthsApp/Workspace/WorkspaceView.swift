@@ -2,8 +2,8 @@ import SwiftUI
 
 /// The signed-in workspace root: a dark Stealth-Desert surface hosting the
 /// idea-input home, a history drawer, and the pipeline-loading screen.
-/// (Task 5 adds the loading screen.)
 struct WorkspaceView: View {
+    @State private var screen: WorkspaceScreen = .home
     @State private var draft = ""
     @State private var isHistoryOpen = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -15,7 +15,13 @@ struct WorkspaceView: View {
 
             VStack(spacing: 0) {
                 WorkspaceTopBar(onHistory: { isHistoryOpen = true }, onNew: startNew)
-                WorkspaceHome(draft: $draft, onSubmit: {})
+
+                switch screen {
+                case .home:
+                    WorkspaceHome(draft: $draft, onSubmit: submit)
+                case .loading:
+                    PipelineLoadingView(idea: draft, onCancel: startNew)
+                }
             }
 
             if isHistoryOpen {
@@ -30,10 +36,17 @@ struct WorkspaceView: View {
         }
         .preferredColorScheme(.dark)
         .animation(.easeOut(duration: 0.28), value: isHistoryOpen)
+        .animation(.easeInOut(duration: 0.3), value: screen)
+    }
+
+    private func submit() {
+        guard !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        screen = .loading
     }
 
     private func startNew() {
         draft = ""
+        screen = .home
         isHistoryOpen = false
     }
 }
