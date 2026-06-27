@@ -28,22 +28,30 @@ struct WorkspaceView: View {
                 )
 
                 workspaceCard
-                    .scaleEffect(1 - 0.12 * progress, anchor: .center)
+                    // Mostly translate, barely scale — so it reads as a tall
+                    // slab pushed aside, not a shrinking thumbnail.
+                    .scaleEffect(1 - 0.07 * progress, anchor: .center)
                     .offset(x: menuWidth * progress)
-                    .clipShape(RoundedRectangle(cornerRadius: 30 * progress, style: .continuous))
-                    .shadow(color: .black.opacity(0.5 * progress), radius: 24, x: -8)
+                    .clipShape(RoundedRectangle(cornerRadius: 34 * progress, style: .continuous))
+                    .overlay {
+                        // A hairline defines the curved edge against the dark menu.
+                        RoundedRectangle(cornerRadius: 34 * progress, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.10 * progress), lineWidth: 1)
+                    }
+                    .shadow(color: .black.opacity(0.55 * progress), radius: 30, x: -12)
                     .overlay {
                         // When fully open, the visible card sliver taps closed.
                         if progress >= 0.999 {
-                            Color.clear
-                                .contentShape(.rect)
-                                .onTapGesture { close() }
-                                .accessibilityLabel("Close history")
+                            Button(action: close) {
+                                Color.clear.contentShape(.rect)
+                            }
+                            .accessibilityLabel("Close history")
                         }
                     }
                     .gesture(dragGesture(menuWidth: menuWidth))
             }
-            .background(Theme.Stealth.skyMid.ignoresSafeArea())
+            // Darkest shade behind the menu so the desert card pops forward.
+            .background(Theme.Stealth.skyTop.ignoresSafeArea())
             .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.86), value: isHistoryOpen)
             .animation(reduceMotion ? nil : .spring(response: 0.4, dampingFraction: 0.86), value: dragProgress)
         }

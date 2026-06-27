@@ -6,7 +6,7 @@ import SwiftUI
 /// in M2 (the report UI is M3).
 struct HistoryDrawer: View {
     let reports: [MockReport]
-    var width: CGFloat
+    let width: CGFloat
     let onSelect: (MockReport) -> Void
 
     var body: some View {
