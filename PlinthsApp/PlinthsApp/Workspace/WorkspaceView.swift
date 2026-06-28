@@ -35,7 +35,7 @@ struct WorkspaceView: View {
                     onSelect: { _ in close() }
                 )
 
-                workspaceCard
+                workspaceCard(safeArea: geo.safeAreaInsets)
                     // Full-height slide — no scale. The card stays a full-screen
                     // panel pushed aside (depth comes from the rounded edge +
                     // shadow, not from shrinking), so nothing cuts off under the
@@ -67,10 +67,13 @@ struct WorkspaceView: View {
         .preferredColorScheme(.dark)
     }
 
-    private var workspaceCard: some View {
+    /// The card fills the *full screen* (`.ignoresSafeArea`) so the rounded clip
+    /// reaches the physical top/bottom edges instead of boxing at the safe area.
+    /// The content is then re-inset by the real safe-area insets so the top bar
+    /// and input still clear the status bar and home indicator.
+    private func workspaceCard(safeArea: EdgeInsets) -> some View {
         ZStack {
             DesertSkyBackground()
-                .ignoresSafeArea()
 
             VStack(spacing: 0) {
                 WorkspaceTopBar(onHistory: open, onNew: startNew)
@@ -82,7 +85,10 @@ struct WorkspaceView: View {
                     PipelineLoadingView(idea: draft, onCancel: startNew)
                 }
             }
+            .padding(.top, safeArea.top)
+            .padding(.bottom, safeArea.bottom)
         }
+        .ignoresSafeArea()
     }
 
     /// A horizontal drag opens/closes the menu, following the finger. Vertical-
