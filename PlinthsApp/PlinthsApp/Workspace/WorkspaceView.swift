@@ -34,26 +34,11 @@ struct WorkspaceView: View {
                     onSelect: { _ in close() }
                 )
 
-                // A dim card tucked just behind the workspace — a "stacked page"
-                // peeking at the top edge gives the push-aside real depth.
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(Theme.Stealth.skyMid)
-                    .overlay {
-                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
-                    }
-                    // Taller than the front card (less scale) + nudged up, so it
-                    // peeks above rather than framing all four sides.
-                    .scaleEffect(1 - 0.015 * progress, anchor: .center)
-                    .offset(x: menuWidth * progress + 10 * progress, y: -8 * progress)
-                    .opacity(0.6 * progress)
-                    .allowsHitTesting(false)
-                    .ignoresSafeArea()
-
                 workspaceCard
-                    // Mostly translate, barely scale — so it reads as a tall
-                    // slab pushed aside, not a shrinking thumbnail.
-                    .scaleEffect(1 - 0.05 * progress, anchor: .center)
+                    // Full-height slide — no scale. The card stays a full-screen
+                    // panel pushed aside (depth comes from the rounded edge +
+                    // shadow, not from shrinking), so nothing cuts off under the
+                    // input or at the top.
                     .offset(x: menuWidth * progress)
                     .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
                     .overlay {

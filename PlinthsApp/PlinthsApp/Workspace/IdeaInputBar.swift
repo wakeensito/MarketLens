@@ -13,7 +13,7 @@ struct IdeaInputBar: View {
     }
 
     var body: some View {
-        HStack(alignment: .bottom, spacing: 10) {
+        HStack(alignment: .center, spacing: 10) {
             TextField("Describe your idea…", text: $draft, axis: .vertical)
                 .font(Theme.Typeface.body)
                 .foregroundStyle(Theme.Stealth.text)
