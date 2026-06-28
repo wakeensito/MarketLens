@@ -1,12 +1,9 @@
 import SwiftUI
 
-/// The history menu that sits *underneath* the workspace card. When the user
-/// slides (or taps ☰), the workspace shifts right to reveal this panel — so the
-/// drawer itself is a fixed underlay, not an overlay. Selecting a row is a stub
-/// in M2 (the report UI is M3).
+/// The history list of past reports, presented as a sheet from the workspace
+/// (tap ☰). Selecting a row is a stub in M2 (the report UI is M3).
 struct HistoryDrawer: View {
     let reports: [MockReport]
-    let width: CGFloat
     let onSelect: (MockReport) -> Void
 
     var body: some View {
@@ -29,14 +26,12 @@ struct HistoryDrawer: View {
                 }
             }
         }
-        .frame(width: width, alignment: .leading)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 
 #Preview {
-    HistoryDrawer(reports: MockWorkspace.history, width: 300, onSelect: { _ in })
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .background(Theme.Stealth.skyMid)
+    HistoryDrawer(reports: MockWorkspace.history, onSelect: { _ in })
+        .background(Theme.Stealth.skyTop)
         .preferredColorScheme(.dark)
 }
