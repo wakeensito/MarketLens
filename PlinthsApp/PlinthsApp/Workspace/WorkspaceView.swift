@@ -15,9 +15,10 @@ struct WorkspaceView: View {
     @State private var dragProgress: CGFloat?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// Corner radius of the pushed-aside card at full open. Large + continuous to
-    /// match the reference side-menu's rounded slab.
-    private let cornerRadius: CGFloat = 40
+    /// Corner radius of the pushed-aside card at full open. Kept small so the
+    /// card's leading edge runs nearly straight top-to-bottom — a full screen
+    /// slid aside, not a floating rounded card.
+    private let cornerRadius: CGFloat = 20
 
     var body: some View {
         GeometryReader { geo in
