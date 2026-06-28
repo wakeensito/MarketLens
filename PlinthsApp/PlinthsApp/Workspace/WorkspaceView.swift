@@ -15,10 +15,17 @@ struct WorkspaceView: View {
     @State private var dragProgress: CGFloat?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    /// Corner radius of the pushed-aside card at full open. Large + continuous to
+    /// match the reference side-menu's rounded slab.
+    private let cornerRadius: CGFloat = 40
+
     var body: some View {
         GeometryReader { geo in
-            let menuWidth = min(geo.size.width * 0.82, 340)
+            // A slimmer menu leaves a wider card sliver on the right — the
+            // proportion the reference uses (~quarter of the screen still shows).
+            let menuWidth = min(geo.size.width * 0.78, 330)
             let progress = dragProgress ?? (isHistoryOpen ? 1 : 0)
+            let radius = cornerRadius * progress
 
             ZStack(alignment: .leading) {
                 HistoryDrawer(
@@ -27,18 +34,34 @@ struct WorkspaceView: View {
                     onSelect: { _ in close() }
                 )
 
+                // A dim card tucked just behind the workspace — a "stacked page"
+                // peeking at the top edge gives the push-aside real depth.
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(Theme.Stealth.skyMid)
+                    .overlay {
+                        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.06), lineWidth: 1)
+                    }
+                    // Taller than the front card (less scale) + nudged up, so it
+                    // peeks above rather than framing all four sides.
+                    .scaleEffect(1 - 0.015 * progress, anchor: .center)
+                    .offset(x: menuWidth * progress + 10 * progress, y: -8 * progress)
+                    .opacity(0.6 * progress)
+                    .allowsHitTesting(false)
+                    .ignoresSafeArea()
+
                 workspaceCard
                     // Mostly translate, barely scale — so it reads as a tall
                     // slab pushed aside, not a shrinking thumbnail.
-                    .scaleEffect(1 - 0.07 * progress, anchor: .center)
+                    .scaleEffect(1 - 0.05 * progress, anchor: .center)
                     .offset(x: menuWidth * progress)
-                    .clipShape(RoundedRectangle(cornerRadius: 34 * progress, style: .continuous))
+                    .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
                     .overlay {
                         // A hairline defines the curved edge against the dark menu.
-                        RoundedRectangle(cornerRadius: 34 * progress, style: .continuous)
-                            .strokeBorder(Color.white.opacity(0.10 * progress), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: radius, style: .continuous)
+                            .strokeBorder(Color.white.opacity(0.12 * progress), lineWidth: 1)
                     }
-                    .shadow(color: .black.opacity(0.55 * progress), radius: 30, x: -12)
+                    .shadow(color: .black.opacity(0.6 * progress), radius: 28, x: -14)
                     .overlay {
                         // When fully open, the visible card sliver taps closed.
                         if progress >= 0.999 {
