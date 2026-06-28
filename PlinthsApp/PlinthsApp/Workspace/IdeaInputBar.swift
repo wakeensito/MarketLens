@@ -36,11 +36,14 @@ struct IdeaInputBar: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(
+            // Recessed, not boxed: a translucent fill lets the desert gradient
+            // show through and a whisper-faint amber hairline keeps the field
+            // discoverable without standing apart from the background.
             RoundedRectangle(cornerRadius: 22)
-                .fill(Theme.Stealth.skyMid)
+                .fill(Theme.Stealth.skyMid.opacity(0.55))
                 .overlay(
                     RoundedRectangle(cornerRadius: 22)
-                        .stroke(Theme.Stealth.amber.opacity(0.3), lineWidth: 1)
+                        .stroke(Theme.Stealth.amber.opacity(0.14), lineWidth: 1)
                 )
         )
     }
