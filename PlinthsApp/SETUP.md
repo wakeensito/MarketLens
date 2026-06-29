@@ -45,12 +45,12 @@ PlinthsApp/PlinthsApp/
     SandParticleField.swift  # animated drifting sand motes (Canvas)
     SandMote.swift           # one mote's seed data
   Workspace/
-    WorkspaceView.swift      # signed-in root (home / loading + history drawer)
+    WorkspaceView.swift      # signed-in root (home / loading + history sheet)
     WorkspaceTopBar.swift    # ☰ history · plinths wordmark · ⊕ new
     WorkspaceHome.swift      # hero + example-idea chips + idea input
     IdeaInputBar.swift       # bottom-docked text field + amber send
     ExampleIdeaChip.swift    # one tappable sample idea
-    HistoryDrawer.swift      # slide-in past-reports panel + scrim
+    HistoryDrawer.swift      # past-reports list (presented as a sheet)
     HistoryRow.swift         # one past-report row (saturation chip + date)
     PipelineLoadingView.swift  # staged analysis-loading animation
   Models/
@@ -94,8 +94,8 @@ Or just press ▶ in Xcode.
 ## Status
 Milestone 2 complete: signing in enters a dark Stealth-Desert **workspace** —
 top bar (history · wordmark · new), a hero with example-idea chips, a bottom-
-docked idea input (text + send only), a slide-in **history drawer** of mock
-past reports, and a staged **pipeline-loading** animation on submit (it runs and
+docked idea input (text + send only), a **history sheet** of mock past reports
+(opened from ☰), and a staged **pipeline-loading** animation on submit (it runs and
 holds — the report render is M3). All mock data, ported from the web app's
 `frontend/src/mockData.ts`.
 
