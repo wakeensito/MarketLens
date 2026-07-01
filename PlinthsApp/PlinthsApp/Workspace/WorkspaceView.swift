@@ -30,7 +30,8 @@ struct WorkspaceView: View {
                                         onComplete: { showReport(MockMemo.digitalFitness, date: .now, origin: .home) })
                 }
             case .report(let memo, let date):
-                MemoView(memo: memo, date: date, onBack: backFromReport)
+                MemoView(memo: memo, date: date, highlightTarget: nil, hasThread: false,
+                         onBack: backFromReport, onAsk: { _ in }, onToggleToMuse: {}, onBannerBack: {})
             }
         }
         .preferredColorScheme(.dark)
