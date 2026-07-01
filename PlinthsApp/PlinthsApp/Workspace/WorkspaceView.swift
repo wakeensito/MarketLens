@@ -27,10 +27,10 @@ struct WorkspaceView: View {
                 VStack(spacing: 0) {
                     WorkspaceTopBar(onHistory: { isHistoryOpen = true }, onNew: startNew)
                     PipelineLoadingView(idea: draft, onCancel: startNew,
-                                        onComplete: { showReport(MockMemo.digitalFitness, origin: .home) })
+                                        onComplete: { showReport(MockMemo.digitalFitness, date: .now, origin: .home) })
                 }
-            case .report(let memo):
-                MemoView(memo: memo, onBack: backFromReport)
+            case .report(let memo, let date):
+                MemoView(memo: memo, date: date, onBack: backFromReport)
             }
         }
         .preferredColorScheme(.dark)
@@ -48,14 +48,14 @@ struct WorkspaceView: View {
         screen = .loading
     }
 
-    private func showReport(_ memo: MarketMemo, origin: ReportOrigin) {
+    private func showReport(_ memo: MarketMemo, date: Date, origin: ReportOrigin) {
         reportOrigin = origin
-        screen = .report(memo)
+        screen = .report(memo, date)
     }
 
     private func openReport(for report: MockReport) {
         isHistoryOpen = false
-        showReport(MockMemo.memo(for: report), origin: .history)
+        showReport(MockMemo.memo(for: report), date: report.createdAt, origin: .history)
     }
 
     private func backFromReport() {

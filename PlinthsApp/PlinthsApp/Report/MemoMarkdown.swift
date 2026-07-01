@@ -4,6 +4,10 @@ import Foundation
 /// MemoView. Kept dependency-free so `ShareLink(item:)` gets a simple String.
 func memoMarkdown(_ memo: MarketMemo) -> String {
     var lines: [String] = []
+    func appendSources(_ sources: [Source]) {
+        guard !sources.isEmpty else { return }
+        lines.append("Sources: " + sources.map { "[\($0.label)](\($0.url))" }.joined(separator: ", "))
+    }
     lines.append("# Market Memo — \(memo.vertical)")
     lines.append("")
     lines.append("_\(memo.oneliner)_")
@@ -20,6 +24,7 @@ func memoMarkdown(_ memo: MarketMemo) -> String {
     lines.append("## Market Size")
     lines.append("\(memo.marketSize.tam) · \(memo.marketSize.growth) (\(memo.marketSize.tier.rawValue))")
     if let note = memo.marketSize.note { lines.append("") ; lines.append(note) }
+    appendSources(memo.marketSize.sources)
     lines.append("")
 
     lines.append("## Who Else Is Doing This")
@@ -33,6 +38,7 @@ func memoMarkdown(_ memo: MarketMemo) -> String {
 
     lines.append("## Why Now")
     lines.append(memo.whyNow.shift)
+    appendSources(memo.whyNow.sources)
     lines.append("")
 
     lines.append("## Market Gaps")
@@ -40,13 +46,14 @@ func memoMarkdown(_ memo: MarketMemo) -> String {
         lines.append("### Gap \(String(format: "%02d", i + 1)) — \(g.title) (\(g.opportunityScore)/100)")
         lines.append(g.description)
         lines.append("- Underserved: \(g.underserved)")
-        for q in g.quotes { lines.append("- \(q.quote) — \(q.source.label)") }
+        for q in g.quotes { lines.append("- \(q.quote) — [\(q.source.label)](\(q.source.url))") }
     }
     lines.append("")
 
     lines.append("## What It Takes to Start")
     for f in memo.entryCost {
         lines.append("- **\(f.label)** (\(f.tier.rawValue)): \(f.value)")
+        for s in f.sources { lines.append("  - Source: [\(s.label)](\(s.url))") }
     }
     lines.append("")
 

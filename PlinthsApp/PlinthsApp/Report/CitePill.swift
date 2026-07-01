@@ -20,6 +20,7 @@ struct CitePill: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel("Open source: \(source.label)")
+        .accessibilityAddTraits(.isLink)
     }
 }
 

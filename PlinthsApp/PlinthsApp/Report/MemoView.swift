@@ -5,6 +5,7 @@ import SwiftUI
 /// sections render in the web memo's order.
 struct MemoView: View {
     let memo: MarketMemo
+    let date: Date
     let onBack: () -> Void
 
     var body: some View {
@@ -161,18 +162,19 @@ struct MemoView: View {
     }
 
     // Deterministic (non-randomized) brief id derived from the idea, so it is
-    // stable across launches for a given memo.
+    // stable across launches for a given memo. The year tracks the report date.
     private var briefId: String {
         let n = memo.idea.unicodeScalars.reduce(0) { ($0 &* 31 &+ Int($1.value)) & 0xFFFF } % 10000
-        return String(format: "PLN-2026-%04d", n)
+        let year = Calendar.current.component(.year, from: date)
+        return "PLN-\(year)-" + String(format: "%04d", n)
     }
 
     private var dateStr: String {
-        Date.now.formatted(.dateTime.month(.abbreviated).day().year())
+        date.formatted(.dateTime.month(.abbreviated).day().year())
     }
 }
 
 #Preview {
-    MemoView(memo: MockMemo.digitalFitness, onBack: {})
+    MemoView(memo: MockMemo.digitalFitness, date: .now, onBack: {})
         .preferredColorScheme(.dark)
 }

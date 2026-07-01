@@ -1648,7 +1648,7 @@ real API lands in M4.
 - [ ] **Step 3: Build + confirm production defaults.** Run the build (expect `** BUILD SUCCEEDED **`) and verify `git grep -n "isSignedIn = true\|screen: WorkspaceScreen = .report\|= .report(MockMemo"` returns **nothing** in `PlinthsApp/PlinthsApp/` (all screenshot flag-flips reverted).
 
 ```bash
-cd /Users/wakeensito/Plinths && git grep -n "isSignedIn = true" -- 'PlinthsApp/PlinthsApp/*.swift'; git grep -n "WorkspaceScreen = .report" -- 'PlinthsApp/PlinthsApp/*.swift'
+cd /Users/wakeensito/Plinths && git grep -n "isSignedIn = true" -- 'PlinthsApp/PlinthsApp/'; git grep -nE "WorkspaceScreen = \.report|= \.report\(MockMemo" -- 'PlinthsApp/PlinthsApp/'
 ```
 Expected: no output.
 

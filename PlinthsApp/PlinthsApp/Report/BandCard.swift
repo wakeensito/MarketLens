@@ -25,7 +25,7 @@ struct BandCard: View {
                 ZStack(alignment: .leading) {
                     Capsule().fill(Theme.Stealth.amber.opacity(0.15))
                     Capsule().fill(Theme.Stealth.amber)
-                        .frame(width: geo.size.width * CGFloat(band.score) / 100)
+                        .frame(width: geo.size.width * CGFloat(min(100, max(0, band.score))) / 100)
                 }
             }
             .frame(height: 3)
