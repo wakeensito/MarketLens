@@ -17,7 +17,8 @@ identity established by the M1 splash.
 ### In scope
 - Top-level session switch: signed-out splash ↔ signed-in workspace.
 - Workspace home: top bar, hero prompt, example-idea chips, bottom-docked input.
-- History drawer: slide-in list of mock past reports.
+- History: a list of mock past reports. *(Planned as a slide-in drawer;
+  shipped as a standard SwiftUI sheet — see the HistoryDrawer note below.)*
 - Submit → staged pipeline-loading animation, which runs and then stops.
 
 ### Out of scope (later milestones)
@@ -79,7 +80,7 @@ PlinthsApp/PlinthsApp/
     WorkspaceHome.swift        # hero + example chips (composes IdeaInputBar)
     IdeaInputBar.swift         # bottom-docked text field + amber send
     ExampleIdeaChip.swift      # one tappable sample idea
-    HistoryDrawer.swift        # slide-in left panel + scrim
+    HistoryDrawer.swift        # past-reports list (presented as a sheet)
     HistoryRow.swift           # one past-report row
     PipelineLoadingView.swift  # staged loading animation
   Models/
@@ -123,6 +124,13 @@ Bottom-docked, above the home indicator:
 - Binds a `@FocusState` so example chips can focus it.
 
 ### HistoryDrawer
+> **Superseded in the final build:** the slide-in-drawer-over-scrim below was
+> the plan; the shipped `WorkspaceView` presents `HistoryDrawer` as a standard
+> SwiftUI sheet (`.sheet(isPresented:)` + `.presentationBackground(...)`). The
+> custom push-aside interaction was dropped after it fought the safe area; the
+> type keeps its name and its list body. See `WorkspaceView.swift` and
+> `PlinthsApp/SETUP.md`.
+
 - A left panel (~82% width, max ~340pt) over a tappable scrim
   (`Color.black.opacity(0.45)`).
 - Slides in from the leading edge (`.transition(.move(edge: .leading))`),

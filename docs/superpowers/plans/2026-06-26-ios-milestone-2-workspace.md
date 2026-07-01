@@ -679,6 +679,12 @@ struct HistoryRow: View {
 
 - [ ] **Step 2: Create `HistoryDrawer.swift`**
 
+> **Superseded by the final build:** the scrim + leading-panel push-aside below
+> was the plan. The shipped `HistoryDrawer` keeps its name and list body but
+> drops the scrim/panel/`onClose` — `WorkspaceView` presents it as a standard
+> `.sheet` (see the Step 3 note). Code below is the historical plan, not the
+> shipped code.
+
 ```swift
 import SwiftUI
 
@@ -736,6 +742,14 @@ struct HistoryDrawer: View {
 ```
 
 - [ ] **Step 3: Modify `WorkspaceView.swift` — wire the drawer**
+
+> **Superseded by the final build:** the `ZStack` overlay + `.transition(.move)`
+> below was the plan. The shipped `WorkspaceView` presents history via
+> `.sheet(isPresented: $isHistoryOpen)` with
+> `.presentationBackground(Theme.Stealth.skyTop)` — no overlay, `zIndex`, or
+> move-edge transition. The custom push-aside was dropped for fighting the safe
+> area; see `WorkspaceView.swift` and `PlinthsApp/SETUP.md`. Code below is the
+> historical plan.
 
 Replace the whole struct with (adds `isHistoryOpen` + `reduceMotion` + drawer overlay):
 ```swift
@@ -1027,7 +1041,7 @@ git commit -m "docs(ios): refresh SETUP for the M2 workspace shell"
 - Home hero + sub-line → Tasks 2 (placeholder) / 3 (real) ✓
 - Example-idea chips (fill, not submit) → Task 3 ✓
 - Idea input, text + send only, no Model/＋ → Task 3 ✓
-- History drawer + rows (amber-only saturation chip, relative date, select stub) → Task 4 ✓
+- History + rows (amber-only saturation chip, relative date, select stub) → Task 4 ✓ *(shipped as a `.sheet`, not the planned push-aside drawer)*
 - Submit → staged pipeline-loading, holds on last frame, Reduce Motion → Task 5 ✓
 - Theme.Stealth tokens only, no new colors → enforced in every component ✓
 - Accessibility (labels, 44pt, Reduce Motion, Dynamic Type) → in each component ✓

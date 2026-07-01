@@ -21,6 +21,7 @@ struct IdeaInputBar: View {
                 .lineLimit(1...4)
                 .focused($isFocused)
                 .submitLabel(.go)
+                .onSubmit(submit)
 
             Button(action: submit) {
                 Image(systemName: "arrow.up")

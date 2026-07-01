@@ -9,6 +9,7 @@ struct PipelineLoadingView: View {
     let onCancel: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var start = Date()
+    @State private var isComplete = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -27,26 +28,19 @@ struct PipelineLoadingView: View {
 
             Spacer()
 
-            TimelineView(.animation) { timeline in
-                let elapsed = timeline.date.timeIntervalSince(start)
-                let stage = PipelineStage.stage(at: elapsed)
-                let progress = min(elapsed / PipelineStage.totalSeconds, 1.0)
-
-                VStack(spacing: 24) {
-                    PlinthsMark(height: 84, color: Theme.Stealth.amber)
-                        .opacity(reduceMotion ? 1 : pulse(elapsed))
-
-                    VStack(spacing: 8) {
-                        Text(stage.label)
-                            .font(Theme.Typeface.title)
-                            .foregroundStyle(Theme.Stealth.text)
-                        Text(stage.description)
-                            .font(Theme.Typeface.caption)
-                            .foregroundStyle(Theme.Stealth.textSecondary)
-                            .multilineTextAlignment(.center)
-                    }
-
-                    progressBar(progress)
+            // While running, TimelineView drives the mark pulse + progress. Once
+            // the pipeline reaches its total runtime it settles on a static
+            // terminal frame, so the animation clock stops instead of pulsing
+            // forever on a screen that's meant to run and hold.
+            if isComplete {
+                stageFrame(stage: PipelineStage.all.last ?? PipelineStage.all[0],
+                           progress: 1.0, markOpacity: 1)
+            } else {
+                TimelineView(.animation) { timeline in
+                    let elapsed = timeline.date.timeIntervalSince(start)
+                    stageFrame(stage: PipelineStage.stage(at: elapsed),
+                               progress: min(elapsed / PipelineStage.totalSeconds, 1.0),
+                               markOpacity: reduceMotion ? 1 : pulse(elapsed))
                 }
             }
 
@@ -60,6 +54,29 @@ struct PipelineLoadingView: View {
         }
         .padding(.horizontal, 20)
         .onAppear { start = Date() }
+        .task {
+            try? await Task.sleep(for: .seconds(PipelineStage.totalSeconds))
+            isComplete = true
+        }
+    }
+
+    private func stageFrame(stage: PipelineStage, progress: Double, markOpacity: Double) -> some View {
+        VStack(spacing: 24) {
+            PlinthsMark(height: 84, color: Theme.Stealth.amber)
+                .opacity(markOpacity)
+
+            VStack(spacing: 8) {
+                Text(stage.label)
+                    .font(Theme.Typeface.title)
+                    .foregroundStyle(Theme.Stealth.text)
+                Text(stage.description)
+                    .font(Theme.Typeface.caption)
+                    .foregroundStyle(Theme.Stealth.textSecondary)
+                    .multilineTextAlignment(.center)
+            }
+
+            progressBar(progress)
+        }
     }
 
     private func pulse(_ elapsed: Double) -> Double {
