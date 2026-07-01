@@ -8,7 +8,7 @@ enum MockMuse {
     /// displayed query is the user's own text.
     static func canonicalTurn(for reportKey: String, query: String) -> MuseTurn {
         let a = answers[reportKey] ?? answers["digitalFitness"]!
-        return MuseTurn(id: "\(reportKey)-canonical-\(query.hashValue)",
+        return MuseTurn(id: "\(reportKey)-canonical-\(UUID().uuidString)",
                         query: query, answerRaw: a.canonical.raw,
                         sources: a.canonical.sources, followups: a.chipQuestions)
     }
@@ -18,7 +18,7 @@ enum MockMuse {
     static func turn(forChip chip: String, in reportKey: String) -> MuseTurn {
         let a = answers[reportKey] ?? answers["digitalFitness"]!
         let mapped = a.chips[chip] ?? a.canonical
-        return MuseTurn(id: "\(reportKey)-chip-\(chip.hashValue)",
+        return MuseTurn(id: "\(reportKey)-chip-\(UUID().uuidString)",
                         query: chip, answerRaw: mapped.raw,
                         sources: mapped.sources, followups: a.chipQuestions)
     }
