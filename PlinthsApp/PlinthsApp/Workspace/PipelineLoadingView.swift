@@ -57,8 +57,10 @@ struct PipelineLoadingView: View {
         .onAppear { start = Date() }
         .task {
             try? await Task.sleep(for: .seconds(PipelineStage.totalSeconds))
+            guard !Task.isCancelled else { return }
             isComplete = true
             try? await Task.sleep(for: .seconds(0.6))
+            guard !Task.isCancelled else { return }
             onComplete()
         }
     }
