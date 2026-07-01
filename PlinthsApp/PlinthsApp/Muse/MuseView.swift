@@ -5,6 +5,8 @@ import UIKit
 /// composer. Asking resolves a canned turn (MockMuse) and appends it to the store.
 struct MuseView: View {
     let reportKey: String
+    var pendingAsk: String? = nil
+    var onConsumePendingAsk: () -> Void = {}
     let onCite: (String) -> Void
     let onToggleToReport: () -> Void
     let onBack: () -> Void
@@ -38,6 +40,10 @@ struct MuseView: View {
                 }
                 .onChange(of: turns.count) {
                     if let last = turns.last?.id { withAnimation { proxy.scrollTo(last, anchor: .bottom) } }
+                }
+                .onAppear {
+                    if let last = turns.last?.id { proxy.scrollTo(last, anchor: .bottom) }
+                    if let q = pendingAsk { ask(free: q); onConsumePendingAsk() }
                 }
             }
             MuseComposer { ask(free: $0) }
