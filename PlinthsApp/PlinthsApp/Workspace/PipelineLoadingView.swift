@@ -7,6 +7,7 @@ import SwiftUI
 struct PipelineLoadingView: View {
     let idea: String
     let onCancel: () -> Void
+    var onComplete: () -> Void = {}
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var start = Date()
     @State private var isComplete = false
@@ -57,6 +58,8 @@ struct PipelineLoadingView: View {
         .task {
             try? await Task.sleep(for: .seconds(PipelineStage.totalSeconds))
             isComplete = true
+            try? await Task.sleep(for: .seconds(0.6))
+            onComplete()
         }
     }
 

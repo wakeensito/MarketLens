@@ -1,36 +1,42 @@
 import SwiftUI
 
-/// The signed-in workspace root: a dark Stealth-Desert surface hosting the
-/// idea-input home, the pipeline-loading screen, and a history list.
-///
-/// History is presented as a standard sheet (tap ☰). The earlier custom
-/// "push-aside" side-menu (card shifts right to reveal the menu) was removed for
-/// now — it lives in git history if we want to bring it back.
+/// The signed-in workspace root: the idea-input home, the pipeline-loading
+/// screen, and — new in M3 — the market-memo report. History is a sheet (tap ☰).
+/// The report is a dedicated full-screen surface; `reportOrigin` remembers where
+/// it was opened from so back returns there.
 struct WorkspaceView: View {
     @State private var screen: WorkspaceScreen = .home
     @State private var draft = ""
     @State private var isHistoryOpen = false
+    @State private var reportOrigin: ReportOrigin = .home
+
+    private enum ReportOrigin { case home, history }
 
     var body: some View {
         ZStack {
             DesertSkyBackground()
                 .ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                WorkspaceTopBar(onHistory: { isHistoryOpen = true }, onNew: startNew)
-
-                switch screen {
-                case .home:
+            switch screen {
+            case .home:
+                VStack(spacing: 0) {
+                    WorkspaceTopBar(onHistory: { isHistoryOpen = true }, onNew: startNew)
                     WorkspaceHome(draft: $draft, onSubmit: submit)
-                case .loading:
-                    PipelineLoadingView(idea: draft, onCancel: startNew)
                 }
+            case .loading:
+                VStack(spacing: 0) {
+                    WorkspaceTopBar(onHistory: { isHistoryOpen = true }, onNew: startNew)
+                    PipelineLoadingView(idea: draft, onCancel: startNew,
+                                        onComplete: { showReport(MockMemo.digitalFitness, origin: .home) })
+                }
+            case .report(let memo):
+                MemoView(memo: memo, onBack: backFromReport)
             }
         }
         .preferredColorScheme(.dark)
         .sheet(isPresented: $isHistoryOpen) {
-            HistoryDrawer(reports: MockWorkspace.history) { _ in
-                isHistoryOpen = false
+            HistoryDrawer(reports: MockWorkspace.history) { report in
+                openReport(for: report)
             }
             .presentationBackground(Theme.Stealth.skyTop)
             .preferredColorScheme(.dark)
@@ -40,6 +46,21 @@ struct WorkspaceView: View {
     private func submit() {
         guard !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         screen = .loading
+    }
+
+    private func showReport(_ memo: MarketMemo, origin: ReportOrigin) {
+        reportOrigin = origin
+        screen = .report(memo)
+    }
+
+    private func openReport(for report: MockReport) {
+        isHistoryOpen = false
+        showReport(MockMemo.memo(for: report), origin: .history)
+    }
+
+    private func backFromReport() {
+        screen = .home
+        if reportOrigin == .history { isHistoryOpen = true }
     }
 
     private func startNew() {
