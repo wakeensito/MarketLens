@@ -4,5 +4,5 @@ import Foundation
 enum WorkspaceScreen {
     case home
     case loading
-    case report(MarketMemo, Date)
+    case report(MarketMemo, Date, String)   // memo, created date, reportKey
 }

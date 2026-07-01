@@ -1,22 +1,19 @@
 import SwiftUI
 
-/// The signed-in workspace root: the idea-input home, the pipeline-loading
-/// screen, and — new in M3 — the market-memo report. History is a sheet (tap ☰).
-/// The report is a dedicated full-screen surface; `reportOrigin` remembers where
-/// it was opened from so back returns there.
+/// The signed-in workspace root: idea-input home, pipeline loading, and — via
+/// `ReportSurface` — the report⇄muse surface. History is a sheet (tap ☰).
 struct WorkspaceView: View {
     @State private var screen: WorkspaceScreen = .home
     @State private var draft = ""
     @State private var isHistoryOpen = false
     @State private var reportOrigin: ReportOrigin = .home
+    @Environment(MuseStore.self) private var store
 
     private enum ReportOrigin { case home, history }
 
     var body: some View {
         ZStack {
-            DesertSkyBackground()
-                .ignoresSafeArea()
-
+            DesertSkyBackground().ignoresSafeArea()
             switch screen {
             case .home:
                 VStack(spacing: 0) {
@@ -27,20 +24,19 @@ struct WorkspaceView: View {
                 VStack(spacing: 0) {
                     WorkspaceTopBar(onHistory: { isHistoryOpen = true }, onNew: startNew)
                     PipelineLoadingView(idea: draft, onCancel: startNew,
-                                        onComplete: { showReport(MockMemo.digitalFitness, date: .now, origin: .home) })
+                        onComplete: { showReport(MockMemo.digitalFitness, date: .now, key: MockMemo.digitalFitnessKey, origin: .home) })
                 }
-            case .report(let memo, let date):
-                MemoView(memo: memo, date: date, highlightTarget: nil, hasThread: false,
-                         onBack: backFromReport, onAsk: { _ in }, onToggleToMuse: {}, onBannerBack: {})
+            case .report(let memo, let date, let key):
+                ReportSurface(memo: memo, date: date, reportKey: key,
+                              initialFace: store.hasThread(for: key) ? .muse : .report,
+                              onBack: backFromReport)
             }
         }
         .preferredColorScheme(.dark)
         .sheet(isPresented: $isHistoryOpen) {
-            HistoryDrawer(reports: MockWorkspace.history) { report in
-                openReport(for: report)
-            }
-            .presentationBackground(Theme.Stealth.skyTop)
-            .preferredColorScheme(.dark)
+            HistoryDrawer(reports: MockWorkspace.history) { report in openReport(for: report) }
+                .presentationBackground(Theme.Stealth.skyTop)
+                .preferredColorScheme(.dark)
         }
     }
 
@@ -48,25 +44,18 @@ struct WorkspaceView: View {
         guard !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         screen = .loading
     }
-
-    private func showReport(_ memo: MarketMemo, date: Date, origin: ReportOrigin) {
+    private func showReport(_ memo: MarketMemo, date: Date, key: String, origin: ReportOrigin) {
         reportOrigin = origin
-        screen = .report(memo, date)
+        screen = .report(memo, date, key)
     }
-
     private func openReport(for report: MockReport) {
         isHistoryOpen = false
-        showReport(MockMemo.memo(for: report), date: report.createdAt, origin: .history)
+        showReport(MockMemo.memo(for: report), date: report.createdAt,
+                   key: MockMemo.reportKey(for: report), origin: .history)
     }
-
     private func backFromReport() {
         screen = .home
         if reportOrigin == .history { isHistoryOpen = true }
     }
-
-    private func startNew() {
-        draft = ""
-        screen = .home
-        isHistoryOpen = false
-    }
+    private func startNew() { draft = ""; screen = .home; isHistoryOpen = false }
 }

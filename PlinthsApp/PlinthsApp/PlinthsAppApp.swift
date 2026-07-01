@@ -10,22 +10,20 @@ import SwiftUI
 @main
 struct PlinthsAppApp: App {
     @State private var isSignedIn = false
+    @State private var museStore = MuseStore()
 
-    init() {
-        FontRegistrar.registerBundledFonts()
-    }
+    init() { FontRegistrar.registerBundledFonts() }
 
     var body: some Scene {
         WindowGroup {
             ZStack {
                 if isSignedIn {
-                    WorkspaceView()
-                        .transition(.opacity)
+                    WorkspaceView().transition(.opacity)
                 } else {
-                    SplashSignInView(onSignIn: { isSignedIn = true })
-                        .transition(.opacity)
+                    SplashSignInView(onSignIn: { isSignedIn = true }).transition(.opacity)
                 }
             }
+            .environment(museStore)
             .animation(.easeInOut(duration: 0.35), value: isSignedIn)
         }
     }
