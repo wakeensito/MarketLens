@@ -30,7 +30,7 @@ sudo xcodebuild -license accept
 ## Project structure (feature folders)
 ```text
 PlinthsApp/PlinthsApp/
-  PlinthsAppApp.swift        # entry; registers fonts, shows SplashSignInView
+  PlinthsAppApp.swift        # entry; registers fonts, switches splash ↔ workspace
   DesignSystem/
     Color+Hex.swift          # Color(hex:) initializer
     Theme.swift              # Palette + Stealth palette + Typeface (font roles)
@@ -44,6 +44,19 @@ PlinthsApp/PlinthsApp/
     DesertSkyBackground.swift  # Stealth-Desert dusk gradient backdrop
     SandParticleField.swift  # animated drifting sand motes (Canvas)
     SandMote.swift           # one mote's seed data
+  Workspace/
+    WorkspaceView.swift      # signed-in root (home / loading + history sheet)
+    WorkspaceTopBar.swift    # ☰ history · plinths wordmark · ⊕ new
+    WorkspaceHome.swift      # hero + example-idea chips + idea input
+    IdeaInputBar.swift       # bottom-docked text field + amber send
+    ExampleIdeaChip.swift    # one tappable sample idea
+    HistoryDrawer.swift      # past-reports list (presented as a sheet)
+    HistoryRow.swift         # one past-report row (saturation chip + date)
+    PipelineLoadingView.swift  # staged analysis-loading animation
+  Models/
+    WorkspaceScreen.swift    # home / loading enum
+    PipelineStage.swift      # mock analysis stages (ported from mockData.ts)
+    MockWorkspace.swift      # example ideas + mock history
   Resources/Fonts/           # IBM Plex Serif/Sans/Mono .ttf
 ```
 
@@ -79,9 +92,17 @@ xcrun simctl launch booted Plinths.PlinthsApp
 Or just press ▶ in Xcode.
 
 ## Status
-Milestone 1 complete: animated Stealth-Desert splash → sign-in (Google default,
-Apple + email under "Other options"), auth stubbed/mock-only. Sign in with Apple
-is a placeholder pill — App Store guideline 4.8 requires Apple's official
-`SignInWithAppleButton` once Google is offered; wire it with real auth in M5.
-Next milestones: idea-input screen, report UI, wire real API, real auth.
-See `docs/superpowers/specs/` and `docs/superpowers/plans/` for the milestone arc.
+Milestone 2 complete: signing in enters a dark Stealth-Desert **workspace** —
+top bar (history · wordmark · new), a hero with example-idea chips, a bottom-
+docked idea input (text + send only), a **history sheet** of mock past reports
+(opened from ☰), and a staged **pipeline-loading** animation on submit (it runs and
+holds — the report render is M3). All mock data, ported from the web app's
+`frontend/src/mockData.ts`.
+
+Auth is still mock — any sign-in button enters the workspace. Sign in with Apple
+remains a placeholder pill; App Store guideline 4.8 requires Apple's official
+`SignInWithAppleButton` once Google is offered, wired with real auth in M5.
+
+Next milestones: report UI (M3), wire real API + add a test target (M4), real
+auth (M5). See `docs/superpowers/specs/` and `docs/superpowers/plans/` for the
+milestone arc.

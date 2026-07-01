@@ -7,6 +7,10 @@ struct SplashSignInControls: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var showMoreOptions = false
 
+    /// Called when the user picks any sign-in option. Mock auth in M2 — every
+    /// option simply enters the workspace; real auth lands in M5.
+    let onSignIn: () -> Void
+
     var body: some View {
         VStack(spacing: 14) {
             SplashPillButton(
@@ -57,20 +61,20 @@ struct SplashSignInControls: View {
     }
 
     private func handleGoogle() {
-        print("continue with google tapped")
+        onSignIn()
     }
 
     private func handleApple() {
-        print("sign in with apple tapped")
+        onSignIn()
     }
 
     private func handleEmail() {
-        print("continue with email tapped")
+        onSignIn()
     }
 }
 
 #Preview {
-    SplashSignInControls()
+    SplashSignInControls(onSignIn: {})
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Theme.Stealth.skyTop)
