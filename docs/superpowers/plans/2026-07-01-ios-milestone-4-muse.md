@@ -1230,7 +1230,7 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>"
 import SwiftUI
 
 /// One report's two faces — the memo report and its Muse conversation — swapped
-/// by a destination-toggle glyph. Owns the citation-highlight state.
+/// by a destination-toggle glyph. Owns the citation-highlight + pending-ask state.
 struct ReportSurface: View {
     let memo: MarketMemo
     let date: Date
@@ -1241,6 +1241,7 @@ struct ReportSurface: View {
     @Environment(MuseStore.self) private var store
     @State private var face: ReportFace
     @State private var highlight: MuseCitationTarget?
+    @State private var pendingAsk: String?     // a report-composer question to run on the Muse face
 
     init(memo: MarketMemo, date: Date, reportKey: String, initialFace: ReportFace, onBack: @escaping () -> Void) {
         self.memo = memo; self.date = date; self.reportKey = reportKey
@@ -1258,16 +1259,20 @@ struct ReportSurface: View {
                      onBannerBack: { highlight = nil; face = .muse })
         case .muse:
             MuseView(reportKey: reportKey,
+                     pendingAsk: pendingAsk,
+                     onConsumePendingAsk: { pendingAsk = nil },
                      onCite: { routeCite($0) },
                      onToggleToReport: { highlight = nil; face = .report },
                      onBack: onBack)
         }
     }
 
-    // A free-typed question from the report composer: append the turn, go to Muse.
+    // A free-typed question from the report composer: stash it and flip to Muse,
+    // which runs it once on appear (so it streams). We do NOT append here — that
+    // keeps all append+animate logic inside MuseView, so a later toggle back to
+    // the Muse face renders the thread statically instead of re-animating.
     private func openMuseAsking(_ query: String) {
-        store.append(MockMuse.canonicalTurn(for: reportKey, query: query), for: reportKey)
-        highlight = nil; face = .muse
+        pendingAsk = query; highlight = nil; face = .muse
     }
 
     // A citation tap in Muse: flip to the report, highlight the cell.
@@ -1277,9 +1282,21 @@ struct ReportSurface: View {
     }
 }
 ```
-> Note: the report composer appends its turn *here* (not in `MuseView`), so switching to Muse shows the just-asked turn. `MuseView` still animates it (its `lastTurnID` picks up the newest turn on appear via the freshly-appended id — set `lastTurnID` there in `.onAppear` to `turns.last?.id` when arriving with a brand-new turn). Wire `MuseView.onAppear { if lastTurnID == nil, let last = turns.last?.id, ... }` — simplest: in `MuseView.body`'s `ScrollViewReader.onAppear`, set `lastTurnID = turns.last?.id` if it is nil so an externally-appended turn animates once.
 
-- [ ] **Step 2: Adjust `MuseView` to animate an externally-appended turn.** In `MuseView.swift`, add to the `ScrollView`'s enclosing `ScrollViewReader` an `.onAppear { if lastTurnID == nil { lastTurnID = turns.last?.id }; if let last = turns.last?.id { proxy.scrollTo(last, anchor: .bottom) } }`.
+- [ ] **Step 2: Adjust `MuseView` for the pending-ask + scroll-on-appear.** In `MuseView.swift`:
+  (a) add two params right after `let reportKey: String` (defaults keep Task 10's other callers valid):
+  ```swift
+      var pendingAsk: String? = nil
+      var onConsumePendingAsk: () -> Void = {}
+  ```
+  (b) in the `ScrollViewReader` (alongside the existing `.onChange(of: turns.count)`), add an `.onAppear` that scrolls to the latest turn and consumes a pending ask **exactly once**:
+  ```swift
+      .onAppear {
+          if let last = turns.last?.id { proxy.scrollTo(last, anchor: .bottom) }
+          if let q = pendingAsk { ask(free: q); onConsumePendingAsk() }
+      }
+  ```
+  **Do NOT set `lastTurnID` from `onAppear`.** `lastTurnID` must be driven only by `ask(...)`, so an existing thread renders statically on (re)mount and only a freshly-asked turn streams. This is what prevents the last turn from re-streaming every time the user toggles back to the Muse face.
 
 - [ ] **Step 3: Build.** Expected: `** BUILD SUCCEEDED **`.
 - [ ] **Step 4: Commit**
