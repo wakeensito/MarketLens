@@ -57,8 +57,8 @@ enum MockMemo {
                 opportunityScore: 90,
                 tags: ["adapts to you", "keeps people coming back"],
                 quotes: [
-                    GapQuote(quote: "\"the program never changes even when I tell it the last week wrecked me\"", source: Source(label: "r/fitness", url: "https://www.reddit.com/r/fitness/")),
-                    GapQuote(quote: "\"great coach, but $149 a month is brutal\"", source: Source(label: "Trustpilot", url: "https://www.trustpilot.com/")),
+                    GapQuote(quote: "\u{201C}the program never changes even when I tell it the last week wrecked me\u{201D}", source: Source(label: "r/fitness", url: "https://www.reddit.com/r/fitness/")),
+                    GapQuote(quote: "\u{201C}great coach, but $149 a month is brutal\u{201D}", source: Source(label: "Trustpilot", url: "https://www.trustpilot.com/")),
                 ]),
             MemoGap(title: "Expert coaching that's affordable",
                 description: "Good coaching is locked behind $100-plus a month. A smart, AI-first app could give people expert-level plans at a price the average person can actually pay.",
@@ -67,7 +67,7 @@ enum MockMemo {
                 opportunityScore: 81,
                 tags: ["affordable", "for everyone"],
                 quotes: [
-                    GapQuote(quote: "\"I want Future-quality plans without the Future price\"", source: Source(label: "G2", url: "https://www.g2.com/")),
+                    GapQuote(quote: "\u{201C}I want Future-quality plans without the Future price\u{201D}", source: Source(label: "G2", url: "https://www.g2.com/")),
                 ]),
             MemoGap(title: "Everything in one place",
                 description: "Fitness, sleep, stress, and food live in separate apps that don't talk to each other. No one ties them together into a single, simple picture of how you're doing.",
