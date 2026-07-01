@@ -22,7 +22,7 @@ enum MockWorkspace {
     /// Mock past reports for the history drawer, newest first.
     static let history: [MockReport] = [
         MockReport(id: "mock-h1", ideaText: "Creator economy monetization platform",
-                   saturationScore: 73, saturationLabel: "Highly Saturated",
+                   saturationScore: 81, saturationLabel: "Highly Saturated",
                    createdAt: Date(timeIntervalSinceNow: -3600 * 2)),
         MockReport(id: "mock-h2", ideaText: "Sustainable food delivery platform",
                    saturationScore: 81, saturationLabel: "Highly Saturated",
@@ -31,7 +31,7 @@ enum MockWorkspace {
                    saturationScore: 34, saturationLabel: "Low Saturation",
                    createdAt: Date(timeIntervalSinceNow: -86400 * 2)),
         MockReport(id: "mock-h4", ideaText: "Pet telehealth and vet booking service",
-                   saturationScore: 47, saturationLabel: "Moderately Saturated",
+                   saturationScore: 62, saturationLabel: "Moderately Saturated",
                    createdAt: Date(timeIntervalSinceNow: -86400 * 5)),
     ]
 }
