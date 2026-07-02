@@ -12,6 +12,7 @@ struct MemoView: View {
     let onNavigate: (ReportFace) -> Void
 
     @State private var pulseID: String?
+    @State private var competitorsExpanded = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -49,11 +50,19 @@ struct MemoView: View {
     }
 
     private func routeHighlight(_ proxy: ScrollViewProxy) {
-        guard let id = highlightTarget?.cellID else { return }
-        withAnimation { proxy.scrollTo(id, anchor: .center) }
-        pulseID = id
-        // Only clear if a newer highlight hasn't taken over the pulse.
-        Task { try? await Task.sleep(nanoseconds: 1_600_000_000); if pulseID == id { pulseID = nil } }
+        guard let target = highlightTarget else { return }
+        // A citation to a collapsed competitor (index > 1) must expand the
+        // section first, else scrollTo targets a cell that isn't rendered.
+        if case .competitor(let n) = target, n > 1 { competitorsExpanded = true }
+        let id = target.cellID
+        Task { @MainActor in
+            // Give a just-expanded layout one frame to render the target cell.
+            try? await Task.sleep(nanoseconds: 60_000_000)
+            withAnimation { proxy.scrollTo(id, anchor: .center) }
+            pulseID = id
+            try? await Task.sleep(nanoseconds: 1_600_000_000)
+            if pulseID == id { pulseID = nil }
+        }
     }
 
     private func pulse(_ id: String) -> some View {
@@ -120,11 +129,27 @@ struct MemoView: View {
     }
 
     private var competitors: some View {
-        VStack(spacing: 12) {
-            ForEach(Array(sortedCompetitors.enumerated()), id: \.element.id) { i, c in
+        let all = sortedCompetitors
+        let visible = competitorsExpanded ? all : Array(all.prefix(1))
+        return VStack(spacing: 12) {
+            ForEach(Array(visible.enumerated()), id: \.element.id) { i, c in
                 CompetitorCard(competitor: c)
                     .id("competitor-\(i + 1)")
                     .overlay(pulse("competitor-\(i + 1)"))
+            }
+            if all.count > 1 {
+                Button {
+                    withAnimation { competitorsExpanded.toggle() }
+                } label: {
+                    Text(competitorsExpanded ? "SHOW FEWER" : "SHOW \(all.count - 1) MORE")
+                        .font(Theme.Typeface.badge)
+                        .foregroundStyle(Theme.Stealth.amber)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 2)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(competitorsExpanded ? "Show fewer competitors" : "Show \(all.count - 1) more competitors")
             }
         }
     }
