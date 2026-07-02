@@ -23,11 +23,8 @@ struct ReportSurface: View {
     var body: some View {
         switch face {
         case .report:
-            MemoView(memo: memo, date: date, highlightTarget: highlight,
-                     hasThread: store.hasThread(for: reportKey), onBack: onBack,
-                     onAsk: { openMuseAsking($0) },
-                     onToggleToMuse: { highlight = nil; face = .muse },
-                     onBannerBack: { highlight = nil; face = .muse })
+            MemoView(memo: memo, date: date, highlightTarget: highlight, onBack: onBack,
+                     onAsk: { openMuseAsking($0) }, onNavigate: { navigate(to: $0) })
         case .brief:
             EmptyView()   // wired to BuildBriefView in Task 11
         case .muse:
@@ -53,4 +50,6 @@ struct ReportSurface: View {
         guard let t = museTarget(target) else { return }
         highlight = t; face = .report
     }
+
+    private func navigate(to target: ReportFace) { highlight = nil; face = target }
 }

@@ -7,18 +7,16 @@ struct MemoView: View {
     let memo: MarketMemo
     let date: Date
     let highlightTarget: MuseCitationTarget?     // set on citation arrival
-    let hasThread: Bool                          // show the chat-bubble toggle
     let onBack: () -> Void
     let onAsk: (String) -> Void                  // free-typed question → open Muse
-    let onToggleToMuse: () -> Void
-    let onBannerBack: () -> Void
+    let onNavigate: (ReportFace) -> Void
 
     @State private var pulseID: String?
 
     var body: some View {
         VStack(spacing: 0) {
             topBar
-            if highlightTarget != nil { BackToChatBanner(onBack: onBannerBack) }
+            if highlightTarget != nil { BackToChatBanner(onBack: { onNavigate(.muse) }) }
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 24) {
@@ -44,7 +42,7 @@ struct MemoView: View {
                 .onAppear { routeHighlight(proxy) }
                 .onChange(of: highlightTarget) { routeHighlight(proxy) }
             }
-            MuseComposer(placeholder: "Ask about this report…") { onAsk($0) }
+            WorkspaceComposer(current: .report, onNavigate: onNavigate, onSubmit: onAsk)
                 .padding(.horizontal, 20).padding(.bottom, 12)
         }
         .background(Theme.Stealth.skyTop.ignoresSafeArea())
@@ -72,13 +70,6 @@ struct MemoView: View {
             }
             .accessibilityLabel("Back")
             Spacer()
-            if hasThread {
-                Button(action: onToggleToMuse) {
-                    Image(systemName: "message").font(.system(size: 17, weight: .medium))
-                        .foregroundStyle(Theme.Stealth.textSecondary).frame(width: 44, height: 44).contentShape(.rect)
-                }
-                .accessibilityLabel("Show conversation")
-            }
             ShareLink(item: memoMarkdown(memo)) {
                 Image(systemName: "square.and.arrow.up").font(.system(size: 17, weight: .medium))
                     .foregroundStyle(Theme.Stealth.textSecondary).frame(width: 44, height: 44).contentShape(.rect)
@@ -197,7 +188,7 @@ struct MemoView: View {
 }
 
 #Preview {
-    MemoView(memo: MockMemo.digitalFitness, date: .now, highlightTarget: nil, hasThread: false,
-             onBack: {}, onAsk: { _ in }, onToggleToMuse: {}, onBannerBack: {})
+    MemoView(memo: MockMemo.digitalFitness, date: .now, highlightTarget: nil,
+             onBack: {}, onAsk: { _ in }, onNavigate: { _ in })
         .preferredColorScheme(.dark)
 }
