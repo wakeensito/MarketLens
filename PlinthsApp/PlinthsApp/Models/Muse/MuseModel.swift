@@ -2,7 +2,7 @@ import Foundation
 import SwiftUI
 
 /// One face of the report surface.
-enum ReportFace: Equatable { case report, muse }
+enum ReportFace: Hashable { case report, brief, muse }
 
 /// Where a citation points, 1-indexed to match MemoView's cell ids.
 enum MuseCitationTarget: Equatable {

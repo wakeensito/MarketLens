@@ -1,18 +1,21 @@
 import SwiftUI
 
-/// The docked Muse composer — a recessed field + amber send, styled like the
-/// workspace IdeaInputBar. Emits the trimmed text and clears on submit.
-struct MuseComposer: View {
-    var placeholder: String = "Ask a follow-up…"
+/// The docked composer shared by all three faces: a leading nav-glyph row (the
+/// two other surfaces) + the Muse text field + amber send. Always Muse-bound —
+/// submitting asks Muse. Supersedes MuseComposer.
+struct WorkspaceComposer: View {
+    let current: ReportFace
+    let onNavigate: (ReportFace) -> Void
+    var placeholder: String = "Ask about this report…"
     let onSubmit: (String) -> Void
 
     @State private var draft = ""
     @FocusState private var focused: Bool
-
     private var canSubmit: Bool { !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
+        HStack(alignment: .center, spacing: 8) {
+            NavGlyphRow(current: current, onNavigate: onNavigate)
             TextField(placeholder, text: $draft, axis: .vertical)
                 .font(Theme.Typeface.body)
                 .foregroundStyle(Theme.Stealth.text)
@@ -49,6 +52,6 @@ struct MuseComposer: View {
 }
 
 #Preview {
-    MuseComposer(onSubmit: { _ in })
+    WorkspaceComposer(current: .report, onNavigate: { _ in }, onSubmit: { _ in })
         .padding().background(Theme.Stealth.skyTop).preferredColorScheme(.dark)
 }
