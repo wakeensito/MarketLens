@@ -28,6 +28,8 @@ struct ReportSurface: View {
                      onAsk: { openMuseAsking($0) },
                      onToggleToMuse: { highlight = nil; face = .muse },
                      onBannerBack: { highlight = nil; face = .muse })
+        case .brief:
+            EmptyView()   // wired to BuildBriefView in Task 11
         case .muse:
             MuseView(reportKey: reportKey,
                      pendingAsk: pendingAsk,
