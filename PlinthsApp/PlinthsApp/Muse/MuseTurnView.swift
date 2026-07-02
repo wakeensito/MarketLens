@@ -33,7 +33,8 @@ struct MuseTurnView: View {
             MuseProseText(raw: streaming ? shown : turn.answerRaw, showCursor: streaming, onCite: onCite)
             MuseActionRow(feedback: turn.feedback, onCopy: onCopy, onRegenerate: onRegenerate,
                           onCiteMarkdown: onCiteMarkdown, onFeedback: onFeedback)
-            if isLast { MuseFollowupChips(questions: turn.followups, onTap: onFollowup) }
+            // Chips belong to the finished turn — hold them until streaming ends.
+            if isLast && !streaming { MuseFollowupChips(questions: turn.followups, onTap: onFollowup) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .task(id: animate) { await streamIfNeeded() }   // re-run when animate flips (e.g. regenerate)
