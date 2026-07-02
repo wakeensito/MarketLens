@@ -285,6 +285,18 @@ enum MockMemo {
             limit: "This is an AI-generated read of public information, not financial advice. Market-size and cost figures are estimates — check the linked sources and get professional advice before investing.")
     )
 
+    /// The canonical reportKey for the submit-complete report.
+    static let digitalFitnessKey = "digitalFitness"
+
+    /// Thread/content key for a history row (parallels `memo(for:)`).
+    static func reportKey(for report: MockReport) -> String {
+        switch report.id {
+        case "mock-h1", "mock-h2": "crowded"
+        case "mock-h3":            "open"
+        default:                   digitalFitnessKey
+        }
+    }
+
     /// Resolves a history row to its fixture (see the M3 spec's mapping table).
     static func memo(for report: MockReport) -> MarketMemo {
         switch report.id {
