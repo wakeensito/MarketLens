@@ -40,8 +40,13 @@ struct ReportSurface: View {
 
     private func navigate(to target: ReportFace) { highlight = nil; face = target }
 
+    // Stash the question and flip to Muse, which runs it once on appear (consumed
+    // via onConsumePendingAsk). Do NOT append here — appending would let a later
+    // face-swap back to Muse re-animate the last turn.
     private func openMuseAsking(_ query: String) { pendingAsk = query; highlight = nil; face = .muse }
 
+    // A citation tap: flip to the report and highlight the cell. Keeps `highlight`
+    // set (unlike navigate) so the "from your conversation" banner shows.
     private func routeCite(_ target: String) {
         guard let t = museTarget(target) else { return }
         highlight = t; face = .report
