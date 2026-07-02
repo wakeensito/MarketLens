@@ -11,6 +11,7 @@ import SwiftUI
 struct PlinthsAppApp: App {
     @State private var isSignedIn = false
     @State private var museStore = MuseStore()
+    @State private var briefStore = BuildBriefStore()
 
     init() { FontRegistrar.registerBundledFonts() }
 
@@ -24,6 +25,7 @@ struct PlinthsAppApp: App {
                 }
             }
             .environment(museStore)
+            .environment(briefStore)
             .animation(.easeInOut(duration: 0.35), value: isSignedIn)
         }
     }
