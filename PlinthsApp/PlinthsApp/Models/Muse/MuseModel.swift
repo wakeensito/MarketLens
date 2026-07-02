@@ -39,7 +39,7 @@ enum MuseRun: Equatable {
 
 /// A citation pill in the GROUNDED IN sources row.
 struct MuseCellRef: Identifiable, Equatable {
-    var id: String { label }
+    var id: String { target }   // target is the unique cell key; labels can repeat
     let target: String     // "competitor-2"
     let label: String      // "Competitors"
 }

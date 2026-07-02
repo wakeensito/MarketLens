@@ -15,6 +15,7 @@ struct MuseFollowupChips: View {
                         Text(q).font(Theme.Typeface.body).foregroundStyle(Theme.Stealth.text)
                         Spacer()
                         Image(systemName: "arrow.right").font(.system(size: 13)).foregroundStyle(Theme.Stealth.amber)
+                            .accessibilityHidden(true)
                     }
                     .padding(.vertical, 12)
                     .contentShape(.rect)

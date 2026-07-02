@@ -36,7 +36,7 @@ struct MuseTurnView: View {
             if isLast { MuseFollowupChips(questions: turn.followups, onTap: onFollowup) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .task(id: turn.id) { await streamIfNeeded() }
+        .task(id: animate) { await streamIfNeeded() }   // re-run when animate flips (e.g. regenerate)
     }
 
     private func streamIfNeeded() async {

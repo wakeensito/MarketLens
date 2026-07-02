@@ -293,7 +293,7 @@ enum MockMemo {
         switch report.id {
         case "mock-h1", "mock-h2": "crowded"
         case "mock-h3":            "open"
-        default:                   "digitalFitness"
+        default:                   digitalFitnessKey
         }
     }
 

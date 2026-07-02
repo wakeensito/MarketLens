@@ -54,7 +54,8 @@ struct MemoView: View {
         guard let id = highlightTarget?.cellID else { return }
         withAnimation { proxy.scrollTo(id, anchor: .center) }
         pulseID = id
-        Task { try? await Task.sleep(nanoseconds: 1_600_000_000); pulseID = nil }
+        // Only clear if a newer highlight hasn't taken over the pulse.
+        Task { try? await Task.sleep(nanoseconds: 1_600_000_000); if pulseID == id { pulseID = nil } }
     }
 
     private func pulse(_ id: String) -> some View {

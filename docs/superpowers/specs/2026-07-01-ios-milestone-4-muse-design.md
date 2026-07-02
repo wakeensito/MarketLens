@@ -51,7 +51,7 @@ Reference (native port source): `frontend/src/hooks/useMuse.ts`,
    each answer cites *that report's real cells* so the citation round-trip works.
    Free-typed submit → the report's canonical answer; follow-up chips → their
    mapped answer.
-5. **In-memory per-session persistence,** keyed by `reportId`. Durable
+5. **In-memory per-session persistence,** keyed by `reportKey`. Durable
    across-launch storage is deferred to M7 (backend).
 6. **Amber-only thumbs.** The web colors thumbs-up `--signal` / thumbs-down
    `--warning`; Stealth is amber-only, so both active states are **amber**,
@@ -72,7 +72,7 @@ enum ReportFace { case report, muse }
 struct ReportSurface: View {
     let memo: MarketMemo
     let date: Date
-    let reportId: String
+    let reportKey: String
     let onBack: () -> Void
     @State private var face: ReportFace
     @State private var highlightTarget: MuseCitation.Target?   // set on citation arrival
@@ -82,12 +82,12 @@ struct ReportSurface: View {
 ```
 
 - `WorkspaceView` changes `case .report(let memo, let date)` to render
-  `ReportSurface(memo:date:reportId:onBack:)`. `reportId` comes from the
+  `ReportSurface(memo:date:reportKey:onBack:)`. `reportKey` comes from the
   navigation context: history rows use `MockReport.id`; a submit-complete report
-  uses a stable id for `digitalFitness` (e.g. `"report-digitalFitness"`). The
-  `MockMemo` resolver gains a parallel `reportId(for:)` (or `MockReport` already
+  uses a stable id for `digitalFitness` (e.g. `"digitalFitness"`). The
+  `MockMemo` resolver gains a parallel `reportKey(for:)` (or `MockReport` already
   carries `id`; submit uses the fixture's canonical id).
-- **Default face on open:** `.muse` if `store.thread(for: reportId)` is non-empty,
+- **Default face on open:** `.muse` if `store.thread(for: reportKey)` is non-empty,
   else `.report` (per the locked "open a report with an existing thread →
   chat-view"). A fresh submit-complete report opens `.report`.
 - **Back chevron** on both faces calls `onBack` (M3's `backFromReport`).
@@ -220,8 +220,8 @@ holds the *grown* sequence of resolved turns for the session.
 API:
 ```swift
 enum MockMuse {
-    static func canonicalTurn(for reportId: String, query: String) -> MuseTurn
-    static func turn(forChip chip: String, in reportId: String) -> MuseTurn
+    static func canonicalTurn(for reportKey: String, query: String) -> MuseTurn
+    static func turn(forChip chip: String, in reportKey: String) -> MuseTurn
 }
 ```
 - Authored for all three M3 fixtures (`digitalFitness`, `crowded`, `open`). Each
@@ -235,7 +235,7 @@ enum MockMuse {
     cites the relevant cell (e.g. "Where's the opening?" → `[[gap-1|…]]`).
 
 ### Thread store (`Models/Muse/MuseStore.swift`)
-- An `@Observable` class, in-memory, keyed by `reportId`:
+- An `@Observable` class, in-memory, keyed by `reportKey`:
   `threads: [String: [MuseTurn]]`. Methods: `thread(for:)`, `append(_:to:)`,
   `setFeedback(_:for:in:)`, `hasThread(for:)`. Seeded lazily from `MockMuse` on
   first access? **No** — threads start *empty* (the empty state is a locked
@@ -272,5 +272,5 @@ two-color treatment to hold the palette law.
 None blocking. Plan-time choices noted inline:
 1. Prose rendering mechanism — `AttributedString` vs a custom run-flow of
    `Text`/`Button` (must support tappable inline pills).
-2. `reportId` derivation for the submit-complete report vs history rows —
+2. `reportKey` derivation for the submit-complete report vs history rows —
    stabilize on `MockReport.id` + a canonical id for the fixture.

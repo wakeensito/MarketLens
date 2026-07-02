@@ -67,11 +67,12 @@ struct MuseView: View {
     }
 
     private func ask(free query: String) {
-        let turn = MockMuse.canonicalTurn(for: reportKey, query: query)
-        store.append(turn, for: reportKey); lastTurnID = turn.id
+        record(MockMuse.canonicalTurn(for: reportKey, query: query))
     }
     private func ask(chip: String) {
-        let turn = MockMuse.turn(forChip: chip, in: reportKey)
+        record(MockMuse.turn(forChip: chip, in: reportKey))
+    }
+    private func record(_ turn: MuseTurn) {
         store.append(turn, for: reportKey); lastTurnID = turn.id
     }
 }

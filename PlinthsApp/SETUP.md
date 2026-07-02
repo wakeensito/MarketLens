@@ -130,13 +130,13 @@ Or just press ▶ in Xcode.
 Milestone 4 complete: signing in enters a dark Stealth-Desert **workspace** —
 top bar (history · wordmark · new), a hero with example-idea chips, a bottom-
 docked idea input (text + send only), a **history sheet** of mock past reports
-(opened from ☰), and a staged **pipeline-loading** animation on submit (it runs and
-holds — the report render is M3). All mock data, ported from the web app's
+(opened from ☰), and a staged **pipeline-loading** animation on submit (it runs,
+then advances to the report). All mock data, ported from the web app's
 `frontend/src/mockData.ts`. On completion the loading screen now advances to a full
 **Market Memo** report — hero score bands (amber-only), market size, competitors,
 why-now, gaps with sourced quotes, cost to enter, an entry roadmap, and an honest
 bottom line — reached on submit or by tapping a history row. Still all mock (3
-fixtures); the real API lands in M4.
+fixtures); the real API lands in M7.
 
 Each report now has a Muse conversation: tap into the docked "Ask about this
 report…" composer (or the chat-bubble toggle) to open a full-screen thread of
@@ -147,7 +147,9 @@ the cited cell and pulses it, with a FROM YOUR CONVERSATION banner. All mock
 
 Auth is still mock — any sign-in button enters the workspace. Sign in with Apple
 remains a placeholder pill; App Store guideline 4.8 requires Apple's official
-`SignInWithAppleButton` once Google is offered, wired with real auth in M5.
+`SignInWithAppleButton` once Google is offered, wired with real auth in M8.
 
-Next milestones: wire real API + add a test target (M5), real auth (M6). See
+Next milestones: Build Brief + the full report/brief/muse navigation (M5),
+peripheral UI — settings, theme toggle, account (M6), wire real backends + a
+test target (M7), real auth (M8). See
 `docs/superpowers/specs/` and `docs/superpowers/plans/` for the milestone arc.
