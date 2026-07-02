@@ -32,8 +32,8 @@ struct ReportSurface: View {
                      pendingAsk: pendingAsk,
                      onConsumePendingAsk: { pendingAsk = nil },
                      onCite: { routeCite($0) },
-                     onToggleToReport: { highlight = nil; face = .report },
-                     onBack: onBack)
+                     onBack: onBack,
+                     onNavigate: { navigate(to: $0) })
         }
     }
 
