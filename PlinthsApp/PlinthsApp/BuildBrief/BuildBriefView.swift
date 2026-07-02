@@ -25,6 +25,9 @@ struct BuildBriefView: View {
         .task(id: store.state(for: reportKey)) {
             guard store.state(for: reportKey) == .generating else { return }
             try? await Task.sleep(for: .seconds(1.5))
+            // If the view went away (or the state changed) mid-sleep, don't
+            // force-complete — leave it .generating so it re-runs on return.
+            guard !Task.isCancelled else { return }
             store.markReady(reportKey)
         }
     }

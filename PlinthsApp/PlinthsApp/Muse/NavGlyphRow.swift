@@ -12,7 +12,7 @@ struct NavGlyphRow: View {
         HStack(spacing: 4) {
             ForEach(order.filter { $0 != current }, id: \.self) { face in
                 Button { onNavigate(face) } label: {
-                    glyph(face).frame(width: 34, height: 34).contentShape(.rect)
+                    glyph(face).frame(width: 44, height: 44).contentShape(.rect)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(label(face))

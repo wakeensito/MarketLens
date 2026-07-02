@@ -6,6 +6,7 @@ import UIKit
 struct BuildBriefBody: View {
     let brief: BuildBrief
     @State private var copied = false
+    @State private var resetTask: Task<Void, Never>?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 24) {
@@ -100,7 +101,12 @@ struct BuildBriefBody: View {
             Button {
                 UIPasteboard.general.string = buildBriefMarkdown(brief)
                 copied = true
-                Task { try? await Task.sleep(for: .seconds(1.5)); copied = false }
+                // Cancel any in-flight reset so only the latest tap controls the revert.
+                resetTask?.cancel()
+                resetTask = Task {
+                    try? await Task.sleep(for: .seconds(1.5))
+                    if !Task.isCancelled { copied = false }
+                }
             } label: {
                 Text(copied ? "COPIED" : "COPY AS MARKDOWN")
                     .font(Theme.Typeface.badge).foregroundStyle(Theme.Stealth.amber)

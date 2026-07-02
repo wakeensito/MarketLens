@@ -15,29 +15,39 @@ func buildBriefMarkdown(_ brief: BuildBrief) -> String {
     }
     lines.append("")
 
-    lines.append("## Capabilities · build or buy")
-    for c in brief.capabilities {
-        lines.append("- **\(c.name)** (\(c.buildOrBuy.rawValue)): \(c.description)")
-        if !c.recommendation.isEmpty { lines.append("  - Recommended: \(c.recommendation)") }
+    // Skip a section entirely when it has no content (e.g. a low-tech brief),
+    // so copied markdown never carries empty headers.
+    if !brief.capabilities.isEmpty {
+        lines.append("## Capabilities · build or buy")
+        for c in brief.capabilities {
+            lines.append("- **\(c.name)** (\(c.buildOrBuy.rawValue)): \(c.description)")
+            if !c.recommendation.isEmpty { lines.append("  - Recommended: \(c.recommendation)") }
+        }
+        lines.append("")
     }
-    lines.append("")
 
-    lines.append("## Foundation · vendor-neutral")
-    for f in brief.foundation {
-        lines.append("- **\(f.primitive)** — \(f.cloudExamples): \(f.why)")
+    if !brief.foundation.isEmpty {
+        lines.append("## Foundation · vendor-neutral")
+        for f in brief.foundation {
+            lines.append("- **\(f.primitive)** — \(f.cloudExamples): \(f.why)")
+        }
+        lines.append("")
     }
-    lines.append("")
 
-    lines.append("## MVP scope")
-    lines.append(brief.mvpScope)
-    lines.append("")
-
-    lines.append("## Technical risks")
-    for (i, r) in brief.technicalRisks.enumerated() {
-        lines.append("### R\(i + 1) — \(r.title)")
-        lines.append(r.description)
+    if !brief.mvpScope.isEmpty {
+        lines.append("## MVP scope")
+        lines.append(brief.mvpScope)
+        lines.append("")
     }
-    lines.append("")
+
+    if !brief.technicalRisks.isEmpty {
+        lines.append("## Technical risks")
+        for (i, r) in brief.technicalRisks.enumerated() {
+            lines.append("### R\(i + 1) — \(r.title)")
+            lines.append(r.description)
+        }
+        lines.append("")
+    }
 
     lines.append("## Foundations & Limits")
     for p in BuildBriefCopy.principles { lines.append("- \(p)") }

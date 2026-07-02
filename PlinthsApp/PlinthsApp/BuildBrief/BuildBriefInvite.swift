@@ -10,6 +10,7 @@ struct BuildBriefInvite: View {
             Image(systemName: "square.grid.2x2")
                 .font(.system(size: 32, weight: .regular))
                 .foregroundStyle(Theme.Stealth.amber)
+                .accessibilityHidden(true)
             Text("Turn this idea into a build brief.")
                 .font(Theme.Typeface.title)
                 .foregroundStyle(Theme.Stealth.text)
