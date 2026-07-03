@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// One report's two faces — the memo report and its Muse conversation — swapped
-/// by a destination-toggle glyph. Owns the citation-highlight + pending-ask state.
+/// One report's three faces — report / build brief / muse — swapped by the
+/// composer's destination glyphs. Owns the citation highlight + pending-ask.
 struct ReportSurface: View {
     let memo: MarketMemo
     let date: Date
@@ -9,10 +9,9 @@ struct ReportSurface: View {
     let initialFace: ReportFace
     let onBack: () -> Void
 
-    @Environment(MuseStore.self) private var store
     @State private var face: ReportFace
     @State private var highlight: MuseCitationTarget?
-    @State private var pendingAsk: String?     // a report-composer question to run on the Muse face
+    @State private var pendingAsk: String?
 
     init(memo: MarketMemo, date: Date, reportKey: String, initialFace: ReportFace, onBack: @escaping () -> Void) {
         self.memo = memo; self.date = date; self.reportKey = reportKey
@@ -23,30 +22,31 @@ struct ReportSurface: View {
     var body: some View {
         switch face {
         case .report:
-            MemoView(memo: memo, date: date, highlightTarget: highlight,
-                     hasThread: store.hasThread(for: reportKey), onBack: onBack,
+            MemoView(memo: memo, date: date, highlightTarget: highlight, onBack: onBack,
                      onAsk: { openMuseAsking($0) },
-                     onToggleToMuse: { highlight = nil; face = .muse },
-                     onBannerBack: { highlight = nil; face = .muse })
+                     onNavigate: { navigate(to: $0) })
+        case .brief:
+            BuildBriefView(reportKey: reportKey, onBack: onBack,
+                           onAsk: { openMuseAsking($0) },
+                           onNavigate: { navigate(to: $0) })
         case .muse:
-            MuseView(reportKey: reportKey,
-                     pendingAsk: pendingAsk,
+            MuseView(reportKey: reportKey, pendingAsk: pendingAsk,
                      onConsumePendingAsk: { pendingAsk = nil },
                      onCite: { routeCite($0) },
-                     onToggleToReport: { highlight = nil; face = .report },
-                     onBack: onBack)
+                     onBack: onBack,
+                     onNavigate: { navigate(to: $0) })
         }
     }
 
-    // A free-typed question from the report composer: stash it and flip to Muse,
-    // which runs it once on appear (so it streams). We do NOT append here — that
-    // keeps all append+animate logic inside MuseView, so a later toggle back to
-    // the Muse face renders the thread statically instead of re-animating.
-    private func openMuseAsking(_ query: String) {
-        pendingAsk = query; highlight = nil; face = .muse
-    }
+    private func navigate(to target: ReportFace) { highlight = nil; face = target }
 
-    // A citation tap in Muse: flip to the report, highlight the cell.
+    // Stash the question and flip to Muse, which runs it once on appear (consumed
+    // via onConsumePendingAsk). Do NOT append here — appending would let a later
+    // face-swap back to Muse re-animate the last turn.
+    private func openMuseAsking(_ query: String) { pendingAsk = query; highlight = nil; face = .muse }
+
+    // A citation tap: flip to the report and highlight the cell. Keeps `highlight`
+    // set (unlike navigate) so the "from your conversation" banner shows.
     private func routeCite(_ target: String) {
         guard let t = museTarget(target) else { return }
         highlight = t; face = .report

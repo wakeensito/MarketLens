@@ -8,8 +8,8 @@ struct MuseView: View {
     var pendingAsk: String? = nil
     var onConsumePendingAsk: () -> Void = {}
     let onCite: (String) -> Void
-    let onToggleToReport: () -> Void
     let onBack: () -> Void
+    let onNavigate: (ReportFace) -> Void
 
     @Environment(MuseStore.self) private var store
     @State private var lastTurnID: String?     // the turn to animate (freshly appended)
@@ -46,7 +46,7 @@ struct MuseView: View {
                     if let q = pendingAsk { ask(free: q); onConsumePendingAsk() }
                 }
             }
-            MuseComposer { ask(free: $0) }
+            WorkspaceComposer(current: .muse, onNavigate: onNavigate, onSubmit: { ask(free: $0) })
                 .padding(.horizontal, 20).padding(.bottom, 12)
         }
         .background(Theme.Stealth.skyTop.ignoresSafeArea())
@@ -60,8 +60,6 @@ struct MuseView: View {
             }
             .accessibilityLabel("Back")
             Spacer()
-            Button(action: onToggleToReport) { SaturationToggleMark().frame(width: 44, height: 44).contentShape(.rect) }
-                .accessibilityLabel("Show report")
         }
         .padding(.horizontal, 8)
     }
