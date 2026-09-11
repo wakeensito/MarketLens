@@ -6,6 +6,7 @@ import os
 import pathlib
 import sys
 import time
+from dataclasses import dataclass
 
 import boto3
 import pytest
@@ -25,6 +26,19 @@ PRICES = {
     "pro_annual": "price_pro_a",
     "max_annual": "price_max_a",
 }
+
+
+@dataclass
+class LambdaContext:
+    function_name: str = "billing-test"
+    memory_limit_in_mb: int = 128
+    invoked_function_arn: str = (
+        "arn:aws:lambda:us-east-1:123456789012:function:billing-test"
+    )
+    aws_request_id: str = "00000000-0000-0000-0000-000000000000"
+
+    def get_remaining_time_in_millis(self) -> int:
+        return 10_000
 
 
 @pytest.fixture(autouse=True)

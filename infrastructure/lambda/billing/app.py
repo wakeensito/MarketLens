@@ -263,27 +263,8 @@ def stripe_webhook():
     return {"received": True, "outcome": outcome}
 
 
-class _LocalInvocationContext:
-    """Stand-in Lambda context for direct/local invocations that pass `context=None`
-    (e.g. tests calling `lambda_handler(event, None)`). Real Lambda invocations always
-    supply a genuine context; this only fills the handful of attributes Powertools'
-    logging/metrics decorators read.
-    """
-
-    function_name = "billing-local"
-    memory_limit_in_mb = 128
-    invoked_function_arn = (
-        "arn:aws:lambda:us-east-1:000000000000:function:billing-local"
-    )
-    aws_request_id = "00000000-0000-0000-0000-000000000000"
-
-
 @logger.inject_lambda_context(correlation_id_path=correlation_paths.API_GATEWAY_REST)
 @tracer.capture_lambda_handler
 @metrics.log_metrics(capture_cold_start_metric=True)
-def _resolve(event: dict, context: LambdaContext) -> dict:
+def lambda_handler(event: dict, context: LambdaContext) -> dict:
     return app.resolve(event, context)
-
-
-def lambda_handler(event: dict, context: LambdaContext | None) -> dict:
-    return _resolve(event, context or _LocalInvocationContext())

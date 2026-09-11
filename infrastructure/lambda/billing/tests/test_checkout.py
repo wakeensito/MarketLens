@@ -1,13 +1,14 @@
 import json
 
-from conftest import api_event, get_user, make_subscription
+from conftest import LambdaContext, api_event, get_user, make_subscription
 
 
 def _post(body: dict, auth=None):
     import app
 
     resp = app.lambda_handler(
-        api_event("POST", "/api/billing/checkout", json.dumps(body), auth=auth), None
+        api_event("POST", "/api/billing/checkout", json.dumps(body), auth=auth),
+        LambdaContext(),
     )
     return resp["statusCode"], json.loads(resp["body"])
 

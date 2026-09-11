@@ -1,12 +1,14 @@
 import json
 
-from conftest import api_event
+from conftest import LambdaContext, api_event
 
 
 def _get(auth=None):
     import app
 
-    resp = app.lambda_handler(api_event("GET", "/api/billing/me", auth=auth), None)
+    resp = app.lambda_handler(
+        api_event("GET", "/api/billing/me", auth=auth), LambdaContext()
+    )
     return resp["statusCode"], json.loads(resp["body"])
 
 

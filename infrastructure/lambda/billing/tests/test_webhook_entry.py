@@ -1,7 +1,7 @@
 import base64
 import json
 
-from conftest import api_event, make_event, make_subscription, sign
+from conftest import LambdaContext, api_event, make_event, make_subscription, sign
 
 
 def _post(body: str, sig: str, base64_body=False):
@@ -13,7 +13,7 @@ def _post(body: str, sig: str, base64_body=False):
     if base64_body:
         ev["body"] = base64.b64encode(body.encode()).decode()
         ev["isBase64Encoded"] = True
-    resp = app.lambda_handler(ev, None)
+    resp = app.lambda_handler(ev, LambdaContext())
     return resp["statusCode"], json.loads(resp["body"])
 
 
