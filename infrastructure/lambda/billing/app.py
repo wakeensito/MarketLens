@@ -70,10 +70,18 @@ def _get_or_create_stripe_customer(auth: dict, row: dict) -> str:
             ConditionExpression="attribute_not_exists(stripe_customer_id)",
             ExpressionAttributeValues={":cid": customer.id},
         )
+        logger.info(
+            "Stripe customer created",
+            extra={"user_id": auth["user_id"], "stripe_customer_id": customer.id},
+        )
         return customer.id
     except ClientError as e:
         if e.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
             raise
+        logger.info(
+            "Stripe customer race lost; cleaning up orphan",
+            extra={"user_id": auth["user_id"], "orphan_customer_id": customer.id},
+        )
         try:
             stripe.Customer.delete(customer.id)
         except stripe.StripeError as del_err:
@@ -118,9 +126,22 @@ def create_checkout_session():
 
     recorded = row.get("stripe_subscription_id")
     if recorded:
-        existing = stripe_client.retrieve_subscription(recorded)
-        if stripe_client.is_live(existing):
-            return {"error": "subscription_exists"}, 409
+        try:
+            existing = stripe_client.retrieve_subscription(recorded)
+        except stripe.InvalidRequestError:
+            logger.warning(
+                "Recorded subscription not retrievable; treating as not live",
+                extra={"user_id": auth["user_id"], "subscription_id": recorded},
+            )
+        except stripe.StripeError as e:
+            logger.error(
+                "Stripe checkout creation failed",
+                extra={"user_id": auth["user_id"], "plan": plan, "error": str(e)},
+            )
+            return {"error": "Could not start checkout. Please try again."}, 502
+        else:
+            if stripe_client.is_live(existing):
+                return {"error": "subscription_exists"}, 409
 
     customer_id = _get_or_create_stripe_customer(auth, row)
     store.set_pending_intent(auth["user_id"], intent_id)
@@ -216,16 +237,17 @@ def stripe_webhook():
     """Signature → parse → livemode → handle. Nothing else runs before the signature passes."""
     payload = app.current_event.decoded_body or ""
     sig_header = app.current_event.get_header_value("stripe-signature") or ""
+    secret = stripe_client.webhook_secret()
     try:
-        event = stripe.Webhook.construct_event(
-            payload, sig_header, stripe_client.webhook_secret()
-        )
+        event = stripe.Webhook.construct_event(payload, sig_header, secret)
     except stripe.SignatureVerificationError:
+        logger.warning("Webhook signature verification failed")
         metrics.add_metric(
             name="WebhookSignatureFailure", unit=MetricUnit.Count, value=1
         )
         return {"error": "Invalid signature"}, 400
-    except (ValueError, KeyError, stripe.StripeError):
+    except (ValueError, KeyError, stripe.StripeError) as e:
+        logger.warning("Webhook payload malformed", extra={"error": str(e)})
         metrics.add_metric(
             name="WebhookMalformedPayload", unit=MetricUnit.Count, value=1
         )

@@ -75,6 +75,37 @@ def test_infrastructure_error_is_500_so_stripe_retries(
     assert code == 500
 
 
+def test_missing_webhook_secret_config_is_5xx_not_400(
+    ddb_table, stripe_stub, monkeypatch
+):
+    import webhook
+    import stripe_client
+    import app
+
+    called = []
+    monkeypatch.setattr(webhook, "handle_event", lambda e: called.append(e))
+
+    def boom():
+        raise KeyError("STRIPE_WEBHOOK_SECRET_PARAM")
+
+    monkeypatch.setattr(stripe_client, "webhook_secret", boom)
+    body = json.dumps(make_event("customer.subscription.updated", {}))
+    ev = api_event(
+        "POST",
+        "/api/billing/webhook",
+        body,
+        headers={"stripe-signature": sign(body)},
+        auth={},
+    )
+    try:
+        resp = app.lambda_handler(ev, LambdaContext())
+    except KeyError:
+        pass
+    else:
+        assert resp["statusCode"] == 500
+    assert called == []
+
+
 def test_end_to_end_signed_install(ddb_table, user_row, stripe_stub):
     from conftest import get_user
 

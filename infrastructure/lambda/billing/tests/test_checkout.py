@@ -48,6 +48,39 @@ def test_checkout_409_when_live_subscription_exists(ddb_table, user_row, stripe_
     code, body = _post({"plan": "max", "intent_id": INTENT})
     assert code == 409 and body["error"] == "subscription_exists"
     assert stripe_stub["sessions"] == []
+    assert "pending_intent_id" not in get_user(ddb_table)
+
+
+def test_checkout_proceeds_when_recorded_subscription_is_gone(
+    ddb_table, user_row, stripe_stub
+):
+    user_row(
+        stripe_subscription_id="sub_gone", subscription_status="active", plan="pro"
+    )
+    code, body = _post({"plan": "pro", "intent_id": INTENT})
+    assert code == 200 and body["checkout_url"] == "https://stripe.test/cs"
+    assert len(stripe_stub["sessions"]) == 1
+
+
+def test_checkout_502_when_refetch_fails_transiently(
+    ddb_table, user_row, stripe_stub, monkeypatch
+):
+    import stripe
+
+    import stripe_client
+
+    user_row(stripe_subscription_id="sub_1", subscription_status="active", plan="pro")
+
+    def boom(_sub_id):
+        raise stripe.APIConnectionError("down")
+
+    monkeypatch.setattr(stripe_client, "retrieve_subscription", boom)
+    code, body = _post({"plan": "pro", "intent_id": INTENT})
+    assert (
+        code == 502 and body["error"] == "Could not start checkout. Please try again."
+    )
+    assert stripe_stub["sessions"] == []
+    assert "pending_intent_id" not in get_user(ddb_table)
 
 
 def test_checkout_allowed_after_cancellation(ddb_table, user_row, stripe_stub):
