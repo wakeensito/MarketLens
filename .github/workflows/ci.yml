@@ -96,8 +96,8 @@ jobs:
             # shellcheck disable=SC1090
             . "/tmp/venv-$(basename "$d")/bin/activate"
             pip install -q --upgrade pip
-            [ -f "$d/requirements.txt" ] && pip install -q -r "$d/requirements.txt" || true
-            [ -f "$d/requirements-dev.txt" ] && pip install -q -r "$d/requirements-dev.txt" || true
+            if [ -f "$d/requirements.txt" ]; then pip install -q -r "$d/requirements.txt"; fi
+            if [ -f "$d/requirements-dev.txt" ]; then pip install -q -r "$d/requirements-dev.txt"; fi
             (cd "$d" && python -m pytest tests -q) || failed=1
             deactivate
           done
