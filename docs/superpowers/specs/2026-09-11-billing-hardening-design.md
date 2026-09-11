@@ -196,6 +196,44 @@ On `?billing=success` (already read once and stripped): read the record, poll `G
 
 CI: a `python-test` job that runs `pytest` in every `infrastructure/lambda/*` and `infrastructure/layers/*` directory containing a `tests/` folder. Today the existing ai-orchestration tests are not run by CI; this job picks them up too.
 
+## Edge cases (senior dev / QA pass)
+
+Each row is a decision the code must make and a test must cover.
+
+| Case | Decision |
+|---|---|
+| **Webhook for a user row that does not exist** (row deleted by hand; there is no account-deletion feature) | Detected on the pre-transaction read. Metric `WebhookOrphanUser`, log the user id, return 200. Returning 500 would make Stripe retry for three days and then disable the endpoint for every user |
+| **Stripe API call fails during refetch** (5xx, rate limit, network) | Raise → 500 → Stripe retries. The Stripe client gets `max_network_retries = 2` and a 10 s request timeout, so three calls stay under the 30 s Lambda timeout instead of inheriting the SDK's 80 s default |
+| **Async payment methods** (bank debit): `checkout.session.completed` fires with the subscription `incomplete` | The install refetch writes `incomplete`, effective plan stays free, the poll keeps waiting. `subscription.updated` → `active` finishes it. `checkout.session.async_payment_failed` needs no handler: the subscription goes `incomplete_expired` on its own |
+| **Unknown price id** on a live subscription (prices rotated in the dashboard, env not updated) | Fail toward capped: `plan = free`, metric `UnknownPriceId` with an alarm, log the price id. The user is billed and gated; the alarm is what fixes it. Silently mapping to a paid tier is the wrong direction |
+| **Subscription with more than one item** | Plinths sells one item. Use `items[0]`, log a warning if more |
+| **`admin` row starts checkout** | 400 `admin_accounts_cannot_subscribe`. Installing a subscription would overwrite `plan = admin` with `pro` |
+| **Stripe idempotency conflict** (same `intent_id` resent with a different plan or customer) | Catch `stripe.error.IdempotencyError` → 409 `{ error: "intent_reused" }`. The frontend mints a fresh intent and retries once. An intent is bound to one `(attempt, plan)`; the retry-after-error path reuses it only with `lastPlan` |
+| **Two checkouts completed by the same user** (two tabs, both paid) | The second install finds a *different* live subscription on the row and cancels the newly found one immediately (`stripe.Subscription.cancel`). Stripe does not auto-refund on cancel: metric `DoubleSubscriptionCancelled` has an alarm and the runbook step is a manual refund of that subscription's invoice. At current volume that beats writing refund code that runs once a year |
+| **State event arrives before the install** (`subscription.updated` outruns `checkout.session.completed`) | The generation pin rejects it (row holds no such id) → 200. The install's refetch then writes current truth, so nothing is lost |
+| **`invoice.payment_failed` for the first invoice of a not-yet-installed subscription** | Same: rejected by the pin, and the install refetch tells the truth |
+| **Grace-path conditional conflict** under concurrent deliveries | Re-read and re-evaluate up to three times before treating it as stale. Only the grace transition carries the `subscription_status = :status_read` condition; plain state writes carry the refetched truth and need no retry |
+| **`cancel_at_period_end`** | Status stays `active` until the period ends; access continues, which is correct. The state write also records `cancel_at_period_end` (BOOL) and `current_period_end` (N) so the settings UI can say "ends on <date>" later without another backend change. UI is out of scope here |
+| **Success URL opened with no `sessionStorage` record** (different browser, cleared storage) | One fetch of `GET /api/billing/me`. Effective plan not free → done. Otherwise show the "your plan will land shortly" state once and stop; there is no intent to correlate, so polling would be guessing |
+| **Portal opened from `past_due`** | The 409 route sends the user to the portal, where "update payment method" is the fix. The dunning banner (reads `entitlement_grace_until`) links straight to the portal |
+| **DynamoDB `Number` comes back as `Decimal`** through the resource API | Every numeric billing attribute goes through `int()` at the read boundary. A test asserts the JSON response serialises |
+| **`effective_plan(row, now=0)`** | `now is None` check, not truthiness |
+| **Logging** | Webhook logs carry `event.id`, `event.type`, `user_id`, `subscription_id`. Never the payload |
+| **`GET /api/billing/me` never returns Stripe ids** | Customer and subscription ids stay server-side |
+| **Webhook secret rotation** | Out of scope. Stripe supports overlapping secrets; a follow-up can read a list from SSM |
+
+**Manual QA before prod** (runs against `dev` with `stripe listen`):
+
+1. Happy path on `4242 4242 4242 4242`: overlay resolves, `/api/billing/me` shows `active`, a report over the free limit succeeds.
+2. Abandon checkout, start a second, complete the first tab: exactly one subscription, plan active, no `DoubleSubscriptionCancelled`.
+3. Complete two checkouts: second is cancelled, metric fires.
+4. Stripe **test clock**: advance past renewal with card `4000 0000 0000 0341` attached → `past_due`, grace set, access still paid; advance 7 days → effective free with status unchanged; update card → `active`, grace cleared.
+5. Cancel at period end in the portal → still `active`; advance the clock → `canceled`, effective free; new checkout → new subscription installed, old id gone.
+6. `stripe trigger customer.subscription.updated` against an installed row with a hand-edited older `billing_source_event_created` → applied; with a newer one → `WebhookStaleEvent`.
+7. Resend a processed event from the dashboard → no revision bump.
+8. Point the dev endpoint at a live-mode secret temporarily → `WebhookLivemodeMismatch`, row untouched.
+9. Monthly → annual in the portal → `billing_revision` bumps, plan string unchanged, UI refreshes.
+
 ## Rollout
 
 Feature branch `feat/billing-hardening`, commits pushed as work lands, one PR at the end. With zero users there is no data migration. After merge: deploy `dev`, run `stripe listen --forward-to <execute-api>/api/billing/webhook` and `stripe trigger` through the event list above, confirm the activation overlay resolves on a test card, then deploy `prod` and re-point the production webhook endpoint at execute-api.
