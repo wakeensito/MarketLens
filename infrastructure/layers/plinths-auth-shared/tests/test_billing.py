@@ -105,3 +105,30 @@ def test_projection_names_every_billing_attr():
         == "#p, subscription_status, entitlement_grace_until"
     )
     assert BILLING_PROJECTION["ExpressionAttributeNames"] == {"#p": "plan"}
+
+
+def test_auth_context_plan_is_effective(monkeypatch):
+    """verify_session_cookie must hand gates the effective plan, not the raw one."""
+    from plinths_auth import cookie_jwt
+
+    class _Key:
+        key = "k"
+
+    class _Jwks:
+        def get_signing_key_from_jwt(self, _):
+            return _Key()
+
+    class _Table:
+        def get_item(self, **_):
+            return {"Item": {"org_id": "o1", "plan": "pro", "subscription_status": "paused", "email": "e"}}
+
+    monkeypatch.setattr(cookie_jwt, "_get_jwks_client", lambda: _Jwks())
+    monkeypatch.setattr(cookie_jwt, "_get_table", lambda: _Table())
+    monkeypatch.setattr(cookie_jwt, "_CLIENT_ID", "cid")
+    monkeypatch.setattr(
+        cookie_jwt.jwt,
+        "decode",
+        lambda *a, **k: {"token_use": "access", "client_id": "cid", "sub": "u1"},
+    )
+    ctx = cookie_jwt.verify_session_cookie("ml_access=tok")
+    assert ctx is not None and ctx.plan == "free"

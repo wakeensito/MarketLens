@@ -27,6 +27,8 @@ from aws_lambda_powertools.logging import correlation_paths
 from aws_lambda_powertools.event_handler import APIGatewayRestResolver
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
+from plinths_auth.billing import BILLING_PROJECTION, effective_plan
+
 import llm
 import prompt as prompt_mod
 
@@ -70,12 +72,11 @@ def _fresh_plan(user_id: str, fallback: str) -> str:
             table.get_item(
                 Key={"pk": f"USER#{user_id}", "sk": f"USER#{user_id}"},
                 ConsistentRead=True,
-                ProjectionExpression="#p",
-                ExpressionAttributeNames={"#p": "plan"},
+                **BILLING_PROJECTION,
             ).get("Item")
             or {}
         )
-        return row.get("plan") or fallback
+        return effective_plan(row) if row else fallback
     except ClientError:
         return fallback
 

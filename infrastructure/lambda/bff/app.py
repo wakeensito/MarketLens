@@ -33,6 +33,8 @@ from aws_lambda_powertools.logging import correlation_paths
 from aws_lambda_powertools.shared.cookies import Cookie, SameSite
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
+from plinths_auth.billing import effective_plan
+
 logger = Logger()
 tracer = Tracer()
 app = APIGatewayRestResolver(strip_prefixes=["/auth"])
@@ -699,7 +701,7 @@ def me():
                 "email": user.get("email"),
                 "name": user.get("name"),
                 "org_id": user.get("org_id"),
-                "plan": user.get("plan", "free"),
+                "plan": effective_plan(user),
             },
         }
     except Exception as e:
