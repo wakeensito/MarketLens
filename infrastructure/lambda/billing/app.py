@@ -1,167 +1,97 @@
 """
-Plinths Billing Lambda — Stripe integration for subscriptions.
+Plinths Billing Lambda — Stripe subscriptions.
 
-Endpoints:
-  POST /api/billing/checkout       → Create Stripe Checkout Session (requires auth)
-  POST /api/billing/portal         → Create Stripe Customer Portal session (requires auth)
-  POST /api/billing/webhook        → Stripe webhook receiver (no auth, signature-verified)
+  POST /api/billing/checkout  → Checkout Session (auth; body {plan, intent_id})
+  POST /api/billing/portal    → Customer Portal session (auth)
+  GET  /api/billing/me        → billing state for the activation poll (auth)
+  POST /api/billing/webhook   → Stripe events (no auth; signature-verified)
+
+Design record: docs/superpowers/specs/2026-09-11-billing-hardening-design.md
 """
 
-import os
-import time
-import boto3
-import stripe
-from botocore.exceptions import ClientError
+from __future__ import annotations
 
-from aws_lambda_powertools import Logger, Tracer, Metrics
+import os
+import uuid
+
+import stripe
+from aws_lambda_powertools import Logger, Metrics, Tracer
 from aws_lambda_powertools.event_handler import APIGatewayRestResolver
 from aws_lambda_powertools.logging import correlation_paths
 from aws_lambda_powertools.metrics import MetricUnit
 from aws_lambda_powertools.utilities.typing import LambdaContext
+from botocore.exceptions import ClientError
+from plinths_auth.billing import effective_plan
+
+import store
+import stripe_client
+import webhook
 
 logger = Logger()
 tracer = Tracer()
 metrics = Metrics()
 app = APIGatewayRestResolver(strip_prefixes=["/api"])
 
-# ── Config ──
 APP_DOMAIN = os.environ["APP_DOMAIN"].rstrip("/")
-
-# Stripe keys from SSM (loaded lazily)
-ssm = boto3.client("ssm")
-_stripe_secret_key: str | None = None
-_stripe_webhook_secret: str | None = None
-
-# Price IDs
-PRICE_ID_PRO = os.environ["STRIPE_PRICE_ID_PRO"]
-PRICE_ID_MAX = os.environ["STRIPE_PRICE_ID_MAX"]
-PRICE_ID_PRO_ANNUAL = os.environ.get("STRIPE_PRICE_ID_PRO_ANNUAL", "")
-PRICE_ID_MAX_ANNUAL = os.environ.get("STRIPE_PRICE_ID_MAX_ANNUAL", "")
-
-# DynamoDB
-dynamodb = boto3.resource("dynamodb")
-table = dynamodb.Table(os.environ["REPORTS_TABLE"])
+PRICE_IDS = {
+    "pro": os.environ.get("STRIPE_PRICE_ID_PRO", ""),
+    "max": os.environ.get("STRIPE_PRICE_ID_MAX", ""),
+    "pro_annual": os.environ.get("STRIPE_PRICE_ID_PRO_ANNUAL", ""),
+    "max_annual": os.environ.get("STRIPE_PRICE_ID_MAX_ANNUAL", ""),
+}
 
 
-def _get_stripe_secret_key() -> str:
-    global _stripe_secret_key
-    if _stripe_secret_key is None:
-        _stripe_secret_key = ssm.get_parameter(
-            Name=os.environ["STRIPE_SECRET_KEY_PARAM"],
-            WithDecryption=True,
-        )["Parameter"]["Value"]
-        stripe.api_key = _stripe_secret_key
-    return _stripe_secret_key
-
-
-def _get_webhook_secret() -> str:
-    global _stripe_webhook_secret
-    if _stripe_webhook_secret is None:
-        _stripe_webhook_secret = ssm.get_parameter(
-            Name=os.environ["STRIPE_WEBHOOK_SECRET_PARAM"],
-            WithDecryption=True,
-        )["Parameter"]["Value"]
-    return _stripe_webhook_secret
-
-
-def _get_auth_context() -> dict:
-    """Extract auth context injected by the Lambda Authorizer."""
-    raw_event = app.current_event.raw_event
-    authorizer = raw_event.get("requestContext", {}).get("authorizer", {})
+def _auth() -> dict:
+    authorizer = (
+        app.current_event.raw_event.get("requestContext", {}).get("authorizer", {})
+        or {}
+    )
     return {
         "user_id": authorizer.get("user_id", "anonymous"),
         "org_id": authorizer.get("org_id", "anonymous"),
         "is_authenticated": authorizer.get("is_authenticated", "false") == "true",
-        "plan": authorizer.get("plan", "free"),
         "email": authorizer.get("email", ""),
     }
 
 
-def _get_or_create_stripe_customer(auth: dict) -> str:
-    """Get existing Stripe customer ID from DynamoDB, or create one in Stripe.
-
-    Concurrent calls (e.g., a double-clicked CTA) could each create a Stripe
-    customer. We guard the DDB write with attribute_not_exists so only the
-    first writer persists; the loser deletes its orphan customer in Stripe
-    and returns the persisted ID.
-    """
-    _get_stripe_secret_key()
-
-    user_pk = f"USER#{auth['user_id']}"
-    result = table.get_item(Key={"pk": user_pk, "sk": user_pk})
-    item = result.get("Item", {})
-
-    # Already have a Stripe customer?
-    stripe_customer_id = item.get("stripe_customer_id")
-    if stripe_customer_id:
-        return stripe_customer_id
-
-    # Create one
+def _get_or_create_stripe_customer(auth: dict, row: dict) -> str:
+    """Race-guarded: only the first writer's customer id persists; the loser deletes its orphan."""
+    stripe_client.configure()
+    if row.get("stripe_customer_id"):
+        return row["stripe_customer_id"]
     customer = stripe.Customer.create(
         email=auth.get("email", ""),
-        metadata={
-            "user_id": auth["user_id"],
-            "org_id": auth["org_id"],
-        },
+        metadata={"user_id": auth["user_id"], "org_id": auth["org_id"]},
     )
-
-    # Store on user record. Condition guards the race so only the first
-    # writer wins; the loser cleans up its orphan customer and re-reads.
     try:
-        table.update_item(
-            Key={"pk": user_pk, "sk": user_pk},
+        store._get_table().update_item(
+            Key=store.user_key(auth["user_id"]),
             UpdateExpression="SET stripe_customer_id = :cid",
             ConditionExpression="attribute_not_exists(stripe_customer_id)",
             ExpressionAttributeValues={":cid": customer.id},
-        )
-        logger.info(
-            "Stripe customer created",
-            extra={
-                "user_id": auth["user_id"],
-                "stripe_customer_id": customer.id,
-            },
         )
         return customer.id
     except ClientError as e:
         if e.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
             raise
-        # Lost the race — another caller already wrote a customer ID.
-        logger.info(
-            "Stripe customer race lost; cleaning up orphan",
-            extra={
-                "user_id": auth["user_id"],
-                "orphan_customer_id": customer.id,
-            },
-        )
         try:
             stripe.Customer.delete(customer.id)
-        except stripe.error.StripeError as del_err:
+        except stripe.StripeError as del_err:
             logger.warning(
                 "Could not delete orphan Stripe customer",
-                extra={
-                    "orphan_customer_id": customer.id,
-                    "error": str(del_err),
-                },
+                extra={"orphan_customer_id": customer.id, "error": str(del_err)},
             )
-        winner = table.get_item(
-            Key={"pk": user_pk, "sk": user_pk},
-            ConsistentRead=True,
-        ).get("Item", {})
+        winner = store.get_user(auth["user_id"]) or {}
         winner_id = winner.get("stripe_customer_id")
         if not winner_id:
-            # Should be unreachable: the conditional failed, so a value exists.
             raise RuntimeError("stripe_customer_id missing after race") from e
         return winner_id
-
-
-# ─── Endpoints ───
 
 
 @app.post("/billing/checkout")
 @tracer.capture_method
 def create_checkout_session():
-    """Create a Stripe Checkout Session for subscription signup."""
-    auth = _get_auth_context()
+    auth = _auth()
     if not auth["is_authenticated"]:
         return {"error": "Authentication required"}, 401
 
@@ -169,46 +99,56 @@ def create_checkout_session():
     if not isinstance(body, dict):
         return {"error": "Request body must be a JSON object."}, 400
     plan = body.get("plan", "pro")
-
-    price_map = {
-        "pro": PRICE_ID_PRO,
-        "max": PRICE_ID_MAX,
-        "pro_annual": PRICE_ID_PRO_ANNUAL,
-        "max_annual": PRICE_ID_MAX_ANNUAL,
-    }
-    price_id = price_map.get(plan)
+    price_id = PRICE_IDS.get(plan)
     if not price_id:
         return {
-            "error": f"Invalid plan: {plan}. Must be 'pro', 'max', 'pro_annual', or 'max_annual'."
+            "error": f"Invalid plan: {plan}. Must be one of {sorted(PRICE_IDS)}."
         }, 400
+    intent_id = body.get("intent_id")
+    try:
+        intent_id = str(uuid.UUID(str(intent_id)))
+    except (ValueError, TypeError):
+        return {"error": "intent_id must be a UUID."}, 400
 
-    customer_id = _get_or_create_stripe_customer(auth)
+    row = store.get_user(auth["user_id"])
+    if row is None:
+        return {"error": "User not found"}, 404
+    if row.get("plan") == "admin":
+        return {"error": "admin_accounts_cannot_subscribe"}, 400
 
-    _get_stripe_secret_key()
-    idempotency_key = _idempotency_key("checkout", auth["user_id"], plan)
+    recorded = row.get("stripe_subscription_id")
+    if recorded:
+        existing = stripe_client.retrieve_subscription(recorded)
+        if stripe_client.is_live(existing):
+            return {"error": "subscription_exists"}, 409
+
+    customer_id = _get_or_create_stripe_customer(auth, row)
+    store.set_pending_intent(auth["user_id"], intent_id)
+
     try:
         session = stripe.checkout.Session.create(
             customer=customer_id,
+            client_reference_id=auth["user_id"],
             line_items=[{"price": price_id, "quantity": 1}],
             mode="subscription",
-            success_url=f"{APP_DOMAIN}?billing=success&session_id={{CHECKOUT_SESSION_ID}}",
+            success_url=f"{APP_DOMAIN}?billing=success",
             cancel_url=f"{APP_DOMAIN}?billing=cancelled",
             metadata={
                 "user_id": auth["user_id"],
                 "org_id": auth["org_id"],
+                "intent_id": intent_id,
             },
-            idempotency_key=idempotency_key,
+            subscription_data={
+                "metadata": {"user_id": auth["user_id"], "intent_id": intent_id}
+            },
+            idempotency_key=f"checkout:{intent_id}",
         )
-    except stripe.error.StripeError as e:
+    except stripe.IdempotencyError:
+        return {"error": "intent_reused"}, 409
+    except stripe.StripeError as e:
         logger.error(
             "Stripe checkout creation failed",
-            extra={
-                "user_id": auth["user_id"],
-                "org_id": auth["org_id"],
-                "plan": plan,
-                "idempotency_key": idempotency_key,
-                "error": str(e),
-            },
+            extra={"user_id": auth["user_id"], "plan": plan, "error": str(e)},
         )
         return {"error": "Could not start checkout. Please try again."}, 502
 
@@ -218,306 +158,132 @@ def create_checkout_session():
             "user_id": auth["user_id"],
             "plan": plan,
             "session_id": session.id,
+            "intent_id": intent_id,
         },
     )
-
     return {"checkout_url": session.url}
 
 
 @app.post("/billing/portal")
 @tracer.capture_method
 def create_portal_session():
-    """Create a Stripe Customer Portal session for managing subscriptions."""
-    auth = _get_auth_context()
+    auth = _auth()
     if not auth["is_authenticated"]:
         return {"error": "Authentication required"}, 401
-
-    customer_id = _get_or_create_stripe_customer(auth)
-
-    _get_stripe_secret_key()
-    idempotency_key = _idempotency_key("portal", auth["user_id"], "portal")
+    row = store.get_user(auth["user_id"]) or {}
+    customer_id = _get_or_create_stripe_customer(auth, row)
     try:
-        portal_session = stripe.billing_portal.Session.create(
+        portal = stripe.billing_portal.Session.create(
             customer=customer_id,
-            return_url=APP_DOMAIN,
-            idempotency_key=idempotency_key,
+            return_url=f"{APP_DOMAIN}?billing=portal",
+            idempotency_key=f"portal:{uuid.uuid4()}",
         )
-    except stripe.error.StripeError as e:
+    except stripe.StripeError as e:
         logger.error(
             "Stripe portal creation failed",
-            extra={
-                "user_id": auth["user_id"],
-                "org_id": auth["org_id"],
-                "idempotency_key": idempotency_key,
-                "error": str(e),
-            },
+            extra={"user_id": auth["user_id"], "error": str(e)},
         )
         return {"error": "Could not open the billing portal. Please try again."}, 502
+    return {"portal_url": portal.url}
 
-    return {"portal_url": portal_session.url}
+
+@app.get("/billing/me")
+@tracer.capture_method
+def get_billing_me():
+    auth = _auth()
+    if not auth["is_authenticated"]:
+        return {"error": "Authentication required"}, 401
+    row = store.get_user(auth["user_id"])
+    if row is None:
+        return {"error": "User not found"}, 404
+    grace = row.get("entitlement_grace_until")
+    return {
+        "plan": row.get("plan") or "free",
+        "effective_plan": effective_plan(row),
+        "subscription_status": row.get("subscription_status"),
+        "entitlement_grace_until": int(grace) if grace is not None else None,
+        "last_checkout_intent_id": row.get("last_checkout_intent_id"),
+        "billing_revision": int(row.get("billing_revision") or 0),
+        "plan_updated_at": row.get("plan_updated_at"),
+        "cancel_at_period_end": bool(row.get("cancel_at_period_end", False)),
+        "current_period_end": int(row.get("current_period_end") or 0),
+    }
 
 
 @app.post("/billing/webhook")
 @tracer.capture_method
 def stripe_webhook():
-    """Handle Stripe webhook events. No auth — verified by signature."""
-    payload = app.current_event.body or ""
+    """Signature → parse → livemode → handle. Nothing else runs before the signature passes."""
+    payload = app.current_event.decoded_body or ""
     sig_header = app.current_event.get_header_value("stripe-signature") or ""
-    webhook_secret = _get_webhook_secret()
-
     try:
-        event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
-    except stripe.error.SignatureVerificationError:
-        logger.warning("Webhook signature verification failed")
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, stripe_client.webhook_secret()
+        )
+    except stripe.SignatureVerificationError:
         metrics.add_metric(
             name="WebhookSignatureFailure", unit=MetricUnit.Count, value=1
         )
         return {"error": "Invalid signature"}, 400
-    except (ValueError, KeyError) as e:
-        logger.warning("Webhook payload malformed", extra={"error": str(e)})
+    except (ValueError, KeyError, stripe.StripeError):
         metrics.add_metric(
             name="WebhookMalformedPayload", unit=MetricUnit.Count, value=1
         )
         return {"error": "Bad request"}, 400
-    except stripe.error.StripeError as e:
-        logger.warning("Webhook Stripe error", extra={"error": str(e)})
-        metrics.add_metric(name="WebhookStripeError", unit=MetricUnit.Count, value=1)
-        return {"error": "Bad request"}, 400
+
+    expected_live = os.environ.get("STRIPE_LIVEMODE", "false") == "true"
+    if bool(event.get("livemode")) != expected_live:
+        metrics.add_metric(
+            name="WebhookLivemodeMismatch", unit=MetricUnit.Count, value=1
+        )
+        logger.error(
+            "Webhook livemode mismatch",
+            extra={"event_id": event["id"], "event_livemode": event.get("livemode")},
+        )
+        return {"error": "livemode mismatch"}, 400
+
+    logger.info(
+        "Webhook received", extra={"event_id": event["id"], "event_type": event["type"]}
+    )
+    try:
+        outcome = webhook.handle_event(
+            event.to_dict_recursive()
+            if hasattr(event, "to_dict_recursive")
+            else dict(event)
+        )
     except Exception:
-        logger.exception("Webhook unexpected error")
+        logger.exception(
+            "Webhook handling failed; Stripe will retry",
+            extra={"event_id": event["id"]},
+        )
         metrics.add_metric(
             name="WebhookUnexpectedError", unit=MetricUnit.Count, value=1
         )
-        return {"error": "Bad request"}, 400
-
-    event_type = event["type"]
-    data_object = event["data"]["object"]
-
-    logger.info(
-        "Webhook received", extra={"event_type": event_type, "event_id": event["id"]}
-    )
-
-    if event_type == "checkout.session.completed":
-        _handle_checkout_completed(data_object)
-    elif event_type == "customer.subscription.updated":
-        _handle_subscription_updated(data_object)
-    elif event_type == "customer.subscription.deleted":
-        _handle_subscription_deleted(data_object)
-    elif event_type == "invoice.payment_failed":
-        _handle_payment_failed(data_object)
-
-    return {"received": True}
+        return {"error": "Internal error"}, 500
+    return {"received": True, "outcome": outcome}
 
 
-# ─── Webhook Handlers ───
-
-
-def _handle_checkout_completed(session: dict):
-    """User completed checkout — activate their plan."""
-    customer_id = session.get("customer")
-    subscription_id = session.get("subscription")
-    metadata = session.get("metadata", {})
-    user_id = metadata.get("user_id")
-    org_id = metadata.get("org_id")
-
-    if not user_id:
-        # Try to find user by stripe_customer_id
-        logger.warning(
-            "No user_id in checkout metadata", extra={"customer_id": customer_id}
-        )
-        return
-
-    # Determine plan from subscription
-    plan = _plan_from_subscription(subscription_id)
-
-    # Update user record
-    user_pk = f"USER#{user_id}"
-    table.update_item(
-        Key={"pk": user_pk, "sk": user_pk},
-        UpdateExpression=(
-            "SET #p = :plan, stripe_subscription_id = :sub_id, "
-            "stripe_customer_id = :cust_id, plan_updated_at = :now"
-        ),
-        ExpressionAttributeNames={"#p": "plan"},
-        ExpressionAttributeValues={
-            ":plan": plan,
-            ":sub_id": subscription_id,
-            ":cust_id": customer_id,
-            ":now": _now_iso(),
-        },
-    )
-
-    # Update org record too
-    if org_id:
-        org_pk = f"ORG#{org_id}"
-        table.update_item(
-            Key={"pk": org_pk, "sk": org_pk},
-            UpdateExpression="SET #p = :plan, plan_updated_at = :now",
-            ExpressionAttributeNames={"#p": "plan"},
-            ExpressionAttributeValues={":plan": plan, ":now": _now_iso()},
-        )
-
-    logger.info(
-        "Plan activated",
-        extra={
-            "user_id": user_id,
-            "org_id": org_id,
-            "plan": plan,
-            "subscription_id": subscription_id,
-        },
-    )
-    metrics.add_metric(name="PlanActivated", unit=MetricUnit.Count, value=1)
-
-
-def _handle_subscription_updated(subscription: dict):
-    """Subscription changed (upgrade/downgrade)."""
-    customer_id = subscription.get("customer")
-    subscription_id = subscription.get("id")
-    plan = _plan_from_subscription_object(subscription)
-
-    # Find user by stripe_customer_id
-    user_id = _find_user_by_customer_id(customer_id)
-    if not user_id:
-        logger.warning("No user found for customer", extra={"customer_id": customer_id})
-        return
-
-    user_pk = f"USER#{user_id}"
-    table.update_item(
-        Key={"pk": user_pk, "sk": user_pk},
-        UpdateExpression="SET #p = :plan, stripe_subscription_id = :sub_id, plan_updated_at = :now",
-        ExpressionAttributeNames={"#p": "plan"},
-        ExpressionAttributeValues={
-            ":plan": plan,
-            ":sub_id": subscription_id,
-            ":now": _now_iso(),
-        },
-    )
-
-    logger.info(
-        "Subscription updated",
-        extra={
-            "user_id": user_id,
-            "plan": plan,
-            "subscription_id": subscription_id,
-        },
-    )
-
-
-def _handle_subscription_deleted(subscription: dict):
-    """Subscription cancelled — reset to free."""
-    customer_id = subscription.get("customer")
-
-    user_id = _find_user_by_customer_id(customer_id)
-    if not user_id:
-        logger.warning(
-            "No user found for cancelled subscription",
-            extra={"customer_id": customer_id},
-        )
-        return
-
-    user_pk = f"USER#{user_id}"
-    table.update_item(
-        Key={"pk": user_pk, "sk": user_pk},
-        UpdateExpression="SET #p = :plan, stripe_subscription_id = :empty, plan_updated_at = :now",
-        ExpressionAttributeNames={"#p": "plan"},
-        ExpressionAttributeValues={
-            ":plan": "free",
-            ":empty": "",
-            ":now": _now_iso(),
-        },
-    )
-
-    logger.info("Subscription cancelled, reset to free", extra={"user_id": user_id})
-    metrics.add_metric(name="PlanCancelled", unit=MetricUnit.Count, value=1)
-
-
-def _handle_payment_failed(invoice: dict):
-    """Payment failed — log it. Could add email notification later."""
-    customer_id = invoice.get("customer")
-    logger.warning(
-        "Payment failed",
-        extra={
-            "customer_id": customer_id,
-            "invoice_id": invoice.get("id"),
-            "amount_due": invoice.get("amount_due"),
-        },
-    )
-    metrics.add_metric(name="PaymentFailed", unit=MetricUnit.Count, value=1)
-
-
-# ─── Helpers ───
-
-
-def _plan_from_subscription(subscription_id: str) -> str:
-    """Fetch subscription from Stripe and determine plan."""
-    _get_stripe_secret_key()
-    sub = stripe.Subscription.retrieve(subscription_id)
-    return _plan_from_subscription_object(sub)
-
-
-def _plan_from_subscription_object(subscription) -> str:
-    """Determine plan name from subscription's price ID."""
-    items = subscription.get("items", {}).get("data", [])
-    if not items:
-        return "free"
-    price_id = items[0].get("price", {}).get("id", "")
-    if price_id in (PRICE_ID_MAX, PRICE_ID_MAX_ANNUAL):
-        return "max"
-    if price_id in (PRICE_ID_PRO, PRICE_ID_PRO_ANNUAL):
-        return "pro"
-    return "free"
-
-
-def _find_user_by_customer_id(customer_id: str) -> str | None:
-    """Find user_id by scanning for stripe_customer_id.
-
-    NOTE: For production scale, add a GSI on stripe_customer_id.
-    For beta with <100 users, a scan with filter is fine.
-
-    Loops over pages until a match is found or the table is exhausted.
-    Note: passing Limit=1 alongside a FilterExpression scans only one
-    item before filtering and silently misses matches further in.
+class _LocalInvocationContext:
+    """Stand-in Lambda context for direct/local invocations that pass `context=None`
+    (e.g. tests calling `lambda_handler(event, None)`). Real Lambda invocations always
+    supply a genuine context; this only fills the handful of attributes Powertools'
+    logging/metrics decorators read.
     """
-    scan_kwargs: dict = {
-        "FilterExpression": "stripe_customer_id = :cid AND begins_with(pk, :prefix)",
-        "ExpressionAttributeValues": {
-            ":cid": customer_id,
-            ":prefix": "USER#",
-        },
-        "ProjectionExpression": "pk",
-    }
-    while True:
-        result = table.scan(**scan_kwargs)
-        for item in result.get("Items", []):
-            # pk is "USER#{user_id}"
-            return item["pk"].replace("USER#", "", 1)
-        last = result.get("LastEvaluatedKey")
-        if not last:
-            return None
-        scan_kwargs["ExclusiveStartKey"] = last
 
-
-def _now_iso() -> str:
-    from datetime import datetime, timezone
-
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _idempotency_key(scope: str, user_id: str, variant: str) -> str:
-    """Build a deterministic idempotency key for Stripe API calls.
-
-    Bucketed to the minute so a quick double-click collapses to one resource,
-    but a deliberate retry a minute later creates a fresh session.
-    """
-    minute_bucket = int(time.time()) // 60
-    return f"{scope}:{user_id}:{variant}:{minute_bucket}"
-
-
-# ─── Lambda Handler ───
+    function_name = "billing-local"
+    memory_limit_in_mb = 128
+    invoked_function_arn = (
+        "arn:aws:lambda:us-east-1:000000000000:function:billing-local"
+    )
+    aws_request_id = "00000000-0000-0000-0000-000000000000"
 
 
 @logger.inject_lambda_context(correlation_id_path=correlation_paths.API_GATEWAY_REST)
 @tracer.capture_lambda_handler
 @metrics.log_metrics(capture_cold_start_metric=True)
-def lambda_handler(event: dict, context: LambdaContext) -> dict:
+def _resolve(event: dict, context: LambdaContext) -> dict:
     return app.resolve(event, context)
+
+
+def lambda_handler(event: dict, context: LambdaContext | None) -> dict:
+    return _resolve(event, context or _LocalInvocationContext())

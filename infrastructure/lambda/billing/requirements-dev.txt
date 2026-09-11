@@ -3,3 +3,4 @@ moto[dynamodb]==5.1.14
 boto3==1.40.30
 stripe==12.1.0
 aws-lambda-powertools==3.22.0
+aws-xray-sdk==2.15.0
