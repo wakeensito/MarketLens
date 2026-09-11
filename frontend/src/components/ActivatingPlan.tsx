@@ -107,13 +107,14 @@ export default function ActivatingPlan({ activation, onRefresh, onComplete }: Pr
               <AnimatedMark
                 size={48}
                 variant="loop"
-                paused={activation.kind === 'done' || activation.kind === 'error'}
+                paused={activation.kind === 'done' || activation.kind === 'error' || activation.kind === 'unknown'}
               />
             </div>
 
             <h2 className="activating-title">
-              {activation.kind === 'done' ? 'Pro is live.' :
+              {activation.kind === 'done' ? `${activation.plan === 'max' ? 'Max' : 'Pro'} is live.` :
                activation.kind === 'error' ? 'Activation is taking longer than usual.' :
+               activation.kind === 'unknown' ? 'Your plan will land shortly.' :
                'Building your plan.'}
             </h2>
 
@@ -122,6 +123,8 @@ export default function ActivatingPlan({ activation, onRefresh, onComplete }: Pr
                 ? 'Workspace ready.'
                 : activation.kind === 'error'
                 ? 'Your charge succeeded. Stripe is still confirming with us.'
+                : activation.kind === 'unknown'
+                ? 'We could not match this tab to your checkout. Refresh in a minute and your plan will be there.'
                 : activation.kind === 'lagged'
                 ? 'Your charge succeeded. Final confirmation incoming.'
                 : 'Your charge succeeded. Stacking your workspace.'}
@@ -131,7 +134,7 @@ export default function ActivatingPlan({ activation, onRefresh, onComplete }: Pr
               {(activation.kind === 'polling' || activation.kind === 'lagged') && (
                 <span className="activating-elapsed">{elapsed}</span>
               )}
-              {activation.kind === 'lagged' || activation.kind === 'error' ? (
+              {activation.kind === 'lagged' || activation.kind === 'error' || activation.kind === 'unknown' ? (
                 <button
                   ref={refreshBtnRef}
                   type="button"

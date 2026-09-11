@@ -184,12 +184,18 @@ export function useBilling() {
     const record = readCheckout();
     if (!record) {
       // No intent to correlate (different browser, cleared storage). One look, then stop.
+      const handle = { cancelled: false };
+      pollHandleRef.current = handle;
       setActivation({ kind: 'polling', startedAt: Date.now() });
       void getBillingMe()
         .then(me => {
+          if (handle.cancelled) return;
           setActivation(me.effective_plan !== 'free' ? { kind: 'done', plan: me.effective_plan } : { kind: 'unknown' });
         })
-        .catch(() => setActivation({ kind: 'unknown' }));
+        .catch(() => {
+          if (handle.cancelled) return;
+          setActivation({ kind: 'unknown' });
+        });
       return;
     }
 

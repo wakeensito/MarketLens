@@ -176,14 +176,14 @@ export default function App() {
   });
   const pendingCheckoutPlanRef = useRef<import('./api').BillingPlan | null>(null);
 
-  // Read ?billing=success|cancelled once on boot, strip the query, dispatch.
+  // Read ?billing=success|cancelled|portal once on boot, strip the query, dispatch.
   const billingFlagHandledRef = useRef(false);
   useEffect(() => {
     if (billingFlagHandledRef.current) return;
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     const flag = params.get('billing');
-    if (flag !== 'success' && flag !== 'cancelled') return;
+    if (flag !== 'success' && flag !== 'cancelled' && flag !== 'portal') return;
     billingFlagHandledRef.current = true;
     params.delete('billing');
     params.delete('session_id');
@@ -191,9 +191,13 @@ export default function App() {
     const url = window.location.pathname + (remaining ? `?${remaining}` : '');
     window.history.replaceState({}, '', url);
     if (flag === 'success') {
-      billing.beginActivationPoll(auth.user?.plan ?? 'free');
+      billing.beginActivationPoll();
+    } else if (flag === 'portal') {
+      void billing.checkPortalReturn().then(changed => { if (changed) void auth.refresh(); });
     }
-  }, [billing, auth.user?.plan]);
+    // billing.* and auth.refresh are stable callbacks; the whole objects would refire this on every tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [billing.beginActivationPoll, billing.checkPortalReturn, auth.refresh]);
 
   // Auto-dismiss cancel toast after 4 seconds.
   useEffect(() => {
