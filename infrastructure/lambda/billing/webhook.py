@@ -75,6 +75,9 @@ def handle_event(event: dict) -> str:
                 "Could not resolve user for event",
                 extra={**log, "subscription_id": sub_id},
             )
+            metrics.add_metric(
+                name="WebhookUnresolvedUser", unit=MetricUnit.Count, value=1
+            )
             return "ignored"
         return install_subscription(event, user_id, sub)
 
@@ -92,16 +95,24 @@ def handle_event(event: dict) -> str:
                 "Could not resolve user for event",
                 extra={**log, "subscription_id": sub_id},
             )
+            metrics.add_metric(
+                name="WebhookUnresolvedUser", unit=MetricUnit.Count, value=1
+            )
             return "ignored"
         return apply_subscription_state(event, user_id, sub)
 
     return "ignored"
 
 
-def _orphan(event: dict, user_id: str) -> str:
+def _orphan(event: dict, user_id: str, sub_id: str) -> str:
     logger.warning(
         "Webhook for missing user row",
-        extra={"event_id": event["id"], "user_id": user_id},
+        extra={
+            "event_id": event["id"],
+            "event_type": event["type"],
+            "user_id": user_id,
+            "subscription_id": sub_id,
+        },
     )
     metrics.add_metric(name="WebhookOrphanUser", unit=MetricUnit.Count, value=1)
     return "orphan"
@@ -145,11 +156,12 @@ def _install_update(
         "plan": plan,
         "subscription_status": sub.get("status"),
         "billing_source_event_created": event_created,
-        "last_checkout_intent_id": intent_id or "",
         "cancel_at_period_end": bool(sub.get("cancel_at_period_end")),
         "current_period_end": int(sub.get("current_period_end") or 0),
         "plan_updated_at": _now_iso(),
     }
+    if intent_id:
+        sets["last_checkout_intent_id"] = intent_id
     n = {"#plan": "plan", **names}
     v = {f":s_{k}": store.serialize(val) for k, val in sets.items()}
     v.update(values)
@@ -163,77 +175,86 @@ def _install_update(
 
 
 def install_subscription(event: dict, user_id: str, sub: dict) -> str:
-    row = store.get_user(user_id)
-    if row is None:
-        return _orphan(event, user_id)
+    """Classify + apply, retrying on a lost race.
 
+    The classification (matching intent / not live / already-recorded /
+    reconcile / double-subscription) is read from a snapshot of the row, but
+    the write is conditioned on that same snapshot. If a concurrent install
+    commits first, our condition fails (STALE) and the snapshot we
+    classified from is now wrong — so we re-read and reclassify rather than
+    reporting a spurious "stale" for what is really a race we lost. The
+    re-read will see the winner's write and route us into the
+    already-recorded or double-subscription branches as appropriate.
+    """
     obj = event["data"]["object"]
-    intent = (obj.get("metadata") or {}).get("intent_id") or (
-        sub.get("metadata") or {}
-    ).get("intent_id")
-    pending = row.get("pending_intent_id")
-    recorded = row.get("stripe_subscription_id") or ""
-    created = int(event["created"])
+    for attempt in range(MAX_CONDITION_RETRIES):
+        row = store.get_user(user_id)
+        if row is None:
+            return _orphan(event, user_id, sub["id"])
 
-    if intent and pending and intent == pending:
-        update = _install_update(
-            sub,
-            intent,
-            created,
-            "pending_intent_id = :intent",
-            {},
-            {":intent": store.serialize(intent)},
-        )
-        outcome = store.apply_event(event["id"], user_id, update)
+        intent = (obj.get("metadata") or {}).get("intent_id") or (
+            sub.get("metadata") or {}
+        ).get("intent_id")
+        pending = row.get("pending_intent_id")
+        recorded = row.get("stripe_subscription_id") or ""
+        created = int(event["created"])
+
+        if intent and pending and intent == pending:
+            update = _install_update(
+                sub,
+                intent,
+                created,
+                "pending_intent_id = :intent",
+                {},
+                {":intent": store.serialize(intent)},
+            )
+            outcome = store.apply_event(event["id"], user_id, update)
+        elif not stripe_client.is_live(sub):
+            # Intent does not match (or is absent): classify by what Stripe says.
+            outcome = store.apply_event(event["id"], None, None)
+        elif recorded == sub["id"]:
+            outcome = store.apply_event(event["id"], None, None)
+        else:
+            recorded_live = False
+            if recorded:
+                recorded_live = stripe_client.is_live(
+                    stripe_client.retrieve_subscription(recorded)
+                )
+
+            if not recorded_live:
+                condition = "attribute_not_exists(stripe_subscription_id) OR stripe_subscription_id = :recorded"
+                update = _install_update(
+                    sub,
+                    intent,
+                    created,
+                    condition,
+                    {},
+                    {":recorded": store.serialize(recorded)},
+                )
+                outcome = store.apply_event(event["id"], user_id, update)
+            else:
+                # Two live subscriptions: the user is paying twice. Cancel the newcomer.
+                stripe_client.cancel_subscription(sub["id"])
+                metrics.add_metric(
+                    name="DoubleSubscriptionCancelled", unit=MetricUnit.Count, value=1
+                )
+                logger.error(
+                    "Cancelled second live subscription; refund manually",
+                    extra={
+                        "event_id": event["id"],
+                        "event_type": event["type"],
+                        "user_id": user_id,
+                        "subscription_id": sub["id"],
+                        "kept": recorded,
+                    },
+                )
+                outcome = store.apply_event(event["id"], None, None)
+
+        if outcome is store.Outcome.STALE and attempt < MAX_CONDITION_RETRIES - 1:
+            time.sleep(0.05)
+            continue
         return _log_outcome(outcome, event, user_id, sub["id"])
-
-    # Intent does not match (or is absent): classify by what Stripe says.
-    if not stripe_client.is_live(sub):
-        return _log_outcome(
-            store.apply_event(event["id"], None, None), event, user_id, sub["id"]
-        )
-
-    if recorded == sub["id"]:
-        return _log_outcome(
-            store.apply_event(event["id"], None, None), event, user_id, sub["id"]
-        )
-
-    recorded_live = False
-    if recorded:
-        recorded_live = stripe_client.is_live(
-            stripe_client.retrieve_subscription(recorded)
-        )
-
-    if not recorded_live:
-        condition = "attribute_not_exists(stripe_subscription_id) OR stripe_subscription_id = :recorded"
-        update = _install_update(
-            sub,
-            intent,
-            created,
-            condition,
-            {},
-            {":recorded": store.serialize(recorded)},
-        )
-        outcome = store.apply_event(event["id"], user_id, update)
-        return _log_outcome(outcome, event, user_id, sub["id"])
-
-    # Two live subscriptions: the user is paying twice. Cancel the newcomer.
-    stripe_client.cancel_subscription(sub["id"])
-    metrics.add_metric(
-        name="DoubleSubscriptionCancelled", unit=MetricUnit.Count, value=1
-    )
-    logger.error(
-        "Cancelled second live subscription; refund manually",
-        extra={
-            "event_id": event["id"],
-            "user_id": user_id,
-            "subscription_id": sub["id"],
-            "kept": recorded,
-        },
-    )
-    return _log_outcome(
-        store.apply_event(event["id"], None, None), event, user_id, sub["id"]
-    )
+    return _log_outcome(store.Outcome.STALE, event, user_id, sub["id"])
 
 
 # ─── State path ───
@@ -298,11 +319,18 @@ def build_state_update(
 
 
 def apply_subscription_state(event: dict, user_id: str, sub: dict) -> str:
+    """Retry loop with no trailing fallback: every branch below either
+    `continue`s (only when attempts remain) or `return`s, and the last
+    attempt can never `continue` — so the loop is guaranteed to return
+    before falling off the end. `while True` (no `break`) tells mypy that
+    directly, so no unreachable statement is needed after the loop.
+    """
     created = int(event["created"])
-    for attempt in range(MAX_CONDITION_RETRIES):
+    attempt = 0
+    while True:
         row = store.get_user(user_id)
         if row is None:
-            return _orphan(event, user_id)
+            return _orphan(event, user_id, sub["id"])
         if (
             row.get("stripe_subscription_id") != sub["id"]
             or row.get("subscription_status") == "canceled"
@@ -317,12 +345,12 @@ def apply_subscription_state(event: dict, user_id: str, sub: dict) -> str:
             )
         outcome = store.apply_event(event["id"], user_id, update)
         grace_path = ":old_status" in update["ExpressionAttributeValues"]
+        attempt += 1
         if (
             outcome is store.Outcome.STALE
             and grace_path
-            and attempt < MAX_CONDITION_RETRIES - 1
+            and attempt < MAX_CONDITION_RETRIES
         ):
             time.sleep(0.05)
             continue
         return _log_outcome(outcome, event, user_id, sub["id"])
-    return _log_outcome(store.Outcome.STALE, event, user_id, sub["id"])

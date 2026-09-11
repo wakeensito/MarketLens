@@ -147,7 +147,7 @@ Refetch the subscription. Read the row (consistent). Compare `metadata.intent_id
 | Intent does not match, row holds no live subscription | Install: it is the user's only real subscription | `attribute_not_exists(stripe_subscription_id) OR stripe_subscription_id = :recorded` |
 | Intent does not match, row holds a *different* live subscription | Anomaly: cancel the newly found subscription via the API, metric `DoubleSubscriptionCancelled`, marker only | — |
 
-Install writes `stripe_subscription_id`, `stripe_customer_id`, `plan`, `subscription_status`, `billing_source_event_created`, `last_checkout_intent_id = :intent`, `plan_updated_at`, `REMOVE pending_intent_id`, `ADD billing_revision 1`. "Live" means Stripe reports a status not in `{canceled, incomplete_expired}`. The install condition never compares timestamps: a replacement subscription can legitimately share an `event.created` second with the outgoing one's last event.
+Install writes `stripe_subscription_id`, `stripe_customer_id`, `plan`, `subscription_status`, `billing_source_event_created`, `last_checkout_intent_id = :intent`, `plan_updated_at`, `REMOVE pending_intent_id`, `ADD billing_revision 1`. "Live" means Stripe reports a status not in `{canceled, incomplete_expired}`. The install condition never compares timestamps: a replacement subscription can legitimately share an `event.created` second with the outgoing one's last event. A row-condition failure on install is re-read and reclassified (up to three attempts), never treated as stale — the only way an install condition fails is that a concurrent install won, and the re-read routes the loser into the reconcile table.
 
 **State path** (never writes `stripe_subscription_id`).
 

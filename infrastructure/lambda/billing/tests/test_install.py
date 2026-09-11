@@ -203,3 +203,86 @@ def test_unhandled_event_type_is_ignored(ddb_table):
         webhook.handle_event(make_event("customer.subscription.trial_will_end", {}))
         == "ignored"
     )
+
+
+def test_install_clears_stale_grace(ddb_table, user_row, stripe_stub):
+    import webhook
+
+    user_row(pending_intent_id="intent-1", entitlement_grace_until=1_600_000_000)
+    stripe_stub["subscriptions"]["sub_1"] = make_subscription(status="active")
+    out = webhook.handle_event(make_event("checkout.session.completed", _session()))
+    assert out == "applied"
+    row = get_user(ddb_table)
+    assert "entitlement_grace_until" not in row
+
+
+def test_reconcile_install_without_intent_leaves_last_intent_untouched(
+    ddb_table, user_row, stripe_stub
+):
+    import webhook
+
+    user_row(last_checkout_intent_id="old")
+    sub = make_subscription(status="active", metadata={})
+    stripe_stub["subscriptions"]["sub_1"] = sub
+    session = _session()
+    session["metadata"] = {"user_id": "u1", "org_id": "org1"}  # no intent_id anywhere
+    out = webhook.handle_event(make_event("checkout.session.completed", session))
+    assert out == "applied"
+    row = get_user(ddb_table)
+    assert row["stripe_subscription_id"] == "sub_1"
+    assert row["last_checkout_intent_id"] == "old"
+
+
+def test_install_race_reclassifies_and_cancels_loser(
+    ddb_table, user_row, stripe_stub, monkeypatch
+):
+    """A concurrent install (winner) commits between our snapshot read and
+    our transaction attempt. Our condition fails (STALE); we must re-read
+    and reclassify rather than report stale — the re-read sees the winner's
+    subscription installed and routes us into the double-subscription
+    branch, cancelling our (losing) subscription."""
+    import store
+    import webhook
+
+    seen = []
+    monkeypatch.setattr(
+        webhook.metrics, "add_metric", lambda **kw: seen.append(kw["name"])
+    )
+
+    user_row(pending_intent_id="intent-other")
+    stripe_stub["subscriptions"]["sub_winner"] = make_subscription(
+        sub_id="sub_winner", status="active"
+    )
+    stripe_stub["subscriptions"]["sub_loser"] = make_subscription(
+        sub_id="sub_loser", status="active"
+    )
+
+    real_apply_event = store.apply_event
+    calls = []
+
+    def fake_apply_event(event_id, user_id, update):
+        calls.append(update)
+        if len(calls) == 1:
+            # Simulate a concurrent winner installing sub_winner between our
+            # snapshot read and our transaction attempt.
+            ddb_table.update_item(
+                Key={"pk": "USER#u1", "sk": "USER#u1"},
+                UpdateExpression=(
+                    "SET stripe_subscription_id = :s, subscription_status = :st "
+                    "REMOVE pending_intent_id"
+                ),
+                ExpressionAttributeValues={":s": "sub_winner", ":st": "active"},
+            )
+            return store.Outcome.STALE
+        return real_apply_event(event_id, user_id, update)
+
+    monkeypatch.setattr(store, "apply_event", fake_apply_event)
+
+    out = webhook.handle_event(
+        make_event(
+            "customer.subscription.created", stripe_stub["subscriptions"]["sub_loser"]
+        )
+    )
+    assert out == "noop"
+    assert "sub_loser" in stripe_stub["cancelled"]
+    assert "DoubleSubscriptionCancelled" in seen
