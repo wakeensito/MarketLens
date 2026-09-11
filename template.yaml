@@ -65,6 +65,9 @@ Parameters:
       lets us swap without a code change. Source:
       https://github.com/awslabs/aws-lambda-web-adapter.
 
+Conditions:
+  IsProd: !Equals [!Ref Stage, prod]
+
 Globals:
   Function:
     MemorySize: 512
@@ -507,6 +510,9 @@ Resources:
               KeyType: RANGE
           Projection:
             ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
 
   # ─── DynamoDB: Muse Conversations Table ───
   MuseConversationsTable:
@@ -1431,6 +1437,8 @@ Resources:
           STRIPE_PRICE_ID_MAX: price_1TTWHWD0uRRrx9E79aJXLXor
           STRIPE_PRICE_ID_PRO_ANNUAL: price_1TTX4LD0uRRrx9E7WSD0kaEV
           STRIPE_PRICE_ID_MAX_ANNUAL: price_1TTWHWD0uRRrx9E7EepKDTCp
+          STRIPE_LIVEMODE: !If [IsProd, "true", "false"]
+          GRACE_WINDOW_SECONDS: "604800"
       Events:
         BillingCheckout:
           Type: Api
@@ -1453,6 +1461,12 @@ Resources:
             Auth:
               ApiKeyRequired: false
               Authorizer: NONE
+        BillingMe:
+          Type: Api
+          Properties:
+            Path: /api/billing/me
+            Method: GET
+            RestApiId: !Ref ApiGatewayApi
 
   BillingFunctionLogGroup:
     Type: AWS::Logs::LogGroup
