@@ -51,7 +51,7 @@ def configure() -> None:
         return
     stripe.api_key = _get_param(os.environ["STRIPE_SECRET_KEY_PARAM"])
     stripe.max_network_retries = 2
-    stripe.default_http_client = stripe.http_client.RequestsClient(timeout=10)
+    stripe.default_http_client = stripe.RequestsClient(timeout=10)
     _configured = True
 
 

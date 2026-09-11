@@ -127,7 +127,7 @@ def stripe_stub(monkeypatch):
 
     def retrieve_sub(sub_id, **_):
         if sub_id not in state["subscriptions"]:
-            raise stripe.error.InvalidRequestError("No such subscription", "id")
+            raise stripe.InvalidRequestError("No such subscription", "id")
         return state["subscriptions"][sub_id]
 
     def cancel_sub(sub_id, **_):
