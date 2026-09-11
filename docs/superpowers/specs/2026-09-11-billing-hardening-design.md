@@ -1,7 +1,7 @@
 # Billing hardening — design
 
 **Date:** 2026-09-11
-**Status:** proposed
+**Status:** implemented
 **Scope:** Plinths only. Backend billing Lambda, shared auth layer, plan gates, frontend activation flow, infra, tests.
 
 ## Why

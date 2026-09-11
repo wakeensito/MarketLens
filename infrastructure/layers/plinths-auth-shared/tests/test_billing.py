@@ -120,7 +120,14 @@ def test_auth_context_plan_is_effective(monkeypatch):
 
     class _Table:
         def get_item(self, **_):
-            return {"Item": {"org_id": "o1", "plan": "pro", "subscription_status": "paused", "email": "e"}}
+            return {
+                "Item": {
+                    "org_id": "o1",
+                    "plan": "pro",
+                    "subscription_status": "paused",
+                    "email": "e",
+                }
+            }
 
     monkeypatch.setattr(cookie_jwt, "_get_jwks_client", lambda: _Jwks())
     monkeypatch.setattr(cookie_jwt, "_get_table", lambda: _Table())

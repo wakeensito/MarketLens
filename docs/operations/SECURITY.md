@@ -106,3 +106,12 @@ The BFF Lambda will fail on cold start until this parameter exists.
 | No CSRF tokens on `/auth/refresh` and `/auth/logout` | Both `ml_refresh` and `ml_access` cookies are `SameSite=Strict`, which prevents cross-site inclusion. |
 | OTP length check before `hmac.compare_digest` | Both codes are always 6 digits. Early-exit on length mismatch leaks no useful timing information. |
 | `auth_error` URL param reflected in frontend | Rendered inside a React text node — React auto-escapes the value, no XSS path. |
+
+---
+
+## Stripe webhook
+
+- The Stripe dashboard endpoint for `POST /api/billing/webhook` points at the **execute-api URL** (`https://<api-id>.execute-api.us-east-1.amazonaws.com/<stage>/api/billing/webhook`), never the CloudFront domain. No cookies are involved and nothing sits between Stripe and signature verification.
+- Order inside the handler is fixed: verify the signature on the exact request bytes, parse, check `livemode` against `STRIPE_LIVEMODE`, and only then touch Stripe or DynamoDB. An unverified caller cannot drive spend.
+- Each stage has its own API key, webhook secret (SSM SecureString) and price IDs. Staging never points at the production table.
+- Alarms worth wiring: `WebhookLivemodeMismatch`, `UnknownPriceId`, `DoubleSubscriptionCancelled` (manual refund runbook), `WebhookOrphanUser`.
