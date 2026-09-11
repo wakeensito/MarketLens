@@ -21,7 +21,6 @@ import boto3
 import jwt
 from jwt import PyJWKClient
 
-
 # ─── Configuration (resolved at import time) ───
 
 _CLIENT_ID = os.environ.get("COGNITO_CLIENT_ID", "")
