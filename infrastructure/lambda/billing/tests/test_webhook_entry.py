@@ -78,9 +78,15 @@ def test_infrastructure_error_is_500_so_stripe_retries(
 def test_missing_webhook_secret_config_is_5xx_not_400(
     ddb_table, stripe_stub, monkeypatch
 ):
+    """A missing SSM param name raises KeyError out of `stripe_client.webhook_secret()`,
+    which isn't caught anywhere in `stripe_webhook` — it propagates through
+    `lambda_handler` uncaught. That's still a 5xx behind API Gateway/Powertools'
+    default error handling, and critically never a 400 (which would tell
+    Stripe the *payload* was bad and stop it retrying)."""
     import webhook
     import stripe_client
     import app
+    import pytest
 
     called = []
     monkeypatch.setattr(webhook, "handle_event", lambda e: called.append(e))
@@ -97,12 +103,8 @@ def test_missing_webhook_secret_config_is_5xx_not_400(
         headers={"stripe-signature": sign(body)},
         auth={},
     )
-    try:
-        resp = app.lambda_handler(ev, LambdaContext())
-    except KeyError:
-        pass
-    else:
-        assert resp["statusCode"] == 500
+    with pytest.raises(KeyError):
+        app.lambda_handler(ev, LambdaContext())
     assert called == []
 
 

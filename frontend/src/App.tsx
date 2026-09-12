@@ -194,10 +194,12 @@ export default function App() {
       billing.beginActivationPoll();
     } else if (flag === 'portal') {
       void billing.checkPortalReturn().then(changed => { if (changed) void auth.refresh(); });
+    } else if (flag === 'cancelled') {
+      billing.clearCheckoutRecord();
     }
     // billing.* and auth.refresh are stable callbacks; the whole objects would refire this on every tick.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [billing.beginActivationPoll, billing.checkPortalReturn, auth.refresh]);
+  }, [billing.beginActivationPoll, billing.checkPortalReturn, billing.clearCheckoutRecord, auth.refresh]);
 
   // Auto-dismiss cancel toast after 4 seconds.
   useEffect(() => {

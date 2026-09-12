@@ -11,6 +11,7 @@ Design record: docs/superpowers/specs/2026-09-11-billing-hardening-design.md
 
 from __future__ import annotations
 
+import json
 import os
 import uuid
 
@@ -236,17 +237,20 @@ def get_billing_me():
 def stripe_webhook():
     """Signature → parse → livemode → handle. Nothing else runs before the signature passes."""
     payload = app.current_event.decoded_body or ""
-    sig_header = app.current_event.get_header_value("stripe-signature") or ""
+    sig_header = app.current_event.headers.get("stripe-signature", "")
     secret = stripe_client.webhook_secret()
     try:
-        event = stripe.Webhook.construct_event(payload, sig_header, secret)
+        stripe.WebhookSignature.verify_header(payload, sig_header, secret)
     except stripe.SignatureVerificationError:
         logger.warning("Webhook signature verification failed")
         metrics.add_metric(
             name="WebhookSignatureFailure", unit=MetricUnit.Count, value=1
         )
         return {"error": "Invalid signature"}, 400
-    except (ValueError, KeyError, stripe.StripeError) as e:
+
+    try:
+        event = json.loads(payload)
+    except (json.JSONDecodeError, ValueError) as e:
         logger.warning("Webhook payload malformed", extra={"error": str(e)})
         metrics.add_metric(
             name="WebhookMalformedPayload", unit=MetricUnit.Count, value=1
@@ -268,11 +272,7 @@ def stripe_webhook():
         "Webhook received", extra={"event_id": event["id"], "event_type": event["type"]}
     )
     try:
-        outcome = webhook.handle_event(
-            event.to_dict_recursive()
-            if hasattr(event, "to_dict_recursive")
-            else dict(event)
-        )
+        outcome = webhook.handle_event(event)
     except Exception:
         logger.exception(
             "Webhook handling failed; Stripe will retry",

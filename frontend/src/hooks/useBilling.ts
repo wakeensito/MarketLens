@@ -159,6 +159,9 @@ export function useBilling() {
   const startCheckout = useCallback(async (plan: BillingPlan) => {
     setCheckout({ kind: 'redirecting', plan });
     const existing = readCheckout();
+    // The stored intent is reused only when the plan matches (retry-after-error
+    // path); a cancelled return clears the record, so a fresh checkout for a
+    // different plan always mints a new intent.
     const intentId = existing && existing.plan === plan ? existing.intentId : mintIntent();
     await attemptCheckout(plan, intentId, false, { setCheckout, openPortal });
   }, [openPortal]);
@@ -166,6 +169,11 @@ export function useBilling() {
   const dismissCheckoutError = useCallback(() => {
     writeCheckout(null);
     setCheckout({ kind: 'idle' });
+  }, []);
+
+  /** Clears the stored checkout record — used on a `?billing=cancelled` return. */
+  const clearCheckoutRecord = useCallback(() => {
+    writeCheckout(null);
   }, []);
 
   const dismissPortalError = useCallback(() => {
@@ -265,6 +273,7 @@ export function useBilling() {
     checkPortalReturn,
     dismissCheckoutError,
     dismissPortalError,
+    clearCheckoutRecord,
   };
 }
 

@@ -88,7 +88,9 @@ def test_equal_timestamp_applies_refetched_truth(ddb_table, user_row, stripe_stu
     assert get_user(ddb_table)["plan"] == "max"
 
 
-def test_event_for_other_subscription_id_is_stale(ddb_table, user_row, stripe_stub):
+def test_event_for_other_subscription_id_is_unknown_subscription(
+    ddb_table, user_row, stripe_stub
+):
     import webhook
 
     _installed(user_row)
@@ -97,8 +99,29 @@ def test_event_for_other_subscription_id_is_stale(ddb_table, user_row, stripe_st
     out = webhook.handle_event(
         make_event("customer.subscription.updated", other, created=T0 + 99)
     )
-    assert out == "stale"
+    assert out == "unknown_subscription"
     assert get_user(ddb_table)["stripe_subscription_id"] == "sub_1"
+
+
+def test_current_period_end_read_from_item(ddb_table, user_row, stripe_stub):
+    import webhook
+
+    sub = make_subscription(status="active", current_period_end=99)
+    assert "current_period_end" not in sub
+    assert sub["items"]["data"][0]["current_period_end"] == 99
+    assert webhook._current_period_end(sub) == 99
+    # Fallback for older event shapes that still carry it at the top level.
+    assert webhook._current_period_end({"current_period_end": 42}) == 42
+    assert webhook._current_period_end({}) == 0
+
+    _installed(user_row, current_period_end=1)
+    stripe_stub["subscriptions"]["sub_1"] = sub
+    out = webhook.handle_event(
+        make_event("customer.subscription.updated", sub, created=T0 + 10)
+    )
+    assert out == "applied"
+    row = get_user(ddb_table)
+    assert int(row["current_period_end"]) == 99
 
 
 def test_deleted_then_late_updated_stays_canceled(ddb_table, user_row, stripe_stub):

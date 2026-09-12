@@ -43,6 +43,16 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _current_period_end(sub: dict) -> int:
+    """`current_period_end` lives on the subscription item, not the
+    subscription, in the pinned API version. Fall back to the top-level key
+    for older event shapes that still carry it there."""
+    items = (sub.get("items") or {}).get("data") or []
+    if items and items[0].get("current_period_end") is not None:
+        return int(items[0]["current_period_end"])
+    return int(sub.get("current_period_end") or 0)
+
+
 def _resolve_user_id(obj: dict, sub: dict | None) -> str | None:
     for source in (obj.get("metadata") or {}, (sub or {}).get("metadata") or {}):
         uid = source.get("user_id")
@@ -118,6 +128,20 @@ def _orphan(event: dict, user_id: str, sub_id: str) -> str:
     return "orphan"
 
 
+def _log_unknown_subscription(event: dict, user_id: str, sub_id: str) -> str:
+    extra = {
+        "event_id": event["id"],
+        "event_type": event["type"],
+        "user_id": user_id,
+        "subscription_id": sub_id,
+    }
+    metrics.add_metric(
+        name="WebhookUnknownSubscription", unit=MetricUnit.Count, value=1
+    )
+    logger.info("Webhook event for a subscription not yet on the row", extra=extra)
+    return "unknown_subscription"
+
+
 def _log_outcome(outcome: store.Outcome, event: dict, user_id: str, sub_id: str) -> str:
     extra = {
         "event_id": event["id"],
@@ -157,7 +181,7 @@ def _install_update(
         "subscription_status": sub.get("status"),
         "billing_source_event_created": event_created,
         "cancel_at_period_end": bool(sub.get("cancel_at_period_end")),
-        "current_period_end": int(sub.get("current_period_end") or 0),
+        "current_period_end": _current_period_end(sub),
         "plan_updated_at": _now_iso(),
     }
     if intent_id:
@@ -172,6 +196,28 @@ def _install_update(
         "ExpressionAttributeNames": n,
         "ExpressionAttributeValues": {**v, ":one": store.serialize(1)},
     }
+
+
+def _cancel_newcomer(event: dict, user_id: str, sub: dict, kept: str) -> store.Outcome:
+    """Two live subscriptions for the same user: cancel the one just found via
+    the API and leave the recorded (`kept`) subscription alone. Shared by
+    both the intent-match branch (a different subscription is already live
+    on the row) and the reconcile branch (the recorded id is still live)."""
+    stripe_client.cancel_subscription(sub["id"])
+    metrics.add_metric(
+        name="DoubleSubscriptionCancelled", unit=MetricUnit.Count, value=1
+    )
+    logger.error(
+        "Cancelled second live subscription; refund manually",
+        extra={
+            "event_id": event["id"],
+            "event_type": event["type"],
+            "user_id": user_id,
+            "subscription_id": sub["id"],
+            "kept": kept,
+        },
+    )
+    return store.apply_event(event["id"], None, None)
 
 
 def install_subscription(event: dict, user_id: str, sub: dict) -> str:
@@ -200,15 +246,26 @@ def install_subscription(event: dict, user_id: str, sub: dict) -> str:
         created = int(event["created"])
 
         if intent and pending and intent == pending:
-            update = _install_update(
-                sub,
-                intent,
-                created,
-                "pending_intent_id = :intent",
-                {},
-                {":intent": store.serialize(intent)},
-            )
-            outcome = store.apply_event(event["id"], user_id, update)
+            other_live = False
+            if recorded and recorded != sub["id"]:
+                other_live = stripe_client.is_live(
+                    stripe_client.retrieve_subscription(recorded)
+                )
+            if other_live:
+                # The matching intent still can't overwrite a different
+                # subscription that is actually live on the row — treat this
+                # exactly like the reconcile double-subscription case.
+                outcome = _cancel_newcomer(event, user_id, sub, recorded)
+            else:
+                update = _install_update(
+                    sub,
+                    intent,
+                    created,
+                    "pending_intent_id = :intent",
+                    {},
+                    {":intent": store.serialize(intent)},
+                )
+                outcome = store.apply_event(event["id"], user_id, update)
         elif not stripe_client.is_live(sub):
             # Intent does not match (or is absent): classify by what Stripe says.
             outcome = store.apply_event(event["id"], None, None)
@@ -234,21 +291,7 @@ def install_subscription(event: dict, user_id: str, sub: dict) -> str:
                 outcome = store.apply_event(event["id"], user_id, update)
             else:
                 # Two live subscriptions: the user is paying twice. Cancel the newcomer.
-                stripe_client.cancel_subscription(sub["id"])
-                metrics.add_metric(
-                    name="DoubleSubscriptionCancelled", unit=MetricUnit.Count, value=1
-                )
-                logger.error(
-                    "Cancelled second live subscription; refund manually",
-                    extra={
-                        "event_id": event["id"],
-                        "event_type": event["type"],
-                        "user_id": user_id,
-                        "subscription_id": sub["id"],
-                        "kept": recorded,
-                    },
-                )
-                outcome = store.apply_event(event["id"], None, None)
+                outcome = _cancel_newcomer(event, user_id, sub, recorded)
 
         if outcome is store.Outcome.STALE and attempt < MAX_CONDITION_RETRIES - 1:
             time.sleep(0.05)
@@ -270,7 +313,7 @@ def build_state_update(
         "plan": stripe_client.plan_from_subscription(sub),
         "subscription_status": new_status,
         "cancel_at_period_end": bool(sub.get("cancel_at_period_end")),
-        "current_period_end": int(sub.get("current_period_end") or 0),
+        "current_period_end": _current_period_end(sub),
     }
     removes: list[str] = []
     grace_transition = new_status == "past_due" and old_status in ENTITLED_STATUSES
@@ -279,11 +322,9 @@ def build_state_update(
     elif new_status != "past_due" and "entitlement_grace_until" in row:
         removes.append("entitlement_grace_until")
 
-    changed = (
-        any(row.get(k) != v for k, v in sets.items() if k != "current_period_end")
-        or (int(row.get("current_period_end") or 0) != sets["current_period_end"])
-        or bool(removes)
-    )
+    # Decimal(n) == n is True, so every field — current_period_end included —
+    # compares the same way against the DynamoDB-native row value.
+    changed = any(row.get(k) != v for k, v in sets.items()) or bool(removes)
     if not changed:
         return None
 
@@ -331,10 +372,14 @@ def apply_subscription_state(event: dict, user_id: str, sub: dict) -> str:
         row = store.get_user(user_id)
         if row is None:
             return _orphan(event, user_id, sub["id"])
-        if (
-            row.get("stripe_subscription_id") != sub["id"]
-            or row.get("subscription_status") == "canceled"
-        ):
+        if row.get("stripe_subscription_id") != sub["id"]:
+            # Not necessarily stale: Stripe routinely delivers `.updated` /
+            # `invoice.*` before the install lands, so the row simply doesn't
+            # know about this subscription yet. That's expected traffic, not
+            # an anomaly — give it its own outcome/metric so it doesn't drown
+            # out real staleness.
+            return _log_unknown_subscription(event, user_id, sub["id"])
+        if row.get("subscription_status") == "canceled":
             return _log_outcome(store.Outcome.STALE, event, user_id, sub["id"])
         if int(row.get("billing_source_event_created") or 0) > created:
             return _log_outcome(store.Outcome.STALE, event, user_id, sub["id"])

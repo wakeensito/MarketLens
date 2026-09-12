@@ -138,6 +138,61 @@ def test_stale_intent_with_different_live_subscription_cancels_newcomer(
     assert get_user(ddb_table)["stripe_subscription_id"] == "sub_1"
 
 
+def test_matching_intent_does_not_overwrite_different_live_subscription(
+    ddb_table, user_row, stripe_stub
+):
+    """A matching intent is not enough on its own: if the row already holds a
+    *different* live subscription, installing over it would silently drop
+    the kept subscription. This must fall through to the same
+    cancel-newcomer path as the reconcile branch."""
+    import webhook
+
+    user_row(
+        stripe_subscription_id="sub_1",
+        subscription_status="active",
+        plan="pro",
+        pending_intent_id="intent-2",
+    )
+    stripe_stub["subscriptions"]["sub_1"] = make_subscription(
+        sub_id="sub_1", status="active"
+    )
+    stripe_stub["subscriptions"]["sub_2"] = make_subscription(
+        sub_id="sub_2", status="active"
+    )
+    out = webhook.handle_event(
+        make_event(
+            "checkout.session.completed", _session(sub_id="sub_2", intent="intent-2")
+        )
+    )
+    assert out == "noop"
+    assert stripe_stub["cancelled"] == ["sub_2"]
+    row = get_user(ddb_table)
+    assert row["stripe_subscription_id"] == "sub_1"
+    assert row["pending_intent_id"] == "intent-2"
+
+
+def test_reconcile_install_replaces_dead_recorded_subscription_without_intent(
+    ddb_table, user_row, stripe_stub
+):
+    import webhook
+
+    user_row(
+        stripe_subscription_id="sub_old", subscription_status="canceled", plan="pro"
+    )
+    stripe_stub["subscriptions"]["sub_old"] = make_subscription(
+        sub_id="sub_old", status="canceled"
+    )
+    sub_new = make_subscription(
+        sub_id="sub_new", status="active", metadata={"user_id": "u1"}
+    )
+    stripe_stub["subscriptions"]["sub_new"] = sub_new
+    out = webhook.handle_event(make_event("customer.subscription.created", sub_new))
+    assert out == "applied"
+    row = get_user(ddb_table)
+    assert row["stripe_subscription_id"] == "sub_new"
+    assert "last_checkout_intent_id" not in row
+
+
 def test_replacement_after_cancel_installs_new_id(ddb_table, user_row, stripe_stub):
     import webhook
 

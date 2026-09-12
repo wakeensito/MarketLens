@@ -237,3 +237,8 @@ Each row is a decision the code must make and a test must cover.
 ## Rollout
 
 Feature branch `feat/billing-hardening`, commits pushed as work lands, one PR at the end. With zero users there is no data migration. After merge: deploy `dev`, run `stripe listen --forward-to <execute-api>/api/billing/webhook` and `stripe trigger` through the event list above, confirm the activation overlay resolves on a test card, then deploy `prod` and re-point the production webhook endpoint at execute-api.
+
+Before either dashboard endpoint (dev or prod) is considered live:
+
+1. Subscribe the endpoint to exactly these seven event types: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.paused`, `customer.subscription.resumed`, `customer.subscription.deleted`, `invoice.payment_failed`. `.created` / `.paused` / `.resumed` are new in this design — an endpoint still configured for the old four leaves paused subscriptions with paid access.
+2. Before the first prod deploy with `STRIPE_LIVEMODE=true`, verify the four `STRIPE_PRICE_ID_*` values in `template.yaml` are live-mode price objects, not test-mode ones — they're currently one hardcoded set for all stages, and a test-mode id makes `Session.create` fail against a live-mode key.

@@ -109,8 +109,16 @@ def get_user(ddb_table, user_id="u1"):
 
 
 def make_subscription(
-    sub_id="sub_1", status="active", price="price_pro", customer="cus_1", **extra
+    sub_id="sub_1",
+    status="active",
+    price="price_pro",
+    customer="cus_1",
+    current_period_end=1_800_000_000,
+    **extra,
 ):
+    """Note: `current_period_end` lives on `items.data[0]`, not the top level
+    — that's the real shape in the pinned API version, and webhook.py reads
+    it from there (see `_current_period_end`)."""
     sub = {
         "id": sub_id,
         "object": "subscription",
@@ -118,8 +126,9 @@ def make_subscription(
         "customer": customer,
         "livemode": False,
         "cancel_at_period_end": False,
-        "current_period_end": 1_800_000_000,
-        "items": {"data": [{"price": {"id": price}}]},
+        "items": {
+            "data": [{"price": {"id": price}, "current_period_end": current_period_end}]
+        },
         "metadata": {"user_id": "u1", "intent_id": "intent-1"},
     }
     sub.update(extra)
