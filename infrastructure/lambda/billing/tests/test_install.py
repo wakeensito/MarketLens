@@ -26,6 +26,7 @@ def test_matching_intent_installs_and_clears_pending(ddb_table, user_row, stripe
     assert row["plan"] == "max"
     assert row["subscription_status"] == "active"
     assert row["last_checkout_intent_id"] == "intent-1"
+    assert row["last_checkout_outcome"] == "installed"
     assert "pending_intent_id" not in row
     assert int(row["billing_revision"]) == 1
     assert int(row["billing_source_event_created"]) == 1_700_000_000
@@ -132,10 +133,16 @@ def test_stale_intent_with_different_live_subscription_cancels_newcomer(
             "checkout.session.completed", _session(sub_id="sub_2", intent="intent-old")
         )
     )
-    assert out == "noop"
+    assert out == "applied"
     assert stripe_stub["cancelled"] == ["sub_2"]
     assert "DoubleSubscriptionCancelled" in seen
-    assert get_user(ddb_table)["stripe_subscription_id"] == "sub_1"
+    row = get_user(ddb_table)
+    assert row["stripe_subscription_id"] == "sub_1"
+    # The poll needs a terminal answer, not a 60 s spin ending in a false failure.
+    assert row["last_checkout_outcome"] == "cancelled_duplicate"
+    assert row["last_checkout_intent_id"] == "intent-old"
+    assert "pending_intent_id" not in row
+    assert int(row["billing_revision"]) == 1
 
 
 def test_matching_intent_does_not_overwrite_different_live_subscription(
@@ -164,11 +171,47 @@ def test_matching_intent_does_not_overwrite_different_live_subscription(
             "checkout.session.completed", _session(sub_id="sub_2", intent="intent-2")
         )
     )
-    assert out == "noop"
+    assert out == "applied"
     assert stripe_stub["cancelled"] == ["sub_2"]
     row = get_user(ddb_table)
     assert row["stripe_subscription_id"] == "sub_1"
-    assert row["pending_intent_id"] == "intent-2"
+    assert row["last_checkout_outcome"] == "cancelled_duplicate"
+    assert row["last_checkout_intent_id"] == "intent-2"
+    assert "pending_intent_id" not in row
+    assert int(row["billing_revision"]) == 1
+
+
+def test_install_replaces_incomplete_recorded_subscription(
+    ddb_table, user_row, stripe_stub
+):
+    """The recorded subscription is `incomplete` — an abandoned checkout that
+    never charged. It must not survive as the double-subscription "kept" one:
+    cancel it and install the newcomer."""
+    import webhook
+
+    user_row(
+        stripe_subscription_id="sub_1",
+        subscription_status="incomplete",
+        plan="pro",
+        pending_intent_id="intent-2",
+    )
+    stripe_stub["subscriptions"]["sub_1"] = make_subscription(
+        sub_id="sub_1", status="incomplete"
+    )
+    stripe_stub["subscriptions"]["sub_2"] = make_subscription(
+        sub_id="sub_2", status="active"
+    )
+    out = webhook.handle_event(
+        make_event(
+            "checkout.session.completed", _session(sub_id="sub_2", intent="intent-2")
+        )
+    )
+    assert out == "applied"
+    row = get_user(ddb_table)
+    assert row["stripe_subscription_id"] == "sub_2"
+    assert row["subscription_status"] == "active"
+    assert row["last_checkout_outcome"] == "installed"
+    assert stripe_stub["cancelled"] == ["sub_1"]
 
 
 def test_reconcile_install_replaces_dead_recorded_subscription_without_intent(
@@ -338,6 +381,7 @@ def test_install_race_reclassifies_and_cancels_loser(
             "customer.subscription.created", stripe_stub["subscriptions"]["sub_loser"]
         )
     )
-    assert out == "noop"
+    assert out == "applied"
     assert "sub_loser" in stripe_stub["cancelled"]
     assert "DoubleSubscriptionCancelled" in seen
+    assert get_user(ddb_table)["last_checkout_outcome"] == "cancelled_duplicate"

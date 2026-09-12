@@ -28,6 +28,15 @@ for _env, _plan in (
 
 NOT_LIVE_STATUSES = frozenset({"canceled", "incomplete_expired"})
 
+# "Live" for the *install* guard means "Stripe still knows about it", so an
+# `incomplete` subscription counts — installing over one would lose it.
+# "Billing-live" is the stricter question the checkout 409 and the
+# replace-the-recorded-subscription decision ask: is this subscription
+# actually going to bill? An `incomplete` subscription never charged
+# (the payment intent was abandoned) and expires on its own after 23 h.
+# Treating it as live would lock the user out of checkout for a day.
+NOT_BILLING_STATUSES = NOT_LIVE_STATUSES | {"incomplete"}
+
 _ssm = None
 _configured = False
 _webhook_secret: str | None = None
@@ -41,17 +50,22 @@ def _get_param(name: str) -> str:
 
 
 def configure() -> None:
-    """Idempotent. API key from SSM; retries and a timeout that fits in the Lambda budget.
+    """Idempotent. API key from SSM; retries and a timeout that fit the Lambda budget.
 
-    The SDK default is 80 s per request. Three calls at that timeout blow the
-    30 s Lambda timeout and leave the webhook returning nothing to Stripe.
+    The SDK default is 80 s per request with no cap that fits in a 30 s
+    Lambda. The webhook makes up to three Stripe calls (refetch, recorded-sub
+    refetch, cancel), so the worst case per call has to stay small: 5 s
+    timeout × 2 attempts (one retry) + ~0.5 s of retry backoff ≈ 10.5 s, so
+    three calls ≈ 31.5 s worst case — and that worst case only happens when
+    Stripe is fully down, where returning 5xx and letting Stripe retry is the
+    right outcome anyway. The realistic two-call path is ≈ 21 s.
     """
     global _configured
     if _configured:
         return
     stripe.api_key = _get_param(os.environ["STRIPE_SECRET_KEY_PARAM"])
-    stripe.max_network_retries = 2
-    stripe.default_http_client = stripe.RequestsClient(timeout=10)
+    stripe.max_network_retries = 1
+    stripe.default_http_client = stripe.RequestsClient(timeout=5)
     _configured = True
 
 
@@ -85,6 +99,13 @@ def plan_from_subscription(sub: dict) -> str:
 
 def is_live(sub: dict) -> bool:
     return sub.get("status") not in NOT_LIVE_STATUSES
+
+
+def is_billing_live(sub: dict) -> bool:
+    """Will this subscription actually bill? `incomplete` will not — it is an
+    abandoned checkout that Stripe expires after 23 h — so it must never
+    block a new checkout or survive a replacement install."""
+    return sub.get("status") not in NOT_BILLING_STATUSES
 
 
 def retrieve_subscription(sub_id: str) -> dict:

@@ -52,6 +52,22 @@ def test_is_live():
     assert not stripe_client.is_live(make_subscription(status="incomplete_expired"))
 
 
+def test_is_billing_live_excludes_incomplete():
+    """`incomplete` is a subscription Stripe still knows about but that never
+    charged. It must not block a new checkout, nor survive as the recorded
+    subscription when a real one arrives."""
+    import stripe_client
+
+    assert stripe_client.is_billing_live(make_subscription(status="active"))
+    assert stripe_client.is_billing_live(make_subscription(status="past_due"))
+    assert stripe_client.is_billing_live(make_subscription(status="trialing"))
+    assert not stripe_client.is_billing_live(make_subscription(status="incomplete"))
+    assert not stripe_client.is_billing_live(make_subscription(status="canceled"))
+    assert not stripe_client.is_billing_live(
+        make_subscription(status="incomplete_expired")
+    )
+
+
 def test_subscription_id_from_invoice_both_api_shapes():
     import stripe_client
 
@@ -83,5 +99,5 @@ def test_configure_sets_timeouts(monkeypatch):
     stripe_client._configured = False
     stripe_client.configure()
     assert stripe.api_key == "sk_test_x"
-    assert stripe.max_network_retries == 2
-    assert stripe.default_http_client._timeout == 10
+    assert stripe.max_network_retries == 1
+    assert stripe.default_http_client._timeout == 5

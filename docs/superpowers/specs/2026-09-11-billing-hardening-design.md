@@ -47,7 +47,8 @@ All on the existing user row (`pk = sk = USER#<sub>`) in `marketlens-reports-<st
 | `billing_source_event_created` | N | webhook | `event.created` of the last event that wrote subscription state. Ordering guard |
 | `billing_revision` | N | webhook, `ADD 1` | change notification for the frontend. Bumped only by a write that changes a field |
 | `pending_intent_id` | S | checkout | the intent the server most recently issued a Session for. Cleared on install |
-| `last_checkout_intent_id` | S | webhook install | echoed from `metadata.intent_id`; the activation poll correlates on it |
+| `last_checkout_intent_id` | S | webhook install, duplicate-cancel | echoed from `metadata.intent_id`; the activation poll correlates on it |
+| `last_checkout_outcome` | S | webhook install, duplicate-cancel | `installed` or `cancelled_duplicate`; the terminal answer the activation poll stops on |
 | `entitlement_grace_until` | N (epoch s) | webhook | set only on the entitled → `past_due` transition |
 | `plan_updated_at` | S | webhook | existing |
 
@@ -95,7 +96,7 @@ The `ConsistentRead=True` those reads already use stays.
 Body `{ plan, intent_id }`. `intent_id` must parse as a UUID; otherwise 400.
 
 1. Consistent read of the user row.
-2. If `stripe_subscription_id` is set, retrieve it from Stripe. If its status is not in `{canceled, incomplete_expired}`, return **409 `{ error: "subscription_exists" }`**. The frontend routes to the portal, where an upgrade mutates the existing subscription.
+2. If `stripe_subscription_id` is set, retrieve it from Stripe. If it is *billing-live* — status not in `{canceled, incomplete_expired, incomplete}` — return **409 `{ error: "subscription_exists" }`**. `incomplete` is excluded deliberately: it is an abandoned checkout that never charged, and Stripe takes 23 h to expire it. The frontend routes to the portal, where an upgrade mutates the existing subscription.
 3. Get or create the Stripe customer (existing race-guarded helper, unchanged).
 4. `SET pending_intent_id = :intent` on the user row.
 5. `stripe.checkout.Session.create(...)` with `idempotency_key = f"checkout:{intent_id}"`, `metadata = {user_id, org_id, intent_id}`, `subscription_data.metadata = {user_id, intent_id}`, `client_reference_id = user_id`, `success_url = APP_DOMAIN?billing=success`, `cancel_url = APP_DOMAIN?billing=cancelled`. `session_id` leaves the success URL: activation is webhook-driven and the frontend never used it.
@@ -112,7 +113,7 @@ Auth required. Consistent read. Returns:
 
 ```json
 { "plan", "effective_plan", "subscription_status", "entitlement_grace_until",
-  "last_checkout_intent_id", "billing_revision", "plan_updated_at" }
+  "last_checkout_intent_id", "last_checkout_outcome", "billing_revision", "plan_updated_at" }
 ```
 
 ### `POST /api/billing/webhook`
@@ -141,13 +142,18 @@ Refetch the subscription. Read the row (consistent). Compare `metadata.intent_id
 
 | Case | Action | Row condition in the transaction |
 |---|---|---|
-| Intent matches | Install | `pending_intent_id = :intent` |
+| Intent matches, row holds no *billing-live* other subscription | Install | `pending_intent_id = :intent` |
 | Intent does not match, subscription not live | Drop (marker only) | — |
 | Intent does not match, row holds this same subscription | No-op (marker only). This is the second of `checkout.session.completed` / `subscription.created` arriving | — |
-| Intent does not match, row holds no live subscription | Install: it is the user's only real subscription | `attribute_not_exists(stripe_subscription_id) OR stripe_subscription_id = :recorded` |
-| Intent does not match, row holds a *different* live subscription | Anomaly: cancel the newly found subscription via the API, metric `DoubleSubscriptionCancelled`, marker only | — |
+| Intent does not match, row holds no *billing-live* subscription | Install: it is the user's only real subscription | `attribute_not_exists(stripe_subscription_id) OR stripe_subscription_id = :recorded` |
+| Either case, but the recorded subscription is `incomplete` | Cancel the *recorded* one (best effort — Stripe expires it in 23 h anyway) and install the newcomer | as the matching row above |
+| Either case, and the recorded subscription is *billing-live* | Anomaly: cancel the newly found subscription via the API, metric `DoubleSubscriptionCancelled`, and record the terminal outcome on the row (below) | `stripe_subscription_id = :kept` |
 
-Install writes `stripe_subscription_id`, `stripe_customer_id`, `plan`, `subscription_status`, `billing_source_event_created`, `last_checkout_intent_id = :intent`, `plan_updated_at`, `REMOVE pending_intent_id`, `ADD billing_revision 1`. "Live" means Stripe reports a status not in `{canceled, incomplete_expired}`. The install condition never compares timestamps: a replacement subscription can legitimately share an `event.created` second with the outgoing one's last event. A row-condition failure on install is re-read and reclassified (up to three attempts), never treated as stale — the only way an install condition fails is that a concurrent install won, and the re-read routes the loser into the reconcile table.
+Install writes `stripe_subscription_id`, `stripe_customer_id`, `plan`, `subscription_status`, `billing_source_event_created`, `last_checkout_intent_id = :intent`, `last_checkout_outcome = "installed"`, `plan_updated_at`, `REMOVE pending_intent_id`, `ADD billing_revision 1`.
+
+Two liveness questions, deliberately different. **Live** means Stripe reports a status not in `{canceled, incomplete_expired}` — the subscription object still exists. **Billing-live** additionally excludes `incomplete`: an abandoned checkout that never charged and that Stripe expires after 23 h. The install guard, the checkout 409, and the double-subscription decision all ask the *billing-live* question — an `incomplete` recorded subscription must never block a real one for a day.
+
+The duplicate-cancel path also writes the row, not just the marker: `last_checkout_intent_id = :intent` (when there is one), `last_checkout_outcome = "cancelled_duplicate"`, `plan_updated_at`, `ADD billing_revision 1`, `REMOVE pending_intent_id`, conditioned on `stripe_subscription_id = :kept`. Plan fields are untouched. Without it the activation poll has no terminal answer and spins for its full 60 s before reporting a failure that isn't one. The install condition never compares timestamps: a replacement subscription can legitimately share an `event.created` second with the outgoing one's last event. A row-condition failure on install is re-read and reclassified (up to three attempts), never treated as stale — the only way an install condition fails is that a concurrent install won, and the re-read routes the loser into the reconcile table.
 
 **State path** (never writes `stripe_subscription_id`).
 
@@ -175,7 +181,7 @@ On `?billing=success` (already read once and stripped): read the record, poll `G
 ## Infra (`template.yaml`)
 
 - `ReportsTable`: add `TimeToLiveSpecification { AttributeName: ttl, Enabled: true }`.
-- `BillingFunction` env: `STRIPE_LIVEMODE` (`!If [IsProd, "true", "false"]`, adding the condition if absent), `GRACE_WINDOW_SECONDS: "604800"`.
+- `BillingFunction` env: `STRIPE_LIVEMODE: !Ref StripeLivemode`, `STRIPE_PRICE_ID_*: !Ref StripePriceId*`, `GRACE_WINDOW_SECONDS: "604800"`. Livemode and the price IDs are **template parameters**, not stage-derived: the `dev` stack runs a live Stripe key, so `!If [IsProd, …]` would reject every real webhook there. `StripeLivemode` defaults to `"true"` and `samconfig.toml` pins it explicitly.
 - New `Api` event `GET /api/billing/me` with the default authorizer.
 - Stripe dashboard: the webhook endpoint should point at the execute-api URL, not the CloudFront domain. Nothing sits between Stripe and signature verification that way. Documented in `docs/operations/SECURITY.md`; not a template change.
 
@@ -203,7 +209,7 @@ Each row is a decision the code must make and a test must cover.
 | Case | Decision |
 |---|---|
 | **Webhook for a user row that does not exist** (row deleted by hand; there is no account-deletion feature) | Detected on the pre-transaction read. Metric `WebhookOrphanUser`, log the user id, return 200. Returning 500 would make Stripe retry for three days and then disable the endpoint for every user |
-| **Stripe API call fails during refetch** (5xx, rate limit, network) | Raise → 500 → Stripe retries. The Stripe client gets `max_network_retries = 2` and a 10 s request timeout, so three calls stay under the 30 s Lambda timeout instead of inheriting the SDK's 80 s default |
+| **Stripe API call fails during refetch** (5xx, rate limit, network) | Raise → 500 → Stripe retries. The Stripe client gets `max_network_retries = 1` and a 5 s request timeout — worst case per call ≈ 5 s × 2 attempts + 0.5 s backoff ≈ 10.5 s — so the webhook's realistic two-call path fits inside the 30 s Lambda timeout instead of inheriting the SDK's 80 s default |
 | **Async payment methods** (bank debit): `checkout.session.completed` fires with the subscription `incomplete` | The install refetch writes `incomplete`, effective plan stays free, the poll keeps waiting. `subscription.updated` → `active` finishes it. `checkout.session.async_payment_failed` needs no handler: the subscription goes `incomplete_expired` on its own |
 | **Unknown price id** on a live subscription (prices rotated in the dashboard, env not updated) | Fail toward capped: `plan = free`, metric `UnknownPriceId` with an alarm, log the price id. The user is billed and gated; the alarm is what fixes it. Silently mapping to a paid tier is the wrong direction |
 | **Subscription with more than one item** | Plinths sells one item. Use `items[0]`, log a warning if more |
@@ -241,4 +247,5 @@ Feature branch `feat/billing-hardening`, commits pushed as work lands, one PR at
 Before either dashboard endpoint (dev or prod) is considered live:
 
 1. Subscribe the endpoint to exactly these seven event types: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.paused`, `customer.subscription.resumed`, `customer.subscription.deleted`, `invoice.payment_failed`. `.created` / `.paused` / `.resumed` are new in this design — an endpoint still configured for the old four leaves paused subscriptions with paid access.
-2. Before the first prod deploy with `STRIPE_LIVEMODE=true`, verify the four `STRIPE_PRICE_ID_*` values in `template.yaml` are live-mode price objects, not test-mode ones — they're currently one hardcoded set for all stages, and a test-mode id makes `Session.create` fail against a live-mode key.
+2. `StripeLivemode` and the four `StripePriceId*` values are **template parameters**, and every one of them must match the mode of the Stripe secret key in that stage's SSM parameter. A live key with `StripeLivemode=false` rejects every real webhook (`WebhookLivemodeMismatch`); a test-mode price id against a live key makes `Session.create` fail. `dev` currently runs a live key, so `samconfig.toml` pins `StripeLivemode="true"` and the price-id defaults are the live-mode objects.
+3. **Test-mode QA pass.** Put a test-mode secret key and webhook secret in the stage's SSM parameters, then deploy with `--parameter-overrides Stage="dev" CognitoCallbackDomain="plinths.net" StripeLivemode=false StripePriceIdPro=<test price> StripePriceIdMax=<test price> StripePriceIdProAnnual=<test price> StripePriceIdMaxAnnual=<test price>`. Run the manual QA list above against `stripe listen`, then restore the live key in SSM and redeploy with the defaults. Leaving the stack in test mode silently drops production webhooks.

@@ -63,6 +63,30 @@ def test_signed_non_dict_body_is_400(ddb_table, stripe_stub, monkeypatch):
     assert called == []
 
 
+def test_signed_object_missing_id_or_type_is_400(ddb_table, stripe_stub, monkeypatch):
+    """A signed JSON object is still malformed if it has no `id` / `type`.
+    Every read below the parse indexes both unguarded, so a KeyError would
+    escape as a 500 and Stripe would retry a payload that can never work."""
+    import webhook
+    import app
+
+    called = []
+    monkeypatch.setattr(webhook, "handle_event", lambda e: called.append(e))
+    seen = []
+    monkeypatch.setattr(app.metrics, "add_metric", lambda **kw: seen.append(kw["name"]))
+
+    for payload in (
+        {"type": "customer.subscription.updated", "livemode": False, "data": {}},
+        {"id": "evt_1", "livemode": False, "data": {}},
+    ):
+        body = json.dumps(payload)
+        code, _ = _post(body, sign(body))
+        assert code == 400
+
+    assert "WebhookMalformedPayload" in seen
+    assert called == []
+
+
 def test_livemode_mismatch_is_400_before_any_work(ddb_table, stripe_stub, monkeypatch):
     import webhook
 

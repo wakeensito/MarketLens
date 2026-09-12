@@ -141,7 +141,10 @@ def create_checkout_session():
             )
             return {"error": "Could not start checkout. Please try again."}, 502
         else:
-            if stripe_client.is_live(existing):
+            # `incomplete` is an abandoned checkout, not a subscription that
+            # bills — blocking here would lock the user out for the 23 h
+            # Stripe takes to expire it.
+            if stripe_client.is_billing_live(existing):
                 return {"error": "subscription_exists"}, 409
 
     customer_id = _get_or_create_stripe_customer(auth, row)
@@ -225,6 +228,10 @@ def get_billing_me():
         "subscription_status": row.get("subscription_status"),
         "entitlement_grace_until": int(grace) if grace is not None else None,
         "last_checkout_intent_id": row.get("last_checkout_intent_id"),
+        # Terminal outcome for the activation poll: "installed", or
+        # "cancelled_duplicate" when this intent's subscription was cancelled
+        # as a duplicate. Without it the poll has nothing to stop on.
+        "last_checkout_outcome": row.get("last_checkout_outcome"),
         "billing_revision": int(row.get("billing_revision") or 0),
         "plan_updated_at": row.get("plan_updated_at"),
         "cancel_at_period_end": bool(row.get("cancel_at_period_end", False)),
@@ -267,6 +274,15 @@ def stripe_webhook():
     # AttributeError escape as a 500.
     if not isinstance(event, dict):
         logger.warning("Webhook payload was not a JSON object")
+        metrics.add_metric(
+            name="WebhookMalformedPayload", unit=MetricUnit.Count, value=1
+        )
+        return {"error": "Bad request"}, 400
+
+    # Everything below reads `event["id"]` / `event["type"]` unguarded. A
+    # signed body missing either is malformed, not a 500.
+    if not event.get("id") or not event.get("type"):
+        logger.warning("Webhook payload missing id or type")
         metrics.add_metric(
             name="WebhookMalformedPayload", unit=MetricUnit.Count, value=1
         )

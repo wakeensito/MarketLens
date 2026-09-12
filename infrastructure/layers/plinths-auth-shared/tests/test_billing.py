@@ -139,3 +139,17 @@ def test_auth_context_plan_is_effective(monkeypatch):
     )
     ctx = cookie_jwt.verify_session_cookie("ml_access=tok")
     assert ctx is not None and ctx.plan == "free"
+
+
+@pytest.mark.parametrize("bad", ["abc", object(), [], {}, "", "1.5"])
+def test_invalid_grace_value_is_not_entitled(bad):
+    """A hand-edited or corrupted grace value must fail closed. `int()` on it
+    raises, and this function is called from every plan gate — an exception
+    here would 500 the whole request instead of denying access."""
+    row = {
+        "plan": "pro",
+        "subscription_status": "past_due",
+        "entitlement_grace_until": bad,
+    }
+    assert is_entitled(row, NOW) is False
+    assert effective_plan(row, NOW) == "free"

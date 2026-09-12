@@ -1,3 +1,7 @@
+import time
+
+import pytest
+from botocore.exceptions import ClientError
 from conftest import get_user
 
 
@@ -25,7 +29,10 @@ def test_apply_writes_marker_and_row(ddb_table, user_row):
     marker = ddb_table.get_item(
         Key={"pk": "BILLING_EVENT#evt_1", "sk": "BILLING_EVENT#evt_1"}
     )["Item"]
-    assert marker["ttl"] > 0
+    # The TTL is what stops the markers accumulating forever; assert the real
+    # horizon, not just "positive".
+    expected = time.time() + store.MARKER_TTL_SECONDS
+    assert abs(int(marker["ttl"]) - expected) <= 5
 
 
 def test_duplicate_event_writes_nothing(ddb_table, user_row):
@@ -87,3 +94,28 @@ def test_serialize_numbers_and_bools():
     assert store.serialize(5) == {"N": "5"}
     assert store.serialize(True) == {"BOOL": True}
     assert store.serialize("x") == {"S": "x"}
+
+
+def test_transaction_conflict_reraises(ddb_table, user_row, monkeypatch):
+    """A `TransactionConflict` cancellation is a concurrent writer, not a
+    duplicate and not a stale event. It must escape so the caller returns 5xx
+    and Stripe retries — swallowing it would silently drop the event."""
+    import store
+
+    user_row()
+
+    def boom(**_):
+        raise ClientError(
+            {
+                "Error": {"Code": "TransactionCanceledException"},
+                "CancellationReasons": [
+                    {"Code": "TransactionConflict"},
+                    {"Code": "None"},
+                ],
+            },
+            "TransactWriteItems",
+        )
+
+    monkeypatch.setattr(store._get_client(), "transact_write_items", boom)
+    with pytest.raises(ClientError):
+        store.apply_event("evt_9", "u1", _upd(subscription_status="active"))

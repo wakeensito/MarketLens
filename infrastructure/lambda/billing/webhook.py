@@ -13,6 +13,7 @@ import os
 import time
 from datetime import datetime, timezone
 
+import stripe
 from aws_lambda_powertools import Logger, Metrics
 from aws_lambda_powertools.metrics import MetricUnit
 from plinths_auth.billing import ENTITLED_STATUSES
@@ -183,6 +184,10 @@ def _install_update(
         "cancel_at_period_end": bool(sub.get("cancel_at_period_end")),
         "current_period_end": _current_period_end(sub),
         "plan_updated_at": _now_iso(),
+        # Terminal outcome for the activation poll. Every install overwrites
+        # any earlier "cancelled_duplicate" so a later, legitimate checkout
+        # is never read as the duplicate one.
+        "last_checkout_outcome": "installed",
     }
     if intent_id:
         sets["last_checkout_intent_id"] = intent_id
@@ -198,11 +203,20 @@ def _install_update(
     }
 
 
-def _cancel_newcomer(event: dict, user_id: str, sub: dict, kept: str) -> store.Outcome:
-    """Two live subscriptions for the same user: cancel the one just found via
-    the API and leave the recorded (`kept`) subscription alone. Shared by
-    both the intent-match branch (a different subscription is already live
-    on the row) and the reconcile branch (the recorded id is still live)."""
+def _cancel_newcomer(
+    event: dict, user_id: str, sub: dict, kept: str, intent_id: str | None
+) -> store.Outcome:
+    """Two billing-live subscriptions for the same user: cancel the one just
+    found via the API and leave the recorded (`kept`) subscription alone.
+    Shared by both the intent-match branch (a different subscription is
+    already live on the row) and the reconcile branch.
+
+    The row write is what gives the activation poll a terminal answer. A
+    marker-only apply leaves the poll spinning for its full 60 s and then
+    reporting a failure, when in fact the outcome is known and final. The
+    plan fields are untouched — only the checkout correlation, the outcome,
+    and the revision bump the frontend watches.
+    """
     stripe_client.cancel_subscription(sub["id"])
     metrics.add_metric(
         name="DoubleSubscriptionCancelled", unit=MetricUnit.Count, value=1
@@ -217,7 +231,51 @@ def _cancel_newcomer(event: dict, user_id: str, sub: dict, kept: str) -> store.O
             "kept": kept,
         },
     )
-    return store.apply_event(event["id"], None, None)
+    sets = {
+        "last_checkout_outcome": "cancelled_duplicate",
+        "plan_updated_at": _now_iso(),
+    }
+    if intent_id:
+        sets["last_checkout_intent_id"] = intent_id
+    values = {f":s_{k}": store.serialize(v) for k, v in sets.items()}
+    values[":one"] = store.serialize(1)
+    values[":kept"] = store.serialize(kept)
+    set_expr = ", ".join(f"{k} = :s_{k}" for k in sets)
+    update = {
+        "UpdateExpression": (
+            f"SET {set_expr} ADD billing_revision :one REMOVE pending_intent_id"
+        ),
+        "ConditionExpression": "stripe_subscription_id = :kept",
+        "ExpressionAttributeValues": values,
+    }
+    return store.apply_event(event["id"], user_id, update)
+
+
+def _recorded_blocks_install(event: dict, user_id: str, recorded_id: str) -> bool:
+    """Does the subscription already on the row stop a newcomer installing?
+
+    Only a *billing-live* one does. An `incomplete` recorded subscription is
+    an abandoned checkout that never charged and that Stripe expires on its
+    own after 23 h — keeping it would block the user's real subscription for
+    a day. Cancel it (best effort) and let the newcomer through.
+    """
+    recorded_sub = stripe_client.retrieve_subscription(recorded_id)
+    if stripe_client.is_billing_live(recorded_sub):
+        return True
+    if stripe_client.is_live(recorded_sub):
+        try:
+            stripe_client.cancel_subscription(recorded_id)
+        except stripe.StripeError as e:
+            logger.warning(
+                "Could not cancel incomplete recorded subscription",
+                extra={
+                    "event_id": event["id"],
+                    "user_id": user_id,
+                    "subscription_id": recorded_id,
+                    "error": str(e),
+                },
+            )
+    return False
 
 
 def install_subscription(event: dict, user_id: str, sub: dict) -> str:
@@ -246,16 +304,14 @@ def install_subscription(event: dict, user_id: str, sub: dict) -> str:
         created = int(event["created"])
 
         if intent and pending and intent == pending:
-            other_live = False
+            other_blocks = False
             if recorded and recorded != sub["id"]:
-                other_live = stripe_client.is_live(
-                    stripe_client.retrieve_subscription(recorded)
-                )
-            if other_live:
+                other_blocks = _recorded_blocks_install(event, user_id, recorded)
+            if other_blocks:
                 # The matching intent still can't overwrite a different
-                # subscription that is actually live on the row — treat this
-                # exactly like the reconcile double-subscription case.
-                outcome = _cancel_newcomer(event, user_id, sub, recorded)
+                # subscription that is actually billing on the row — treat
+                # this exactly like the reconcile double-subscription case.
+                outcome = _cancel_newcomer(event, user_id, sub, recorded, intent)
             else:
                 update = _install_update(
                     sub,
@@ -272,13 +328,11 @@ def install_subscription(event: dict, user_id: str, sub: dict) -> str:
         elif recorded == sub["id"]:
             outcome = store.apply_event(event["id"], None, None)
         else:
-            recorded_live = False
+            recorded_blocks = False
             if recorded:
-                recorded_live = stripe_client.is_live(
-                    stripe_client.retrieve_subscription(recorded)
-                )
+                recorded_blocks = _recorded_blocks_install(event, user_id, recorded)
 
-            if not recorded_live:
+            if not recorded_blocks:
                 condition = "attribute_not_exists(stripe_subscription_id) OR stripe_subscription_id = :recorded"
                 update = _install_update(
                     sub,
@@ -290,8 +344,8 @@ def install_subscription(event: dict, user_id: str, sub: dict) -> str:
                 )
                 outcome = store.apply_event(event["id"], user_id, update)
             else:
-                # Two live subscriptions: the user is paying twice. Cancel the newcomer.
-                outcome = _cancel_newcomer(event, user_id, sub, recorded)
+                # Two billing subscriptions: the user is paying twice. Cancel the newcomer.
+                outcome = _cancel_newcomer(event, user_id, sub, recorded, intent)
 
         if outcome is store.Outcome.STALE and attempt < MAX_CONDITION_RETRIES - 1:
             time.sleep(0.05)

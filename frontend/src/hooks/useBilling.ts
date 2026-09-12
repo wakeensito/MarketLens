@@ -22,12 +22,19 @@ type ActivationState =
   | { kind: 'polling'; startedAt: number }
   | { kind: 'lagged'; startedAt: number }
   | { kind: 'done'; plan: string }
+  /** This checkout duplicated a live subscription; the backend cancelled it. */
+  | { kind: 'duplicate' }
   | { kind: 'unknown' }
   | { kind: 'error'; message: string };
 
 const POLL_INTERVAL_MS = 800;
 const LAG_THRESHOLD_MS = 10_000;
 const MAX_TOTAL_MS = 60_000;
+// Portal return: Stripe has already processed the change, but the webhook may
+// still be a second or two behind. Bounded so a portal visit that changed
+// nothing settles quickly instead of hanging.
+const PORTAL_POLL_INTERVAL_MS = 800;
+const PORTAL_POLL_MAX_MS = 8_000;
 const ENTITLED = new Set(['active', 'trialing']);
 
 const CHECKOUT_KEY = 'plinths.checkout';
@@ -218,6 +225,17 @@ export function useBilling() {
       try {
         const me = await getBillingMe();
         if (handle.cancelled) return;
+        // Checked before the entitled branch: on a duplicate the row still
+        // holds the *kept* subscription, which is active — reading that as
+        // success would tell the user the wrong thing.
+        if (
+          me.last_checkout_intent_id === record.intentId &&
+          me.last_checkout_outcome === 'cancelled_duplicate'
+        ) {
+          writeCheckout(null);
+          setActivation({ kind: 'duplicate' });
+          return;
+        }
         if (
           me.last_checkout_intent_id === record.intentId &&
           me.subscription_status !== null &&
@@ -250,15 +268,31 @@ export function useBilling() {
     setActivation({ kind: 'idle' });
   }, []);
 
-  /** Returning from the Customer Portal: did anything change while we were away? */
+  /**
+   * Returning from the Customer Portal: did anything change while we were away?
+   *
+   * A single read races the webhook — Stripe redirects the browser back the
+   * moment the change is made, often before `customer.subscription.updated`
+   * has been delivered and applied. Poll for a bounded window instead, and
+   * give up rather than spinning: the next page load catches a late webhook.
+   */
   const checkPortalReturn = useCallback(async (): Promise<boolean> => {
     const before = readPortalRevision();
     writePortalRevision(null);
-    try {
-      const me = await getBillingMe();
-      return before === null || me.billing_revision !== before;
-    } catch {
-      return true; // can't tell — refresh anyway
+    // Nothing to compare against (cleared storage, another tab): one look is
+    // all we can do, and refreshing is the safe answer.
+    if (before === null) return true;
+
+    const deadline = Date.now() + PORTAL_POLL_MAX_MS;
+    for (;;) {
+      try {
+        const me = await getBillingMe();
+        if (me.billing_revision !== before) return true;
+      } catch {
+        // Transient — keep trying until the deadline.
+      }
+      if (Date.now() >= deadline) return false;
+      await new Promise(resolve => window.setTimeout(resolve, PORTAL_POLL_INTERVAL_MS));
     }
   }, []);
 

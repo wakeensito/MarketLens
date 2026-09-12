@@ -51,6 +51,22 @@ def test_checkout_409_when_live_subscription_exists(ddb_table, user_row, stripe_
     assert "pending_intent_id" not in get_user(ddb_table)
 
 
+def test_checkout_allowed_when_recorded_subscription_incomplete(
+    ddb_table, user_row, stripe_stub
+):
+    """An `incomplete` recorded subscription is an abandoned checkout that
+    never charged. Stripe takes 23 h to expire it; blocking checkout for that
+    long is the bug."""
+    user_row(
+        stripe_subscription_id="sub_1", subscription_status="incomplete", plan="pro"
+    )
+    stripe_stub["subscriptions"]["sub_1"] = make_subscription(status="incomplete")
+    code, body = _post({"plan": "pro", "intent_id": INTENT})
+    assert code == 200 and body["checkout_url"] == "https://stripe.test/cs"
+    assert len(stripe_stub["sessions"]) == 1
+    assert get_user(ddb_table)["pending_intent_id"] == INTENT
+
+
 def test_checkout_proceeds_when_recorded_subscription_is_gone(
     ddb_table, user_row, stripe_stub
 ):

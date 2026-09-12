@@ -82,7 +82,7 @@ Base URL: `https://amcgahmo7i.execute-api.us-east-1.amazonaws.com/dev`
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | `/api/health` | none | Health check |
-| GET | `/api/me` | required | Returns the authenticated user incl. `plan`; used by billing activation poll |
+| GET | `/api/me` | required | Returns the authenticated user incl. `plan` |
 | POST | `/api/reports` | required | Create report, body: `{"idea_text": "..."}` |
 | GET | `/api/reports/{report_id}` | required | Get report (poll until `status: "complete"`) |
 | GET | `/api/reports` | required | List user's reports |
@@ -198,7 +198,7 @@ Plinths is solo-only. The plan axis is power, not audience.
 
 **Daily report limits** (`infrastructure/lambda/api/app.py` `plan_limits`): free 3, pro 15, max 9999, admin 9999.
 
-**Max differentiators vs Pro**: unlimited reports, cross-report memory in Muse, Muse model selection (Claude, GPT, Gemini, Perplexity vs. Pro's default model). Stripe price IDs live in the SAM template (`STRIPE_PRICE_ID_PRO`, `STRIPE_PRICE_ID_PRO_ANNUAL`, `STRIPE_PRICE_ID_MAX`, `STRIPE_PRICE_ID_MAX_ANNUAL`).
+**Max differentiators vs Pro**: unlimited reports, cross-report memory in Muse, Muse model selection (Claude, GPT, Gemini, Perplexity vs. Pro's default model). Stripe price IDs are SAM **template parameters** (`StripePriceIdPro`, `StripePriceIdProAnnual`, `StripePriceIdMax`, `StripePriceIdMaxAnnual` → the `STRIPE_PRICE_ID_*` env vars), as is `StripeLivemode`; all five must match the Stripe mode of the stage's secret key in SSM, so a test-mode QA pass overrides them at deploy time instead of editing the template.
 
 **Build Brief gating**: Build Brief is a Pro feature. Free users get a **small daily allowance** — **temporary beta: 3/day** via env `FREE_BUILD_BRIEF_DAILY_LIMIT` (default 3), tracked by `free_brief_count_today` + `free_brief_count_date` on the `USER#{user_id}` row, reserved atomically per generation and reset daily (UTC); once today's allowance is spent the pane shows the Pro upsell. (Long-term spec is **one lifetime sample**; revert by lowering the env var or reverting the daily-counter commit. The old `free_build_brief_used` flag is now unused and just lingers on existing rows.) GET `/api/build-brief/{report_id}` is open to all authenticated users and returns `free_brief_used` so the frontend can render the correct CTA. Paid plans (Pro, Max, admin) have no cap.
 

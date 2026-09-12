@@ -275,6 +275,8 @@ export interface BillingMeResponse {
   subscription_status: string | null;
   entitlement_grace_until: number | null;
   last_checkout_intent_id: string | null;
+  /** Terminal outcome for the activation poll: 'installed' | 'cancelled_duplicate' | null. */
+  last_checkout_outcome: string | null;
   billing_revision: number;
   plan_updated_at: string | null;
   cancel_at_period_end: boolean;

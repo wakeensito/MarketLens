@@ -26,7 +26,11 @@ capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
 #   bin/deploy
 # which fetches the current SSM values and passes them via
 # `--parameter-overrides`.
-parameter_overrides = "Stage=\"dev\" CognitoCallbackDomain=\"plinths.net\""
+# StripeLivemode is explicit, not derived from Stage: the `dev` stack runs a
+# LIVE Stripe key, so a stage-derived "false" would reject every real webhook.
+# Flip it to "false" only together with a test-mode key in SSM and test-mode
+# StripePriceId* overrides.
+parameter_overrides = "Stage=\"dev\" CognitoCallbackDomain=\"plinths.net\" StripeLivemode=\"true\""
 image_repositories = []
 
 [default.global.parameters]

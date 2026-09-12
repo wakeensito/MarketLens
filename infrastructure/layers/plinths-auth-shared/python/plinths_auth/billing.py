@@ -36,7 +36,12 @@ def is_entitled(row: dict, now: int) -> bool:
     if status in ENTITLED_STATUSES:
         return True
     if status == "past_due":
-        return int(row.get("entitlement_grace_until") or 0) > now
+        # A hand-edited or corrupted grace value must fail closed, not raise
+        # out of every gate that calls this.
+        try:
+            return int(row.get("entitlement_grace_until") or 0) > now
+        except (TypeError, ValueError):
+            return False
     return False
 
 
