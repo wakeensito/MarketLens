@@ -1,5 +1,6 @@
 import base64
 import json
+import time
 
 from conftest import LambdaContext, api_event, make_event, make_subscription, sign
 
@@ -25,6 +26,41 @@ def test_bad_signature_is_400_and_touches_nothing(ddb_table, stripe_stub, monkey
     body, _ = json.dumps(make_event("customer.subscription.updated", {})), None
     code, _ = _post(body, sign(body, secret="whsec_wrong"))
     assert code == 400 and called == []
+
+
+def test_stale_timestamp_signature_is_rejected(ddb_table, stripe_stub, monkeypatch):
+    """The signature is correct for the payload but the `t=` in the header is
+    ~28 hours old. `verify_header` only checks the timestamp when it is handed
+    a tolerance, so without one a captured request replays forever."""
+    import webhook
+    import app
+
+    called = []
+    monkeypatch.setattr(webhook, "handle_event", lambda e: called.append(e))
+    seen = []
+    monkeypatch.setattr(app.metrics, "add_metric", lambda **kw: seen.append(kw["name"]))
+    body = json.dumps(make_event("customer.subscription.updated", {}))
+    code, _ = _post(body, sign(body, ts=int(time.time()) - 100_000))
+    assert code == 400
+    assert "WebhookSignatureFailure" in seen
+    assert called == []
+
+
+def test_signed_non_dict_body_is_400(ddb_table, stripe_stub, monkeypatch):
+    """A correctly signed body can still be JSON that isn't an object. Every
+    read below the parse indexes `event`, so this must be turned away as
+    malformed rather than escaping as an AttributeError."""
+    import webhook
+    import app
+
+    called = []
+    monkeypatch.setattr(webhook, "handle_event", lambda e: called.append(e))
+    seen = []
+    monkeypatch.setattr(app.metrics, "add_metric", lambda **kw: seen.append(kw["name"]))
+    code, _ = _post("[1]", sign("[1]"))
+    assert code == 400
+    assert "WebhookMalformedPayload" in seen
+    assert called == []
 
 
 def test_livemode_mismatch_is_400_before_any_work(ddb_table, stripe_stub, monkeypatch):

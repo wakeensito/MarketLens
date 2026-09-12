@@ -240,7 +240,12 @@ def stripe_webhook():
     sig_header = app.current_event.headers.get("stripe-signature", "")
     secret = stripe_client.webhook_secret()
     try:
-        stripe.WebhookSignature.verify_header(payload, sig_header, secret)
+        # `verify_header` defaults to `tolerance=None`, which skips the timestamp
+        # check outright — a captured signature would replay forever. Pass the
+        # same 300s window `construct_event` used to apply for us.
+        stripe.WebhookSignature.verify_header(
+            payload, sig_header, secret, stripe.Webhook.DEFAULT_TOLERANCE
+        )
     except stripe.SignatureVerificationError:
         logger.warning("Webhook signature verification failed")
         metrics.add_metric(
@@ -252,6 +257,16 @@ def stripe_webhook():
         event = json.loads(payload)
     except (json.JSONDecodeError, ValueError) as e:
         logger.warning("Webhook payload malformed", extra={"error": str(e)})
+        metrics.add_metric(
+            name="WebhookMalformedPayload", unit=MetricUnit.Count, value=1
+        )
+        return {"error": "Bad request"}, 400
+
+    # A signed body can still be valid JSON that isn't an object (`"x"`, `[1]`).
+    # Everything below indexes `event`, so reject it here rather than letting an
+    # AttributeError escape as a 500.
+    if not isinstance(event, dict):
+        logger.warning("Webhook payload was not a JSON object")
         metrics.add_metric(
             name="WebhookMalformedPayload", unit=MetricUnit.Count, value=1
         )
