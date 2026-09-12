@@ -216,8 +216,28 @@ def _cancel_newcomer(
     reporting a failure, when in fact the outcome is known and final. The
     plan fields are untouched — only the checkout correlation, the outcome,
     and the revision bump the frontend watches.
+
+    The cancel is best effort. It is an irreversible side effect that has
+    already happened by the time the row write is attempted, so a failure
+    here must not abort the write (and a *repeat* call on an
+    already-cancelled subscription raises `InvalidRequestError`, which would
+    turn a recoverable state into a 500). The caller treats a STALE outcome
+    from this path as terminal for the same reason: the newcomer is gone,
+    and re-classifying against a fresh row snapshot while still holding the
+    original `sub` would install the subscription we just cancelled.
     """
-    stripe_client.cancel_subscription(sub["id"])
+    try:
+        stripe_client.cancel_subscription(sub["id"])
+    except stripe.StripeError as e:
+        logger.warning(
+            "Could not cancel duplicate subscription",
+            extra={
+                "event_id": event["id"],
+                "user_id": user_id,
+                "subscription_id": sub["id"],
+                "error": str(e),
+            },
+        )
     metrics.add_metric(
         name="DoubleSubscriptionCancelled", unit=MetricUnit.Count, value=1
     )
@@ -303,6 +323,9 @@ def install_subscription(event: dict, user_id: str, sub: dict) -> str:
         recorded = row.get("stripe_subscription_id") or ""
         created = int(event["created"])
 
+        # A cancel already fired: the outcome below is final whatever it is.
+        cancelled_newcomer = False
+
         if intent and pending and intent == pending:
             other_blocks = False
             if recorded and recorded != sub["id"]:
@@ -312,6 +335,7 @@ def install_subscription(event: dict, user_id: str, sub: dict) -> str:
                 # subscription that is actually billing on the row — treat
                 # this exactly like the reconcile double-subscription case.
                 outcome = _cancel_newcomer(event, user_id, sub, recorded, intent)
+                cancelled_newcomer = True
             else:
                 update = _install_update(
                     sub,
@@ -346,8 +370,19 @@ def install_subscription(event: dict, user_id: str, sub: dict) -> str:
             else:
                 # Two billing subscriptions: the user is paying twice. Cancel the newcomer.
                 outcome = _cancel_newcomer(event, user_id, sub, recorded, intent)
+                cancelled_newcomer = True
 
-        if outcome is store.Outcome.STALE and attempt < MAX_CONDITION_RETRIES - 1:
+        # Retrying is only safe when nothing irreversible has happened yet.
+        # Once the newcomer is cancelled, `sub` is a stale snapshot of a dead
+        # subscription: a re-read that no longer shows a billing-live
+        # recorded subscription would install it as `active`. Let Stripe
+        # retry the delivery instead — its refetch will report `canceled`
+        # and the event drops.
+        if (
+            outcome is store.Outcome.STALE
+            and not cancelled_newcomer
+            and attempt < MAX_CONDITION_RETRIES - 1
+        ):
             time.sleep(0.05)
             continue
         return _log_outcome(outcome, event, user_id, sub["id"])

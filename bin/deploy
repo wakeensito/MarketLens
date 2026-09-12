@@ -50,6 +50,9 @@ PARAM_OVERRIDES=(
     "CognitoCallbackDomain=plinths.net"
     "GoogleClientId=${GOOGLE_CLIENT_ID}"
     "GoogleClientSecret=${GOOGLE_CLIENT_SECRET}"
+    # Must be carried explicitly: this array shadows samconfig.toml, so without
+    # it a deploy after a test-mode QA pass would leave StripeLivemode=false.
+    "StripeLivemode=${STRIPE_LIVEMODE:-true}"
 )
 
 if aws cloudformation describe-stacks \

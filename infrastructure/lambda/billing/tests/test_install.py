@@ -385,3 +385,67 @@ def test_install_race_reclassifies_and_cancels_loser(
     assert "sub_loser" in stripe_stub["cancelled"]
     assert "DoubleSubscriptionCancelled" in seen
     assert get_user(ddb_table)["last_checkout_outcome"] == "cancelled_duplicate"
+
+
+def test_cancel_newcomer_stale_does_not_reinstall(ddb_table, user_row, stripe_stub):
+    """The cancel is irreversible and happens before the row write. If that
+    write loses a race (STALE), retrying would re-classify against a fresh
+    row while still holding the original `sub` snapshot — and a recorded
+    subscription that is no longer billing-live would let the loop install
+    the very subscription we just cancelled, as `active`. The cancel path is
+    terminal: log the stale outcome and let Stripe redeliver (its refetch
+    reports `canceled` and the event drops)."""
+    import store
+    import webhook
+
+    user_row(
+        stripe_subscription_id="sub_1",
+        subscription_status="active",
+        plan="pro",
+        pending_intent_id="intent-2",
+    )
+    stripe_stub["subscriptions"]["sub_1"] = make_subscription(
+        sub_id="sub_1", status="active"
+    )
+    stripe_stub["subscriptions"]["sub_2"] = make_subscription(
+        sub_id="sub_2", status="active"
+    )
+    stripe_stub["subscriptions"]["sub_x"] = make_subscription(
+        sub_id="sub_x", status="incomplete"
+    )
+
+    real_apply_event = store.apply_event
+    calls = []
+
+    def fake_apply_event(event_id, user_id, update):
+        calls.append(update)
+        if len(calls) == 1:
+            # A concurrent writer moved the row between our snapshot and the
+            # cancel-path write, so our `stripe_subscription_id = :kept`
+            # condition fails.
+            ddb_table.update_item(
+                Key={"pk": "USER#u1", "sk": "USER#u1"},
+                UpdateExpression=(
+                    "SET stripe_subscription_id = :s, subscription_status = :st"
+                ),
+                ExpressionAttributeValues={":s": "sub_x", ":st": "incomplete"},
+            )
+            return store.Outcome.STALE
+        return real_apply_event(event_id, user_id, update)
+
+    import pytest
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(store, "apply_event", fake_apply_event)
+        out = webhook.handle_event(
+            make_event(
+                "checkout.session.completed",
+                _session(sub_id="sub_2", intent="intent-2"),
+            )
+        )
+
+    assert out == "stale"
+    # Cancelled exactly once — a second Subscription.cancel would raise.
+    assert stripe_stub["cancelled"] == ["sub_2"]
+    # And the cancelled subscription was never installed over the winner.
+    assert get_user(ddb_table)["stripe_subscription_id"] == "sub_x"

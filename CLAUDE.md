@@ -90,7 +90,7 @@ Base URL: `https://amcgahmo7i.execute-api.us-east-1.amazonaws.com/dev`
 | POST | `/api/billing/checkout` | required | Create Stripe Checkout Session, body: `{"plan": ..., "intent_id": "<uuid>"}` |
 | POST | `/api/billing/portal` | required | Create Stripe Customer Portal session for self-serve management |
 | POST | `/api/billing/webhook` | none (Stripe-signed) | Stripe webhook receiver — signature is verified, never trust the body without it |
-| GET | `/api/billing/me` | required | Billing state for the activation poll: `effective_plan`, `subscription_status`, `billing_revision`, `last_checkout_intent_id` |
+| GET | `/api/billing/me` | required | Billing state for the activation poll: `effective_plan`, `subscription_status`, `billing_revision`, `last_checkout_intent_id`, `last_checkout_outcome` |
 | GET | `/api/muse/conversations/{report_id}` | required | List the per-report Muse thread |
 | DELETE | `/api/muse/conversations/{report_id}` | required | Clear the per-report thread |
 | POST | `/api/muse/conversations/{report_id}/messages/{message_id}/feedback` | required | Thumbs up/down on a Muse turn |

@@ -275,6 +275,10 @@ export function useBilling() {
    * moment the change is made, often before `customer.subscription.updated`
    * has been delivered and applied. Poll for a bounded window instead, and
    * give up rather than spinning: the next page load catches a late webhook.
+   *
+   * Shares `pollHandleRef` with the activation poll so an unmount (or a
+   * cancel) stops it — an 8 s loop firing requests into a dead component is
+   * the same leak the activation poll already guards against.
    */
   const checkPortalReturn = useCallback(async (): Promise<boolean> => {
     const before = readPortalRevision();
@@ -283,16 +287,23 @@ export function useBilling() {
     // all we can do, and refreshing is the safe answer.
     if (before === null) return true;
 
+    if (pollHandleRef.current) pollHandleRef.current.cancelled = true;
+    const handle = { cancelled: false };
+    pollHandleRef.current = handle;
+
     const deadline = Date.now() + PORTAL_POLL_MAX_MS;
     for (;;) {
       try {
         const me = await getBillingMe();
+        if (handle.cancelled) return false;
         if (me.billing_revision !== before) return true;
       } catch {
+        if (handle.cancelled) return false;
         // Transient — keep trying until the deadline.
       }
       if (Date.now() >= deadline) return false;
       await new Promise(resolve => window.setTimeout(resolve, PORTAL_POLL_INTERVAL_MS));
+      if (handle.cancelled) return false;
     }
   }, []);
 
