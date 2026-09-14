@@ -176,14 +176,14 @@ export default function App() {
   });
   const pendingCheckoutPlanRef = useRef<import('./api').BillingPlan | null>(null);
 
-  // Read ?billing=success|cancelled once on boot, strip the query, dispatch.
+  // Read ?billing=success|cancelled|portal once on boot, strip the query, dispatch.
   const billingFlagHandledRef = useRef(false);
   useEffect(() => {
     if (billingFlagHandledRef.current) return;
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
     const flag = params.get('billing');
-    if (flag !== 'success' && flag !== 'cancelled') return;
+    if (flag !== 'success' && flag !== 'cancelled' && flag !== 'portal') return;
     billingFlagHandledRef.current = true;
     params.delete('billing');
     params.delete('session_id');
@@ -191,9 +191,15 @@ export default function App() {
     const url = window.location.pathname + (remaining ? `?${remaining}` : '');
     window.history.replaceState({}, '', url);
     if (flag === 'success') {
-      billing.beginActivationPoll(auth.user?.plan ?? 'free');
+      billing.beginActivationPoll();
+    } else if (flag === 'portal') {
+      void billing.checkPortalReturn().then(changed => { if (changed) void auth.reload(); });
+    } else if (flag === 'cancelled') {
+      billing.clearCheckoutRecord();
     }
-  }, [billing, auth.user?.plan]);
+    // billing.* and auth.reload are stable callbacks; the whole objects would refire this on every tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [billing.beginActivationPoll, billing.checkPortalReturn, billing.clearCheckoutRecord, auth.reload]);
 
   // Auto-dismiss cancel toast after 4 seconds.
   useEffect(() => {
@@ -205,10 +211,12 @@ export default function App() {
   // When activation completes, pull a fresh auth snapshot so plan-gated UI updates.
   useEffect(() => {
     if (billing.activation.kind !== 'done') return;
-    void auth.refresh();
-    // auth.refresh is stable; depending on the whole auth object would refire on every login/logout state change.
+    // reload(), not refresh(): refresh only rotates the token, so the new
+    // plan would never reach the UI until a full page load.
+    void auth.reload();
+    // auth.reload is stable; depending on the whole auth object would refire on every login/logout state change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [billing.activation.kind, auth.refresh]);
+  }, [billing.activation.kind, auth.reload]);
 
   const onActivationComplete = useCallback(() => {
     billing.cancelActivationPoll();

@@ -36,3 +36,6 @@ frontend/dist/
 
 # Security docs (local-only)
 docs/SECURITY.md
+
+# Local Python venv
+.venv/

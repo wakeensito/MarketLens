@@ -45,11 +45,42 @@ if [[ -z "${GOOGLE_CLIENT_ID}" || -z "${GOOGLE_CLIENT_SECRET}" ]]; then
     exit 1
 fi
 
+# StripeLivemode is derived from the key that will actually be used, not from
+# a default or an env var. The two can only disagree by mistake, and either
+# direction of drift is silent: a live key with StripeLivemode=false rejects
+# every real webhook, a test key with true does the reverse. The key value is
+# never echoed.
+echo "→ Deriving StripeLivemode from ${SSM_PREFIX}/stripe-secret-key..."
+STRIPE_SECRET_KEY=$(aws ssm get-parameter \
+    --name "${SSM_PREFIX}/stripe-secret-key" \
+    --with-decryption \
+    --query 'Parameter.Value' \
+    --output text \
+    --region "${AWS_REGION}")
+case "${STRIPE_SECRET_KEY}" in
+    sk_live_*|rk_live_*) DERIVED_LIVEMODE="true" ;;
+    sk_test_*|rk_test_*) DERIVED_LIVEMODE="false" ;;
+    *)
+        echo "✗ ${SSM_PREFIX}/stripe-secret-key is neither a live nor a test key (sk_live_*/rk_live_*/sk_test_*/rk_test_*) — refusing to deploy." >&2
+        exit 1
+        ;;
+esac
+unset STRIPE_SECRET_KEY
+
+if [[ -n "${STRIPE_LIVEMODE:-}" && "${STRIPE_LIVEMODE}" != "${DERIVED_LIVEMODE}" ]]; then
+    echo "✗ STRIPE_LIVEMODE=${STRIPE_LIVEMODE} in the environment disagrees with the key in SSM (StripeLivemode=${DERIVED_LIVEMODE}) — refusing to deploy." >&2
+    exit 1
+fi
+echo "→ StripeLivemode=${DERIVED_LIVEMODE} (derived from the key in SSM)."
+
 PARAM_OVERRIDES=(
     "Stage=${STAGE}"
     "CognitoCallbackDomain=plinths.net"
     "GoogleClientId=${GOOGLE_CLIENT_ID}"
     "GoogleClientSecret=${GOOGLE_CLIENT_SECRET}"
+    # Must be carried explicitly: this array shadows samconfig.toml, so without
+    # it a deploy after a test-mode QA pass would leave StripeLivemode=false.
+    "StripeLivemode=${DERIVED_LIVEMODE}"
 )
 
 if aws cloudformation describe-stacks \

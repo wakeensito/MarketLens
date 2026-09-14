@@ -21,6 +21,7 @@ import boto3
 import jwt
 from jwt import PyJWKClient
 
+from .billing import effective_plan
 
 # ─── Configuration (resolved at import time) ───
 
@@ -74,7 +75,7 @@ class AuthContext:
 
     user_id: str
     org_id: str
-    plan: str
+    plan: str  # effective plan — already accounts for subscription_status
     email: str
 
 
@@ -155,6 +156,6 @@ def verify_session_cookie(cookie_header: str | None) -> AuthContext | None:
     return AuthContext(
         user_id=sub,
         org_id=org_id,
-        plan=user.get("plan", "free"),
+        plan=effective_plan(user),
         email=user.get("email", ""),
     )

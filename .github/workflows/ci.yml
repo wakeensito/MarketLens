@@ -57,10 +57,10 @@ jobs:
         run: pip install ruff mypy
 
       - name: Ruff lint
-        run: ruff check infrastructure/lambda/ scripts/
+        run: ruff check infrastructure/lambda/ infrastructure/layers/ scripts/
 
       - name: Ruff format check
-        run: ruff format --check infrastructure/lambda/ scripts/
+        run: ruff format --check infrastructure/lambda/ infrastructure/layers/ scripts/
 
       # Each Lambda is its own folder with app.py — checking infrastructure/lambda/ as one tree
       # makes mypy treat every app.py as duplicate module "app".
@@ -70,7 +70,38 @@ jobs:
           for d in infrastructure/lambda/*/; do
             mypy "$d" --ignore-missing-imports --no-strict-optional
           done
+          mypy infrastructure/layers/plinths-auth-shared/python --ignore-missing-imports --no-strict-optional
           mypy scripts/ --ignore-missing-imports --no-strict-optional
+
+  python-test:
+    name: Python Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      # Every Lambda / layer directory that ships a tests/ folder and a
+      # requirements-dev.txt runs in isolation so their deps never collide.
+      - name: Run pytest per directory
+        run: |
+          set -euo pipefail
+          failed=0
+          for d in infrastructure/lambda/*/ infrastructure/layers/*/; do
+            [ -d "$d/tests" ] || continue
+            echo "=== $d"
+            python -m venv "/tmp/venv-$(basename "$d")"
+            # shellcheck disable=SC1090
+            . "/tmp/venv-$(basename "$d")/bin/activate"
+            pip install -q --upgrade pip
+            if [ -f "$d/requirements.txt" ]; then pip install -q -r "$d/requirements.txt"; fi
+            if [ -f "$d/requirements-dev.txt" ]; then pip install -q -r "$d/requirements-dev.txt"; fi
+            (cd "$d" && python -m pytest tests -q) || failed=1
+            deactivate
+          done
+          exit $failed
 
   # ─── SAM Template ───
   sam-validate:

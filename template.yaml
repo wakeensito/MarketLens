@@ -64,6 +64,39 @@ Parameters:
       occasionally retires old LWA layer versions; bumping this parameter
       lets us swap without a code change. Source:
       https://github.com/awslabs/aws-lambda-web-adapter.
+  StripeLivemode:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: >-
+      Whether the billing Lambda accepts live-mode Stripe webhooks. It is NOT
+      derived from the stage: it must match the mode of the Stripe secret key
+      in SSM for this stage (the stripe-secret-key parameter). A
+      mismatch rejects every real webhook with WebhookLivemodeMismatch.
+  StripePriceIdPro:
+    Type: String
+    Default: price_1TTWHWD0uRRrx9E75JuQHBZd
+    Description: >-
+      Stripe price id for Pro monthly. Must be an object in the same Stripe
+      mode (test/live) as the secret key in SSM for this stage.
+  StripePriceIdMax:
+    Type: String
+    Default: price_1TTWHWD0uRRrx9E79aJXLXor
+    Description: >-
+      Stripe price id for Max monthly. Must be an object in the same Stripe
+      mode (test/live) as the secret key in SSM for this stage.
+  StripePriceIdProAnnual:
+    Type: String
+    Default: price_1TTX4LD0uRRrx9E7WSD0kaEV
+    Description: >-
+      Stripe price id for Pro annual. Must be an object in the same Stripe
+      mode (test/live) as the secret key in SSM for this stage.
+  StripePriceIdMaxAnnual:
+    Type: String
+    Default: price_1TTWHWD0uRRrx9E7EepKDTCp
+    Description: >-
+      Stripe price id for Max annual. Must be an object in the same Stripe
+      mode (test/live) as the secret key in SSM for this stage.
 
 Globals:
   Function:
@@ -507,6 +540,9 @@ Resources:
               KeyType: RANGE
           Projection:
             ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
 
   # ─── DynamoDB: Muse Conversations Table ───
   MuseConversationsTable:
@@ -935,6 +971,10 @@ Resources:
       CodeUri: infrastructure/lambda/bff/
       Description: BFF auth endpoints — login, callback, refresh, logout, me
       Timeout: 15
+      Layers:
+        # Powertools layer comes from Globals.Function.Layers (SAM appends
+        # function-level Layers to the global list).
+        - !Ref PlinthsAuthLayer
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ReportsTable
@@ -1065,6 +1105,10 @@ Resources:
       # API Gateway integration caps at 29s; match it so the Lambda dies with
       # the request rather than storing a brief after the client already 504'd.
       Timeout: 29
+      Layers:
+        # Powertools layer comes from Globals.Function.Layers (SAM appends
+        # function-level Layers to the global list).
+        - !Ref PlinthsAuthLayer
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ReportsTable
@@ -1244,6 +1288,10 @@ Resources:
       CodeUri: infrastructure/lambda/api/
       Description: REST API handler for MarketLens
       Timeout: 15
+      Layers:
+        # Powertools layer comes from Globals.Function.Layers (SAM appends
+        # function-level Layers to the global list).
+        - !Ref PlinthsAuthLayer
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ReportsTable
@@ -1339,6 +1387,10 @@ Resources:
       Description: PDF and CSV report export
       MemorySize: 1024
       Timeout: 120
+      Layers:
+        # Powertools layer comes from Globals.Function.Layers (SAM appends
+        # function-level Layers to the global list).
+        - !Ref PlinthsAuthLayer
       Policies:
         - DynamoDBReadPolicy:
             TableName: !Ref ReportsTable
@@ -1395,6 +1447,10 @@ Resources:
       Description: Stripe billing — checkout, portal, webhooks
       MemorySize: 256
       Timeout: 30
+      Layers:
+        # Powertools layer comes from Globals.Function.Layers (SAM appends
+        # function-level Layers to the global list).
+        - !Ref PlinthsAuthLayer
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref ReportsTable
@@ -1407,10 +1463,12 @@ Resources:
           APP_DOMAIN: !Sub https://${CognitoCallbackDomain}
           STRIPE_SECRET_KEY_PARAM: !Sub /marketlens/${Stage}/stripe-secret-key
           STRIPE_WEBHOOK_SECRET_PARAM: !Sub /marketlens/${Stage}/stripe-webhook-secret
-          STRIPE_PRICE_ID_PRO: price_1TTWHWD0uRRrx9E75JuQHBZd
-          STRIPE_PRICE_ID_MAX: price_1TTWHWD0uRRrx9E79aJXLXor
-          STRIPE_PRICE_ID_PRO_ANNUAL: price_1TTX4LD0uRRrx9E7WSD0kaEV
-          STRIPE_PRICE_ID_MAX_ANNUAL: price_1TTWHWD0uRRrx9E7EepKDTCp
+          STRIPE_PRICE_ID_PRO: !Ref StripePriceIdPro
+          STRIPE_PRICE_ID_MAX: !Ref StripePriceIdMax
+          STRIPE_PRICE_ID_PRO_ANNUAL: !Ref StripePriceIdProAnnual
+          STRIPE_PRICE_ID_MAX_ANNUAL: !Ref StripePriceIdMaxAnnual
+          STRIPE_LIVEMODE: !Ref StripeLivemode
+          GRACE_WINDOW_SECONDS: "604800"
       Events:
         BillingCheckout:
           Type: Api
@@ -1433,6 +1491,12 @@ Resources:
             Auth:
               ApiKeyRequired: false
               Authorizer: NONE
+        BillingMe:
+          Type: Api
+          Properties:
+            Path: /api/billing/me
+            Method: GET
+            RestApiId: !Ref ApiGatewayApi
 
   BillingFunctionLogGroup:
     Type: AWS::Logs::LogGroup

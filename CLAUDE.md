@@ -82,14 +82,15 @@ Base URL: `https://amcgahmo7i.execute-api.us-east-1.amazonaws.com/dev`
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | `/api/health` | none | Health check |
-| GET | `/api/me` | required | Returns the authenticated user incl. `plan`; used by billing activation poll |
+| GET | `/api/me` | required | Returns the authenticated user incl. `plan` |
 | POST | `/api/reports` | required | Create report, body: `{"idea_text": "..."}` |
 | GET | `/api/reports/{report_id}` | required | Get report (poll until `status: "complete"`) |
 | GET | `/api/reports` | required | List user's reports |
 | POST | `/api/reports/{report_id}/export` | required | Export, returns `{"download_url": "..."}` |
-| POST | `/api/billing/checkout` | required | Create Stripe Checkout Session, body: `{"plan": "pro" \| "pro_annual" \| "max" \| "max_annual"}` |
+| POST | `/api/billing/checkout` | required | Create Stripe Checkout Session, body: `{"plan": ..., "intent_id": "<uuid>"}` |
 | POST | `/api/billing/portal` | required | Create Stripe Customer Portal session for self-serve management |
 | POST | `/api/billing/webhook` | none (Stripe-signed) | Stripe webhook receiver — signature is verified, never trust the body without it |
+| GET | `/api/billing/me` | required | Billing state for the activation poll: `effective_plan`, `subscription_status`, `billing_revision`, `last_checkout_intent_id`, `last_checkout_outcome` |
 | GET | `/api/muse/conversations/{report_id}` | required | List the per-report Muse thread |
 | DELETE | `/api/muse/conversations/{report_id}` | required | Clear the per-report thread |
 | POST | `/api/muse/conversations/{report_id}/messages/{message_id}/feedback` | required | Thumbs up/down on a Muse turn |
@@ -149,7 +150,7 @@ Scores are STRING numbers (e.g. `"10"` not `10`). The adapter in `frontend/src/a
 - `src/api.ts` — fetch wrapper, types for backend response (`ResultJson`, `ApiReport`); also `getMe`, `startBillingCheckout`, `openBillingPortal`, `BillingPlan`
 - `src/adapter.ts` — transforms `ResultJson` → `MarketReport` (frontend type)
 - `src/hooks/useAnalysis.ts` — state machine: create report → poll → adapt → display
-- `src/hooks/useBilling.ts` — Stripe redirect (`startCheckout` / `openPortal`) + activation poll. `beginActivationPoll(baselinePlan?)` polls `/api/me` until the plan changes from the supplied baseline (or until any non-`free` plan appears when no baseline is given) so a webhook that landed before the user returned still resolves immediately
+- `src/hooks/useBilling.ts` — Stripe redirect (`startCheckout` / `openPortal`) + activation poll. The frontend mints a UUID intent per checkout, stores it in `sessionStorage` (`plinths.checkout`), and the activation poll on `?billing=success` watches `GET /api/billing/me` until `last_checkout_intent_id` matches and `subscription_status` is `active`/`trialing`; `?billing=portal` refetches and refreshes auth when `billing_revision` changed
 - `src/components/ActivatingPlan.tsx` — modal scrim shown while the activation poll runs; surfaces a "taking longer than usual" affordance after `LAG_THRESHOLD_MS` and an error/refresh button after `MAX_TOTAL_MS`
 - `src/components/PricingSection.tsx` — Free / Pro / Max table with monthly ↔ annual cadence toggle (ARIA radio-group)
 - `src/types.ts` — frontend-only types (`MarketReport`, `PipelineStage`, etc.)
@@ -157,7 +158,7 @@ Scores are STRING numbers (e.g. `"10"` not `10`). The adapter in `frontend/src/a
 - `src/theme.ts` — theme preference helpers (`getThemePref`, `setThemePref`, `initTheme`)
 - `src/mockData.ts` — fixture `MarketReport` used by `VITE_USE_MOCK` and demo states
 
-**Stripe return flow**: After Checkout, Stripe redirects to `/?billing=success&session_id=…` (or `?billing=cancelled`). `App.tsx` reads the flag once on boot, strips the query, and either dispatches `billing.beginActivationPoll(auth.user?.plan ?? 'free')` or shows the cancel toast. Pass the *pre-checkout* plan as the baseline so a webhook that already updated `/api/me` resolves the poll on the first read.
+**Stripe return flow**: the frontend mints a UUID intent per checkout, stores it in `sessionStorage` (`plinths.checkout`), and the activation poll on `?billing=success` watches `GET /api/billing/me` until `last_checkout_intent_id` matches and `subscription_status` is `active`/`trialing`; `?billing=portal` refetches and refreshes auth when `billing_revision` changed.
 
 **Auth context split:** `src/authContext.ts` holds the bare `createContext`; `src/AuthContext.tsx` holds the `<AuthProvider>` component. They are intentionally separate so React Fast Refresh stays clean — don't merge them.
 
@@ -191,13 +192,13 @@ No real Cognito call is made; `AuthUser` fields are stubbed. Integrations should
 
 Plinths is solo-only. The plan axis is power, not audience.
 
-**Plan strings the backend accepts** (in `infrastructure/lambda/billing/app.py` checkout `plan` field): `pro`, `pro_annual`, `max`, `max_annual`. The user's stored plan in DynamoDB resolves to one of `free`, `pro`, `max`, or `admin`.
+**Plan strings the backend accepts** (in `infrastructure/lambda/billing/app.py` checkout `plan` field): `pro`, `pro_annual`, `max`, `max_annual`. The user's stored plan in DynamoDB resolves to one of `free`, `pro`, `max`, or `admin`. `plan` records the Stripe price; `subscription_status` says whether it is paid for; gates read `plinths_auth.billing.effective_plan`, never `plan` directly. A hand-set `pro` with no status reads as free — comp through a Stripe coupon or trial.
 
 **Pricing**: Free $0 · Pro $20/mo (annual $192) · Max $100/mo (annual $960).
 
 **Daily report limits** (`infrastructure/lambda/api/app.py` `plan_limits`): free 3, pro 15, max 9999, admin 9999.
 
-**Max differentiators vs Pro**: unlimited reports, cross-report memory in Muse, Muse model selection (Claude, GPT, Gemini, Perplexity vs. Pro's default model). Stripe price IDs live in the SAM template (`STRIPE_PRICE_ID_PRO`, `STRIPE_PRICE_ID_PRO_ANNUAL`, `STRIPE_PRICE_ID_MAX`, `STRIPE_PRICE_ID_MAX_ANNUAL`).
+**Max differentiators vs Pro**: unlimited reports, cross-report memory in Muse, Muse model selection (Claude, GPT, Gemini, Perplexity vs. Pro's default model). Stripe price IDs are SAM **template parameters** (`StripePriceIdPro`, `StripePriceIdProAnnual`, `StripePriceIdMax`, `StripePriceIdMaxAnnual` → the `STRIPE_PRICE_ID_*` env vars), as is `StripeLivemode`; all five must match the Stripe mode of the stage's secret key in SSM, so a test-mode QA pass overrides them at deploy time instead of editing the template.
 
 **Build Brief gating**: Build Brief is a Pro feature. Free users get a **small daily allowance** — **temporary beta: 3/day** via env `FREE_BUILD_BRIEF_DAILY_LIMIT` (default 3), tracked by `free_brief_count_today` + `free_brief_count_date` on the `USER#{user_id}` row, reserved atomically per generation and reset daily (UTC); once today's allowance is spent the pane shows the Pro upsell. (Long-term spec is **one lifetime sample**; revert by lowering the env var or reverting the daily-counter commit. The old `free_build_brief_used` flag is now unused and just lingers on existing rows.) GET `/api/build-brief/{report_id}` is open to all authenticated users and returns `free_brief_used` so the frontend can render the correct CTA. Paid plans (Pro, Max, admin) have no cap.
 

@@ -22,6 +22,8 @@ from aws_lambda_powertools.event_handler import APIGatewayRestResolver
 from aws_lambda_powertools.logging import correlation_paths
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
+from plinths_auth.billing import BILLING_PROJECTION, effective_plan
+
 logger = Logger()
 tracer = Tracer()
 metrics = Metrics()
@@ -74,12 +76,11 @@ def _atomic_check_and_increment(auth: dict) -> str | None:
             table.get_item(
                 Key={"pk": user_pk, "sk": user_pk},
                 ConsistentRead=True,
-                ProjectionExpression="#p",
-                ExpressionAttributeNames={"#p": "plan"},
+                **BILLING_PROJECTION,
             ).get("Item")
             or {}
         )
-        plan = user_row.get("plan") or plan
+        plan = effective_plan(user_row) if user_row else plan
     except ClientError as e:
         logger.warning(
             "Plan refresh failed; using authorizer snapshot", extra={"error": str(e)}
@@ -178,7 +179,7 @@ def get_me():
         "is_authenticated": True,
         "user_id": auth["user_id"],
         "email": item.get("email") or auth["email"],
-        "plan": item.get("plan") or "free",
+        "plan": effective_plan(item),
     }
 
 

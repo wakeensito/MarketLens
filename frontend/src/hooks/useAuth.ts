@@ -22,8 +22,10 @@ export interface AuthState {
   login: () => void;
   /** Clear cookies and log out */
   logout: () => Promise<void>;
-  /** Silently refresh the access token */
+  /** Silently refresh the access token. Does NOT re-read the user — use `reload` for that. */
   refresh: () => Promise<boolean>;
+  /** Re-fetch `/auth/me` and update `user`. This is what picks up a plan change. */
+  reload: () => Promise<boolean>;
   /** Instant mock login — only present when VITE_USE_MOCK=true */
   mockLogin?: () => void;
   /** Email + password — mock signs in locally; production POSTs to BFF for Cognito */
@@ -249,6 +251,21 @@ export function useAuth(): AuthState {
     }
   }, []);
 
+  // `refresh()` rotates the access token and never touches `user`, so a plan
+  // change made by Stripe would never reach plan-gated UI. `reload()` is the
+  // one that re-reads /auth/me. In mock mode `checkAuth` deliberately resets
+  // to unauthenticated, so reloading there would log the mock user out —
+  // report the current state instead of clearing it.
+  const authedRef = useRef(isAuthenticated);
+  useEffect(() => {
+    authedRef.current = isAuthenticated;
+  }, [isAuthenticated]);
+
+  const reload = useCallback(async (): Promise<boolean> => {
+    if (IS_MOCK) return authedRef.current;
+    return checkAuth(true);
+  }, [checkAuth]);
+
   // Schedule silent refresh every 50 minutes (access token is 1 hour)
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -277,6 +294,7 @@ export function useAuth(): AuthState {
     login,
     logout,
     refresh,
+    reload,
     mockLogin,
     loginWithEmail,
     continueWithEmail,

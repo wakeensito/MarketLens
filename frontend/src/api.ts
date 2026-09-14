@@ -269,14 +269,32 @@ export interface MeResponse {
   stale?: boolean;
 }
 
+export interface BillingMeResponse {
+  plan: string;
+  effective_plan: string;
+  subscription_status: string | null;
+  entitlement_grace_until: number | null;
+  last_checkout_intent_id: string | null;
+  /** Terminal outcome for the activation poll: 'installed' | 'cancelled_duplicate' | null. */
+  last_checkout_outcome: string | null;
+  billing_revision: number;
+  plan_updated_at: string | null;
+  cancel_at_period_end: boolean;
+  current_period_end: number;
+}
+
 export function getMe(): Promise<MeResponse> {
   return request<MeResponse>('/api/me');
 }
 
-export function startBillingCheckout(plan: BillingPlan): Promise<{ checkout_url: string }> {
+export function getBillingMe(): Promise<BillingMeResponse> {
+  return request<BillingMeResponse>('/api/billing/me');
+}
+
+export function startBillingCheckout(plan: BillingPlan, intentId: string): Promise<{ checkout_url: string }> {
   return request('/api/billing/checkout', {
     method: 'POST',
-    body: JSON.stringify({ plan }),
+    body: JSON.stringify({ plan, intent_id: intentId }),
   });
 }
 

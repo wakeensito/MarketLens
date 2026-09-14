@@ -1,0 +1,155 @@
+import pytest
+from plinths_auth.billing import BILLING_PROJECTION, effective_plan, is_entitled
+
+NOW = 1_700_000_000
+
+
+@pytest.mark.parametrize(
+    "row,expected",
+    [
+        ({"plan": "pro", "subscription_status": "active"}, True),
+        ({"plan": "pro", "subscription_status": "trialing"}, True),
+        (
+            {
+                "plan": "pro",
+                "subscription_status": "past_due",
+                "entitlement_grace_until": NOW + 1,
+            },
+            True,
+        ),
+        (
+            {
+                "plan": "pro",
+                "subscription_status": "past_due",
+                "entitlement_grace_until": NOW,
+            },
+            False,
+        ),
+        ({"plan": "pro", "subscription_status": "past_due"}, False),
+        ({"plan": "pro", "subscription_status": "paused"}, False),
+        ({"plan": "pro", "subscription_status": "canceled"}, False),
+        ({"plan": "pro", "subscription_status": "incomplete"}, False),
+        ({"plan": "pro", "subscription_status": "unpaid"}, False),
+        ({"plan": "pro"}, False),
+        ({}, False),
+    ],
+)
+def test_is_entitled(row, expected):
+    assert is_entitled(row, NOW) is expected
+
+
+@pytest.mark.parametrize(
+    "row,expected",
+    [
+        ({}, "free"),
+        ({"plan": "free"}, "free"),
+        ({"plan": "admin"}, "admin"),
+        ({"plan": "admin", "subscription_status": "canceled"}, "admin"),
+        ({"plan": "pro"}, "free"),
+        ({"plan": "max", "subscription_status": "active"}, "max"),
+        ({"plan": "max", "subscription_status": "paused"}, "free"),
+        (
+            {
+                "plan": "pro",
+                "subscription_status": "past_due",
+                "entitlement_grace_until": NOW + 5,
+            },
+            "pro",
+        ),
+        (
+            {
+                "plan": "pro",
+                "subscription_status": "past_due",
+                "entitlement_grace_until": NOW - 5,
+            },
+            "free",
+        ),
+    ],
+)
+def test_effective_plan(row, expected):
+    assert effective_plan(row, NOW) == expected
+
+
+def test_effective_plan_now_zero_is_not_treated_as_missing():
+    row = {
+        "plan": "pro",
+        "subscription_status": "past_due",
+        "entitlement_grace_until": 1,
+    }
+    assert effective_plan(row, 0) == "pro"
+
+
+def test_effective_plan_defaults_now_to_wall_clock():
+    row = {
+        "plan": "pro",
+        "subscription_status": "past_due",
+        "entitlement_grace_until": 1,
+    }
+    assert effective_plan(row) == "free"
+
+
+def test_decimal_grace_from_dynamodb():
+    from decimal import Decimal
+
+    row = {
+        "plan": "pro",
+        "subscription_status": "past_due",
+        "entitlement_grace_until": Decimal(NOW + 1),
+    }
+    assert effective_plan(row, NOW) == "pro"
+
+
+def test_projection_names_every_billing_attr():
+    assert (
+        BILLING_PROJECTION["ProjectionExpression"]
+        == "#p, subscription_status, entitlement_grace_until"
+    )
+    assert BILLING_PROJECTION["ExpressionAttributeNames"] == {"#p": "plan"}
+
+
+def test_auth_context_plan_is_effective(monkeypatch):
+    """verify_session_cookie must hand gates the effective plan, not the raw one."""
+    from plinths_auth import cookie_jwt
+
+    class _Key:
+        key = "k"
+
+    class _Jwks:
+        def get_signing_key_from_jwt(self, _):
+            return _Key()
+
+    class _Table:
+        def get_item(self, **_):
+            return {
+                "Item": {
+                    "org_id": "o1",
+                    "plan": "pro",
+                    "subscription_status": "paused",
+                    "email": "e",
+                }
+            }
+
+    monkeypatch.setattr(cookie_jwt, "_get_jwks_client", lambda: _Jwks())
+    monkeypatch.setattr(cookie_jwt, "_get_table", lambda: _Table())
+    monkeypatch.setattr(cookie_jwt, "_CLIENT_ID", "cid")
+    monkeypatch.setattr(
+        cookie_jwt.jwt,
+        "decode",
+        lambda *a, **k: {"token_use": "access", "client_id": "cid", "sub": "u1"},
+    )
+    ctx = cookie_jwt.verify_session_cookie("ml_access=tok")
+    assert ctx is not None and ctx.plan == "free"
+
+
+@pytest.mark.parametrize("bad", ["abc", object(), [], {}, "", "1.5"])
+def test_invalid_grace_value_is_not_entitled(bad):
+    """A hand-edited or corrupted grace value must fail closed. `int()` on it
+    raises, and this function is called from every plan gate — an exception
+    here would 500 the whole request instead of denying access."""
+    row = {
+        "plan": "pro",
+        "subscription_status": "past_due",
+        "entitlement_grace_until": bad,
+    }
+    assert is_entitled(row, NOW) is False
+    assert effective_plan(row, NOW) == "free"

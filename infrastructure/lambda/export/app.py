@@ -15,6 +15,8 @@ from aws_lambda_powertools.event_handler import APIGatewayRestResolver
 from aws_lambda_powertools.logging import correlation_paths
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
+from plinths_auth.billing import BILLING_PROJECTION, effective_plan
+
 logger = Logger()
 tracer = Tracer()
 metrics = Metrics()
@@ -111,12 +113,11 @@ def _resolve_current_plan(auth: dict) -> str:
             table.get_item(
                 Key={"pk": user_pk, "sk": user_pk},
                 ConsistentRead=True,
-                ProjectionExpression="#p",
-                ExpressionAttributeNames={"#p": "plan"},
+                **BILLING_PROJECTION,
             ).get("Item")
             or {}
         )
-        return item.get("plan") or snapshot
+        return effective_plan(item) if item else snapshot
     except ClientError as e:
         logger.warning(
             "Plan refresh failed; using authorizer snapshot", extra={"error": str(e)}

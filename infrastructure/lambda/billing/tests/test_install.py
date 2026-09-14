@@ -1,0 +1,752 @@
+import pytest
+
+from conftest import get_user, make_event, make_subscription
+
+
+def _session(sub_id="sub_1", intent="intent-1", user_id="u1", customer="cus_1"):
+    return {
+        "id": "cs_1",
+        "object": "checkout.session",
+        "subscription": sub_id,
+        "customer": customer,
+        "metadata": {"user_id": user_id, "org_id": "org1", "intent_id": intent},
+    }
+
+
+def test_matching_intent_installs_and_clears_pending(ddb_table, user_row, stripe_stub):
+    import webhook
+
+    user_row(pending_intent_id="intent-1")
+    stripe_stub["subscriptions"]["sub_1"] = make_subscription(
+        status="active", price="price_max"
+    )
+    out = webhook.handle_event(make_event("checkout.session.completed", _session()))
+    assert out == "applied"
+    row = get_user(ddb_table)
+    assert row["stripe_subscription_id"] == "sub_1"
+    assert row["stripe_customer_id"] == "cus_1"
+    assert row["plan"] == "max"
+    assert row["subscription_status"] == "active"
+    assert row["last_checkout_intent_id"] == "intent-1"
+    assert row["last_checkout_outcome"] == "installed"
+    assert "pending_intent_id" not in row
+    assert int(row["billing_revision"]) == 1
+    assert int(row["billing_source_event_created"]) == 1_700_000_000
+
+
+def test_incomplete_subscription_installs_but_is_not_entitled(
+    ddb_table, user_row, stripe_stub
+):
+    from plinths_auth.billing import effective_plan
+    import webhook
+
+    user_row(pending_intent_id="intent-1")
+    stripe_stub["subscriptions"]["sub_1"] = make_subscription(status="incomplete")
+    webhook.handle_event(make_event("checkout.session.completed", _session()))
+    row = get_user(ddb_table)
+    assert row["subscription_status"] == "incomplete"
+    assert effective_plan(row) == "free"
+
+
+def test_subscription_created_installs_from_subscription_metadata(
+    ddb_table, user_row, stripe_stub
+):
+    import webhook
+
+    user_row(pending_intent_id="intent-1")
+    sub = make_subscription(status="active")
+    stripe_stub["subscriptions"]["sub_1"] = sub
+    out = webhook.handle_event(make_event("customer.subscription.created", sub))
+    assert out == "applied"
+    assert get_user(ddb_table)["stripe_subscription_id"] == "sub_1"
+
+
+def test_second_install_event_for_same_subscription_is_noop(
+    ddb_table, user_row, stripe_stub
+):
+    import webhook
+
+    user_row(pending_intent_id="intent-1")
+    sub = make_subscription(status="active")
+    stripe_stub["subscriptions"]["sub_1"] = sub
+    webhook.handle_event(
+        make_event("checkout.session.completed", _session(), event_id="evt_a")
+    )
+    out = webhook.handle_event(
+        make_event("customer.subscription.created", sub, event_id="evt_b")
+    )
+    assert out == "noop"
+    assert int(get_user(ddb_table)["billing_revision"]) == 1
+
+
+def test_stale_intent_not_live_is_dropped(ddb_table, user_row, stripe_stub):
+    import webhook
+
+    user_row(pending_intent_id="intent-2")
+    stripe_stub["subscriptions"]["sub_1"] = make_subscription(
+        status="incomplete_expired"
+    )
+    out = webhook.handle_event(
+        make_event("checkout.session.completed", _session(intent="intent-1"))
+    )
+    assert out == "noop"
+    assert "stripe_subscription_id" not in get_user(ddb_table)
+
+
+def test_stale_intent_live_and_row_empty_installs_anyway(
+    ddb_table, user_row, stripe_stub
+):
+    """Abandon tab A, start B, then complete A: A is the only real subscription."""
+    import webhook
+
+    user_row(pending_intent_id="intent-B")
+    stripe_stub["subscriptions"]["sub_A"] = make_subscription(
+        sub_id="sub_A", status="active"
+    )
+    out = webhook.handle_event(
+        make_event(
+            "checkout.session.completed", _session(sub_id="sub_A", intent="intent-A")
+        )
+    )
+    assert out == "applied"
+    row = get_user(ddb_table)
+    assert row["stripe_subscription_id"] == "sub_A"
+    assert row["last_checkout_intent_id"] == "intent-A"
+
+
+def test_stale_intent_with_different_live_subscription_cancels_newcomer(
+    ddb_table, user_row, stripe_stub, monkeypatch
+):
+    import webhook
+
+    seen = []
+    monkeypatch.setattr(
+        webhook.metrics, "add_metric", lambda **kw: seen.append(kw["name"])
+    )
+    user_row(stripe_subscription_id="sub_1", subscription_status="active", plan="pro")
+    stripe_stub["subscriptions"]["sub_1"] = make_subscription(
+        sub_id="sub_1", status="active"
+    )
+    stripe_stub["subscriptions"]["sub_2"] = make_subscription(
+        sub_id="sub_2", status="active"
+    )
+    out = webhook.handle_event(
+        make_event(
+            "checkout.session.completed", _session(sub_id="sub_2", intent="intent-old")
+        )
+    )
+    assert out == "applied"
+    assert stripe_stub["cancelled"] == ["sub_2"]
+    assert "DoubleSubscriptionCancelled" in seen
+    row = get_user(ddb_table)
+    assert row["stripe_subscription_id"] == "sub_1"
+    # The poll needs a terminal answer, not a 60 s spin ending in a false failure.
+    assert row["last_checkout_outcome"] == "cancelled_duplicate"
+    assert row["last_checkout_intent_id"] == "intent-old"
+    assert "pending_intent_id" not in row
+    assert int(row["billing_revision"]) == 1
+
+
+def test_matching_intent_does_not_overwrite_different_live_subscription(
+    ddb_table, user_row, stripe_stub
+):
+    """A matching intent is not enough on its own: if the row already holds a
+    *different* live subscription, installing over it would silently drop
+    the kept subscription. This must fall through to the same
+    cancel-newcomer path as the reconcile branch."""
+    import webhook
+
+    user_row(
+        stripe_subscription_id="sub_1",
+        subscription_status="active",
+        plan="pro",
+        pending_intent_id="intent-2",
+    )
+    stripe_stub["subscriptions"]["sub_1"] = make_subscription(
+        sub_id="sub_1", status="active"
+    )
+    stripe_stub["subscriptions"]["sub_2"] = make_subscription(
+        sub_id="sub_2", status="active"
+    )
+    out = webhook.handle_event(
+        make_event(
+            "checkout.session.completed", _session(sub_id="sub_2", intent="intent-2")
+        )
+    )
+    assert out == "applied"
+    assert stripe_stub["cancelled"] == ["sub_2"]
+    row = get_user(ddb_table)
+    assert row["stripe_subscription_id"] == "sub_1"
+    assert row["last_checkout_outcome"] == "cancelled_duplicate"
+    assert row["last_checkout_intent_id"] == "intent-2"
+    assert "pending_intent_id" not in row
+    assert int(row["billing_revision"]) == 1
+
+
+def test_install_replaces_incomplete_recorded_subscription(
+    ddb_table, user_row, stripe_stub
+):
+    """The recorded subscription is `incomplete` — an abandoned checkout that
+    never charged. It must not survive as the double-subscription "kept" one:
+    cancel it and install the newcomer."""
+    import webhook
+
+    user_row(
+        stripe_subscription_id="sub_1",
+        subscription_status="incomplete",
+        plan="pro",
+        pending_intent_id="intent-2",
+    )
+    stripe_stub["subscriptions"]["sub_1"] = make_subscription(
+        sub_id="sub_1", status="incomplete"
+    )
+    stripe_stub["subscriptions"]["sub_2"] = make_subscription(
+        sub_id="sub_2", status="active"
+    )
+    out = webhook.handle_event(
+        make_event(
+            "checkout.session.completed", _session(sub_id="sub_2", intent="intent-2")
+        )
+    )
+    assert out == "applied"
+    row = get_user(ddb_table)
+    assert row["stripe_subscription_id"] == "sub_2"
+    assert row["subscription_status"] == "active"
+    assert row["last_checkout_outcome"] == "installed"
+    assert stripe_stub["cancelled"] == ["sub_1"]
+
+
+def test_reconcile_install_replaces_dead_recorded_subscription_without_intent(
+    ddb_table, user_row, stripe_stub
+):
+    import webhook
+
+    user_row(
+        stripe_subscription_id="sub_old", subscription_status="canceled", plan="pro"
+    )
+    stripe_stub["subscriptions"]["sub_old"] = make_subscription(
+        sub_id="sub_old", status="canceled"
+    )
+    sub_new = make_subscription(
+        sub_id="sub_new", status="active", metadata={"user_id": "u1"}
+    )
+    stripe_stub["subscriptions"]["sub_new"] = sub_new
+    out = webhook.handle_event(make_event("customer.subscription.created", sub_new))
+    assert out == "applied"
+    row = get_user(ddb_table)
+    assert row["stripe_subscription_id"] == "sub_new"
+    assert "last_checkout_intent_id" not in row
+
+
+def test_replacement_after_cancel_installs_new_id(ddb_table, user_row, stripe_stub):
+    import webhook
+
+    user_row(
+        stripe_subscription_id="sub_old",
+        subscription_status="canceled",
+        plan="pro",
+        billing_source_event_created=1_700_000_000,
+        pending_intent_id="intent-new",
+    )
+    stripe_stub["subscriptions"]["sub_old"] = make_subscription(
+        sub_id="sub_old", status="canceled"
+    )
+    stripe_stub["subscriptions"]["sub_new"] = make_subscription(
+        sub_id="sub_new", status="active"
+    )
+    # Same created second as the old subscription's final event — must still install.
+    out = webhook.handle_event(
+        make_event(
+            "checkout.session.completed",
+            _session(sub_id="sub_new", intent="intent-new"),
+            created=1_700_000_000,
+        )
+    )
+    assert out == "applied"
+    assert get_user(ddb_table)["stripe_subscription_id"] == "sub_new"
+
+
+def test_orphan_user_returns_orphan_and_writes_nothing(
+    ddb_table, stripe_stub, monkeypatch
+):
+    import webhook
+
+    seen = []
+    monkeypatch.setattr(
+        webhook.metrics, "add_metric", lambda **kw: seen.append(kw["name"])
+    )
+    stripe_stub["subscriptions"]["sub_1"] = make_subscription(status="active")
+    out = webhook.handle_event(
+        make_event("checkout.session.completed", _session(user_id="ghost"))
+    )
+    assert out == "orphan"
+    assert "WebhookOrphanUser" in seen
+
+
+def test_missing_user_id_falls_back_to_customer_metadata(
+    ddb_table, user_row, stripe_stub
+):
+    import webhook
+
+    user_row(pending_intent_id="intent-1")
+    stripe_stub["customers"]["cus_1"] = {"id": "cus_1", "metadata": {"user_id": "u1"}}
+    sub = make_subscription(status="active", metadata={})
+    stripe_stub["subscriptions"]["sub_1"] = sub
+    out = webhook.handle_event(make_event("customer.subscription.created", sub))
+    assert out == "applied"
+
+
+def test_unhandled_event_type_is_ignored(ddb_table):
+    import webhook
+
+    assert (
+        webhook.handle_event(make_event("customer.subscription.trial_will_end", {}))
+        == "ignored"
+    )
+
+
+def test_install_clears_stale_grace(ddb_table, user_row, stripe_stub):
+    import webhook
+
+    user_row(pending_intent_id="intent-1", entitlement_grace_until=1_600_000_000)
+    stripe_stub["subscriptions"]["sub_1"] = make_subscription(status="active")
+    out = webhook.handle_event(make_event("checkout.session.completed", _session()))
+    assert out == "applied"
+    row = get_user(ddb_table)
+    assert "entitlement_grace_until" not in row
+
+
+def test_reconcile_install_without_intent_leaves_last_intent_untouched(
+    ddb_table, user_row, stripe_stub
+):
+    import webhook
+
+    user_row(last_checkout_intent_id="old")
+    sub = make_subscription(status="active", metadata={})
+    stripe_stub["subscriptions"]["sub_1"] = sub
+    session = _session()
+    session["metadata"] = {"user_id": "u1", "org_id": "org1"}  # no intent_id anywhere
+    out = webhook.handle_event(make_event("checkout.session.completed", session))
+    assert out == "applied"
+    row = get_user(ddb_table)
+    assert row["stripe_subscription_id"] == "sub_1"
+    assert row["last_checkout_intent_id"] == "old"
+
+
+def test_install_race_reclassifies_and_cancels_loser(
+    ddb_table, user_row, stripe_stub, monkeypatch
+):
+    """A concurrent install (winner) commits between our snapshot read and
+    our transaction attempt. Our condition fails (STALE); we must re-read
+    and reclassify rather than report stale — the re-read sees the winner's
+    subscription installed and routes us into the double-subscription
+    branch, cancelling our (losing) subscription."""
+    import store
+    import webhook
+
+    seen = []
+    monkeypatch.setattr(
+        webhook.metrics, "add_metric", lambda **kw: seen.append(kw["name"])
+    )
+
+    user_row(pending_intent_id="intent-other")
+    stripe_stub["subscriptions"]["sub_winner"] = make_subscription(
+        sub_id="sub_winner", status="active"
+    )
+    stripe_stub["subscriptions"]["sub_loser"] = make_subscription(
+        sub_id="sub_loser", status="active"
+    )
+
+    real_apply_event = store.apply_event
+    calls = []
+
+    def fake_apply_event(event_id, user_id, update):
+        calls.append(update)
+        if len(calls) == 1:
+            # Simulate a concurrent winner installing sub_winner between our
+            # snapshot read and our transaction attempt.
+            ddb_table.update_item(
+                Key={"pk": "USER#u1", "sk": "USER#u1"},
+                UpdateExpression=(
+                    "SET stripe_subscription_id = :s, subscription_status = :st "
+                    "REMOVE pending_intent_id"
+                ),
+                ExpressionAttributeValues={":s": "sub_winner", ":st": "active"},
+            )
+            return store.Outcome.STALE
+        return real_apply_event(event_id, user_id, update)
+
+    monkeypatch.setattr(store, "apply_event", fake_apply_event)
+
+    out = webhook.handle_event(
+        make_event(
+            "customer.subscription.created", stripe_stub["subscriptions"]["sub_loser"]
+        )
+    )
+    assert out == "applied"
+    assert "sub_loser" in stripe_stub["cancelled"]
+    assert "DoubleSubscriptionCancelled" in seen
+    assert get_user(ddb_table)["last_checkout_outcome"] == "cancelled_duplicate"
+
+
+def test_cancel_newcomer_stale_does_not_reinstall(ddb_table, user_row, stripe_stub):
+    """The cancel is irreversible and happens before the row write. If that
+    write loses a race (STALE), *re-classifying* against a fresh row while
+    still holding the original `sub` snapshot would let the loop install the
+    very subscription we just cancelled, as `active`. So the classification
+    never retries. Only the correlation-only update is re-aimed at the
+    subscription the row holds now — it writes no plan fields, so the
+    cancelled subscription can never land on the row."""
+    import store
+    import webhook
+
+    user_row(
+        stripe_subscription_id="sub_1",
+        subscription_status="active",
+        plan="pro",
+        pending_intent_id="intent-2",
+    )
+    stripe_stub["subscriptions"]["sub_1"] = make_subscription(
+        sub_id="sub_1", status="active"
+    )
+    stripe_stub["subscriptions"]["sub_2"] = make_subscription(
+        sub_id="sub_2", status="active"
+    )
+    stripe_stub["subscriptions"]["sub_x"] = make_subscription(
+        sub_id="sub_x", status="incomplete"
+    )
+
+    real_apply_event = store.apply_event
+    calls = []
+
+    def fake_apply_event(event_id, user_id, update):
+        calls.append(update)
+        if len(calls) == 1:
+            # A concurrent writer moved the row between our snapshot and the
+            # cancel-path write, so our `stripe_subscription_id = :kept`
+            # condition fails.
+            ddb_table.update_item(
+                Key={"pk": "USER#u1", "sk": "USER#u1"},
+                UpdateExpression=(
+                    "SET stripe_subscription_id = :s, subscription_status = :st"
+                ),
+                ExpressionAttributeValues={":s": "sub_x", ":st": "incomplete"},
+            )
+            return store.Outcome.STALE
+        return real_apply_event(event_id, user_id, update)
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(store, "apply_event", fake_apply_event)
+        out = webhook.handle_event(
+            make_event(
+                "checkout.session.completed",
+                _session(sub_id="sub_2", intent="intent-2"),
+            )
+        )
+
+    assert out == "applied"
+    # Cancelled exactly once — a second Subscription.cancel would raise.
+    assert stripe_stub["cancelled"] == ["sub_2"]
+    # And the cancelled subscription was never installed over the winner.
+    row = get_user(ddb_table)
+    assert row["stripe_subscription_id"] == "sub_x"
+    # The retried correlation write still gives the poll its terminal answer.
+    assert row["last_checkout_outcome"] == "cancelled_duplicate"
+
+
+def test_cancel_newcomer_failure_with_live_sub_raises(
+    ddb_table, user_row, stripe_stub, monkeypatch
+):
+    """A cancel that errors is only a confirmed cancel if the refetch says so.
+    Here the newcomer is still active, so the user may be billing twice:
+    raise (5xx) so Stripe redelivers and the cancel is re-attempted. Writing
+    `cancelled_duplicate` here would record a cancel that never happened."""
+    import stripe
+    import stripe_client
+    import webhook
+
+    seen = []
+    monkeypatch.setattr(
+        webhook.metrics, "add_metric", lambda **kw: seen.append(kw["name"])
+    )
+    user_row(
+        stripe_subscription_id="sub_1",
+        subscription_status="active",
+        plan="pro",
+        pending_intent_id="intent-2",
+    )
+    stripe_stub["subscriptions"]["sub_1"] = make_subscription(
+        sub_id="sub_1", status="active"
+    )
+    stripe_stub["subscriptions"]["sub_2"] = make_subscription(
+        sub_id="sub_2", status="active"
+    )
+
+    def boom(_sub_id):
+        raise stripe.APIConnectionError("down")
+
+    monkeypatch.setattr(stripe_client, "cancel_subscription", boom)
+
+    with pytest.raises(stripe.APIConnectionError):
+        webhook.handle_event(
+            make_event(
+                "checkout.session.completed",
+                _session(sub_id="sub_2", intent="intent-2"),
+            )
+        )
+
+    assert "DoubleSubscriptionCancelFailed" in seen
+    assert "DoubleSubscriptionCancelled" not in seen
+    row = get_user(ddb_table)
+    assert "last_checkout_outcome" not in row
+    assert row["pending_intent_id"] == "intent-2"
+    assert row["stripe_subscription_id"] == "sub_1"
+
+
+def test_cancel_newcomer_failure_but_already_cancelled_proceeds(
+    ddb_table, user_row, stripe_stub, monkeypatch
+):
+    """A repeat cancel on an already-cancelled subscription raises
+    `InvalidRequestError`. The refetch says it is gone, so that is a
+    confirmed cancel and the terminal outcome is written as normal."""
+    import stripe
+    import stripe_client
+    import webhook
+
+    user_row(
+        stripe_subscription_id="sub_1",
+        subscription_status="active",
+        plan="pro",
+        pending_intent_id="intent-2",
+    )
+    stripe_stub["subscriptions"]["sub_1"] = make_subscription(
+        sub_id="sub_1", status="active"
+    )
+    stripe_stub["subscriptions"]["sub_2"] = make_subscription(
+        sub_id="sub_2", status="canceled"
+    )
+
+    def already_cancelled(_sub_id):
+        raise stripe.InvalidRequestError("already canceled", "id")
+
+    monkeypatch.setattr(stripe_client, "cancel_subscription", already_cancelled)
+
+    out = webhook.handle_event(
+        make_event(
+            "checkout.session.completed", _session(sub_id="sub_2", intent="intent-2")
+        )
+    )
+    assert out == "applied"
+    row = get_user(ddb_table)
+    assert row["last_checkout_outcome"] == "cancelled_duplicate"
+    assert row["stripe_subscription_id"] == "sub_1"
+    assert "pending_intent_id" not in row
+
+
+def test_cancel_newcomer_stale_retries_correlation_write_once(
+    ddb_table, user_row, stripe_stub, monkeypatch
+):
+    """The post-cancel correlation write loses a race. It is re-aimed exactly
+    once at the subscription the row holds now, so the activation poll still
+    gets a terminal answer instead of spinning for its full 60 s."""
+    import store
+    import webhook
+
+    user_row(
+        stripe_subscription_id="sub_1",
+        subscription_status="active",
+        plan="pro",
+        pending_intent_id="intent-2",
+    )
+    for sid in ("sub_1", "sub_2", "sub_x"):
+        stripe_stub["subscriptions"][sid] = make_subscription(
+            sub_id=sid, status="active"
+        )
+
+    real_apply_event = store.apply_event
+    calls = []
+
+    def fake_apply_event(event_id, user_id, update):
+        calls.append(update)
+        if len(calls) == 1:
+            ddb_table.update_item(
+                Key={"pk": "USER#u1", "sk": "USER#u1"},
+                UpdateExpression=(
+                    "SET stripe_subscription_id = :s, subscription_status = :st"
+                ),
+                ExpressionAttributeValues={":s": "sub_x", ":st": "active"},
+            )
+            return store.Outcome.STALE
+        return real_apply_event(event_id, user_id, update)
+
+    monkeypatch.setattr(store, "apply_event", fake_apply_event)
+
+    out = webhook.handle_event(
+        make_event(
+            "checkout.session.completed", _session(sub_id="sub_2", intent="intent-2")
+        )
+    )
+    assert out == "applied"
+    assert stripe_stub["cancelled"] == ["sub_2"]
+    row = get_user(ddb_table)
+    assert row["stripe_subscription_id"] == "sub_x"
+    assert row["last_checkout_outcome"] == "cancelled_duplicate"
+    assert "pending_intent_id" not in row
+    # Exactly one retry — a second loss is genuinely stale.
+    assert len(calls) == 2
+
+
+def test_cancel_newcomer_stale_skips_retry_when_row_holds_newcomer(
+    ddb_table, user_row, stripe_stub, monkeypatch
+):
+    """The post-cancel correlation write loses a race, and the row it lost to
+    now holds the newcomer we just cancelled (`sub_2`) — a concurrent path
+    installed it before the cancel and our write landed. Re-aiming the
+    correlation write at that row would re-record a subscription that no
+    longer exists on Stripe, so the retry is skipped entirely and the
+    outcome is reported stale; Stripe's `.deleted` event for `sub_2` will
+    correct the row on its own."""
+    import store
+    import webhook
+
+    user_row(
+        stripe_subscription_id="sub_1",
+        subscription_status="active",
+        plan="pro",
+        pending_intent_id="intent-2",
+    )
+    for sid in ("sub_1", "sub_2"):
+        stripe_stub["subscriptions"][sid] = make_subscription(
+            sub_id=sid, status="active"
+        )
+
+    real_apply_event = store.apply_event
+    calls = []
+
+    def fake_apply_event(event_id, user_id, update):
+        calls.append(update)
+        if len(calls) == 1:
+            ddb_table.update_item(
+                Key={"pk": "USER#u1", "sk": "USER#u1"},
+                UpdateExpression=(
+                    "SET stripe_subscription_id = :s, subscription_status = :st"
+                ),
+                ExpressionAttributeValues={":s": "sub_2", ":st": "active"},
+            )
+            return store.Outcome.STALE
+        return real_apply_event(event_id, user_id, update)
+
+    monkeypatch.setattr(store, "apply_event", fake_apply_event)
+
+    out = webhook.handle_event(
+        make_event(
+            "checkout.session.completed", _session(sub_id="sub_2", intent="intent-2")
+        )
+    )
+    assert out == "stale"
+    assert stripe_stub["cancelled"] == ["sub_2"]
+    row = get_user(ddb_table)
+    assert row["stripe_subscription_id"] == "sub_2"
+    assert "last_checkout_outcome" not in row
+    # No retry — a fresh read that shows the newcomer must not be re-aimed at.
+    assert len(calls) == 1
+
+
+def test_cancel_newcomer_preserves_foreign_pending_intent(
+    ddb_table, user_row, stripe_stub
+):
+    """On the reconcile branch the cancelled newcomer's intent can be an old
+    attempt while `pending_intent_id` on the row belongs to a newer
+    in-flight checkout. Clearing it unconditionally would strand that newer
+    attempt — its later install would miss the intent-match branch and get
+    treated as a duplicate. The correlation write must leave a foreign
+    `pending_intent_id` alone."""
+    import webhook
+
+    user_row(
+        stripe_subscription_id="sub_1",
+        subscription_status="active",
+        plan="pro",
+        pending_intent_id="intent-B",
+    )
+    stripe_stub["subscriptions"]["sub_1"] = make_subscription(
+        sub_id="sub_1", status="active"
+    )
+    sub_2 = make_subscription(
+        sub_id="sub_2",
+        status="active",
+        metadata={"user_id": "u1", "intent_id": "intent-A"},
+    )
+    stripe_stub["subscriptions"]["sub_2"] = sub_2
+
+    out = webhook.handle_event(make_event("customer.subscription.created", sub_2))
+    assert out == "applied"
+    assert stripe_stub["cancelled"] == ["sub_2"]
+    row = get_user(ddb_table)
+    assert row["last_checkout_outcome"] == "cancelled_duplicate"
+    assert row["last_checkout_intent_id"] == "intent-A"
+    assert row["stripe_subscription_id"] == "sub_1"
+    # The newer, still-pending checkout's intent must survive the cancel.
+    assert row["pending_intent_id"] == "intent-B"
+
+
+def test_cancel_newcomer_clears_own_pending_intent(ddb_table, user_row, stripe_stub):
+    """When the cancelled attempt's own intent is the one recorded as
+    pending, clearing it is correct — nothing newer is stranded."""
+    import webhook
+
+    user_row(
+        stripe_subscription_id="sub_1",
+        subscription_status="active",
+        plan="pro",
+        pending_intent_id="intent-A",
+    )
+    stripe_stub["subscriptions"]["sub_1"] = make_subscription(
+        sub_id="sub_1", status="active"
+    )
+    sub_2 = make_subscription(
+        sub_id="sub_2",
+        status="active",
+        metadata={"user_id": "u1", "intent_id": "intent-A"},
+    )
+    stripe_stub["subscriptions"]["sub_2"] = sub_2
+
+    out = webhook.handle_event(make_event("customer.subscription.created", sub_2))
+    assert out == "applied"
+    assert stripe_stub["cancelled"] == ["sub_2"]
+    row = get_user(ddb_table)
+    assert row["last_checkout_outcome"] == "cancelled_duplicate"
+    assert row["last_checkout_intent_id"] == "intent-A"
+    assert row["stripe_subscription_id"] == "sub_1"
+    assert "pending_intent_id" not in row
+
+
+def test_cancel_newcomer_without_intent_leaves_existing_pending(
+    ddb_table, user_row, stripe_stub
+):
+    """A cancelled newcomer that carries no intent at all must not clobber a
+    pending intent recorded for a different (still in-flight) checkout."""
+    import webhook
+
+    user_row(
+        stripe_subscription_id="sub_1",
+        subscription_status="active",
+        plan="pro",
+        pending_intent_id="intent-B",
+    )
+    stripe_stub["subscriptions"]["sub_1"] = make_subscription(
+        sub_id="sub_1", status="active"
+    )
+    sub_2 = make_subscription(
+        sub_id="sub_2", status="active", metadata={"user_id": "u1"}
+    )
+    stripe_stub["subscriptions"]["sub_2"] = sub_2
+
+    out = webhook.handle_event(make_event("customer.subscription.created", sub_2))
+    assert out == "applied"
+    assert stripe_stub["cancelled"] == ["sub_2"]
+    row = get_user(ddb_table)
+    assert row["last_checkout_outcome"] == "cancelled_duplicate"
+    assert "last_checkout_intent_id" not in row
+    assert row["stripe_subscription_id"] == "sub_1"
+    assert row["pending_intent_id"] == "intent-B"
