@@ -650,3 +650,103 @@ def test_cancel_newcomer_stale_skips_retry_when_row_holds_newcomer(
     assert "last_checkout_outcome" not in row
     # No retry — a fresh read that shows the newcomer must not be re-aimed at.
     assert len(calls) == 1
+
+
+def test_cancel_newcomer_preserves_foreign_pending_intent(
+    ddb_table, user_row, stripe_stub
+):
+    """On the reconcile branch the cancelled newcomer's intent can be an old
+    attempt while `pending_intent_id` on the row belongs to a newer
+    in-flight checkout. Clearing it unconditionally would strand that newer
+    attempt — its later install would miss the intent-match branch and get
+    treated as a duplicate. The correlation write must leave a foreign
+    `pending_intent_id` alone."""
+    import webhook
+
+    user_row(
+        stripe_subscription_id="sub_1",
+        subscription_status="active",
+        plan="pro",
+        pending_intent_id="intent-B",
+    )
+    stripe_stub["subscriptions"]["sub_1"] = make_subscription(
+        sub_id="sub_1", status="active"
+    )
+    sub_2 = make_subscription(
+        sub_id="sub_2",
+        status="active",
+        metadata={"user_id": "u1", "intent_id": "intent-A"},
+    )
+    stripe_stub["subscriptions"]["sub_2"] = sub_2
+
+    out = webhook.handle_event(make_event("customer.subscription.created", sub_2))
+    assert out == "applied"
+    assert stripe_stub["cancelled"] == ["sub_2"]
+    row = get_user(ddb_table)
+    assert row["last_checkout_outcome"] == "cancelled_duplicate"
+    assert row["last_checkout_intent_id"] == "intent-A"
+    assert row["stripe_subscription_id"] == "sub_1"
+    # The newer, still-pending checkout's intent must survive the cancel.
+    assert row["pending_intent_id"] == "intent-B"
+
+
+def test_cancel_newcomer_clears_own_pending_intent(ddb_table, user_row, stripe_stub):
+    """When the cancelled attempt's own intent is the one recorded as
+    pending, clearing it is correct — nothing newer is stranded."""
+    import webhook
+
+    user_row(
+        stripe_subscription_id="sub_1",
+        subscription_status="active",
+        plan="pro",
+        pending_intent_id="intent-A",
+    )
+    stripe_stub["subscriptions"]["sub_1"] = make_subscription(
+        sub_id="sub_1", status="active"
+    )
+    sub_2 = make_subscription(
+        sub_id="sub_2",
+        status="active",
+        metadata={"user_id": "u1", "intent_id": "intent-A"},
+    )
+    stripe_stub["subscriptions"]["sub_2"] = sub_2
+
+    out = webhook.handle_event(make_event("customer.subscription.created", sub_2))
+    assert out == "applied"
+    assert stripe_stub["cancelled"] == ["sub_2"]
+    row = get_user(ddb_table)
+    assert row["last_checkout_outcome"] == "cancelled_duplicate"
+    assert row["last_checkout_intent_id"] == "intent-A"
+    assert row["stripe_subscription_id"] == "sub_1"
+    assert "pending_intent_id" not in row
+
+
+def test_cancel_newcomer_without_intent_leaves_existing_pending(
+    ddb_table, user_row, stripe_stub
+):
+    """A cancelled newcomer that carries no intent at all must not clobber a
+    pending intent recorded for a different (still in-flight) checkout."""
+    import webhook
+
+    user_row(
+        stripe_subscription_id="sub_1",
+        subscription_status="active",
+        plan="pro",
+        pending_intent_id="intent-B",
+    )
+    stripe_stub["subscriptions"]["sub_1"] = make_subscription(
+        sub_id="sub_1", status="active"
+    )
+    sub_2 = make_subscription(
+        sub_id="sub_2", status="active", metadata={"user_id": "u1"}
+    )
+    stripe_stub["subscriptions"]["sub_2"] = sub_2
+
+    out = webhook.handle_event(make_event("customer.subscription.created", sub_2))
+    assert out == "applied"
+    assert stripe_stub["cancelled"] == ["sub_2"]
+    row = get_user(ddb_table)
+    assert row["last_checkout_outcome"] == "cancelled_duplicate"
+    assert "last_checkout_intent_id" not in row
+    assert row["stripe_subscription_id"] == "sub_1"
+    assert row["pending_intent_id"] == "intent-B"

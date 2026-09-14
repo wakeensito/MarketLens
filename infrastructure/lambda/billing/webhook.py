@@ -203,12 +203,20 @@ def _install_update(
     }
 
 
-def _duplicate_correlation_update(kept: str, intent_id: str | None) -> dict:
+def _duplicate_correlation_update(
+    kept: str, intent_id: str | None, pending: str | None
+) -> dict:
     """Correlation-only update for a confirmed duplicate cancel.
 
     Touches nothing but the checkout correlation, the terminal outcome and
     the revision the frontend watches — never the plan fields, so it can
     never install the subscription that was just cancelled.
+
+    `pending_intent_id` is only ever cleared when it belongs to *this*
+    cancelled attempt (absent, or equal to `intent_id`). On the reconcile
+    branch the cancelled newcomer's intent can be an old attempt while
+    `pending_intent_id` on the row belongs to a newer in-flight checkout —
+    clearing it unconditionally would strand that newer attempt.
     """
     sets = {
         "last_checkout_outcome": "cancelled_duplicate",
@@ -220,10 +228,25 @@ def _duplicate_correlation_update(kept: str, intent_id: str | None) -> dict:
     values[":one"] = store.serialize(1)
     values[":kept"] = store.serialize(kept)
     set_expr = ", ".join(f"{k} = :s_{k}" for k in sets)
+    clear_pending = pending is None or (intent_id is not None and pending == intent_id)
+    if clear_pending:
+        if pending is None:
+            pending_guard = "attribute_not_exists(pending_intent_id)"
+        else:
+            values[":pending_intent"] = store.serialize(intent_id)
+            pending_guard = (
+                "(attribute_not_exists(pending_intent_id) "
+                "OR pending_intent_id = :pending_intent)"
+            )
+        return {
+            "UpdateExpression": (
+                f"SET {set_expr} ADD billing_revision :one REMOVE pending_intent_id"
+            ),
+            "ConditionExpression": f"stripe_subscription_id = :kept AND {pending_guard}",
+            "ExpressionAttributeValues": values,
+        }
     return {
-        "UpdateExpression": (
-            f"SET {set_expr} ADD billing_revision :one REMOVE pending_intent_id"
-        ),
+        "UpdateExpression": f"SET {set_expr} ADD billing_revision :one",
         "ConditionExpression": "stripe_subscription_id = :kept",
         "ExpressionAttributeValues": values,
     }
@@ -244,7 +267,12 @@ def _cancel_confirmed(sub_id: str) -> bool:
 
 
 def _cancel_newcomer(
-    event: dict, user_id: str, sub: dict, kept: str, intent_id: str | None
+    event: dict,
+    user_id: str,
+    sub: dict,
+    kept: str,
+    intent_id: str | None,
+    pending: str | None,
 ) -> store.Outcome:
     """Two billing-live subscriptions for the same user: cancel the one just
     found via the API and leave the recorded (`kept`) subscription alone.
@@ -305,7 +333,7 @@ def _cancel_newcomer(
         },
     )
     outcome = store.apply_event(
-        event["id"], user_id, _duplicate_correlation_update(kept, intent_id)
+        event["id"], user_id, _duplicate_correlation_update(kept, intent_id, pending)
     )
     if outcome is not store.Outcome.STALE:
         return outcome
@@ -323,8 +351,11 @@ def _cancel_newcomer(
         # a subscription that no longer exists; Stripe's `.deleted` event
         # for it will correct the row on its own.
         return store.Outcome.STALE
+    fresh_pending = row.get("pending_intent_id")
     return store.apply_event(
-        event["id"], user_id, _duplicate_correlation_update(fresh_kept, intent_id)
+        event["id"],
+        user_id,
+        _duplicate_correlation_update(fresh_kept, intent_id, fresh_pending),
     )
 
 
@@ -391,7 +422,9 @@ def install_subscription(event: dict, user_id: str, sub: dict) -> str:
                 # The matching intent still can't overwrite a different
                 # subscription that is actually billing on the row — treat
                 # this exactly like the reconcile double-subscription case.
-                outcome = _cancel_newcomer(event, user_id, sub, recorded, intent)
+                outcome = _cancel_newcomer(
+                    event, user_id, sub, recorded, intent, pending
+                )
                 cancelled_newcomer = True
             else:
                 update = _install_update(
@@ -426,7 +459,9 @@ def install_subscription(event: dict, user_id: str, sub: dict) -> str:
                 outcome = store.apply_event(event["id"], user_id, update)
             else:
                 # Two billing subscriptions: the user is paying twice. Cancel the newcomer.
-                outcome = _cancel_newcomer(event, user_id, sub, recorded, intent)
+                outcome = _cancel_newcomer(
+                    event, user_id, sub, recorded, intent, pending
+                )
                 cancelled_newcomer = True
 
         # Retrying is only safe when nothing irreversible has happened yet.
