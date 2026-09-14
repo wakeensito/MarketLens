@@ -130,7 +130,7 @@ export default function ActivatingPlan({ activation, onRefresh, onComplete }: Pr
                 : activation.kind === 'error'
                 ? 'Your charge succeeded. Stripe is still confirming with us.'
                 : activation.kind === 'duplicate'
-                ? 'This checkout duplicated your existing subscription, so we cancelled it. Any charge will be refunded.'
+                ? "This checkout duplicated your existing subscription, so we cancelled it. If a charge went through, contact support and we'll refund it."
                 : activation.kind === 'unknown'
                 ? 'We could not match this tab to your checkout. Refresh in a minute and your plan will be there.'
                 : activation.kind === 'lagged'

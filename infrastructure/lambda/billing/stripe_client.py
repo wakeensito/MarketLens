@@ -35,6 +35,9 @@ NOT_LIVE_STATUSES = frozenset({"canceled", "incomplete_expired"})
 # actually going to bill? An `incomplete` subscription never charged
 # (the payment intent was abandoned) and expires on its own after 23 h.
 # Treating it as live would lock the user out of checkout for a day.
+# Deliberately a denylist, not an allowlist: an unknown or missing status is
+# treated as billing, so a second checkout is refused (409 → portal) rather
+# than a second subscription being created. Money-safe direction.
 NOT_BILLING_STATUSES = NOT_LIVE_STATUSES | {"incomplete"}
 
 _ssm = None
@@ -50,21 +53,23 @@ def _get_param(name: str) -> str:
 
 
 def configure() -> None:
-    """Idempotent. API key from SSM; retries and a timeout that fit the Lambda budget.
+    """Idempotent. API key from SSM; a timeout that fits the Lambda budget.
 
     The SDK default is 80 s per request with no cap that fits in a 30 s
-    Lambda. The webhook makes up to three Stripe calls (refetch, recorded-sub
-    refetch, cancel), so the worst case per call has to stay small: 5 s
-    timeout × 2 attempts (one retry) + ~0.5 s of retry backoff ≈ 10.5 s, so
-    three calls ≈ 31.5 s worst case — and that worst case only happens when
-    Stripe is fully down, where returning 5xx and letting Stripe retry is the
-    right outcome anyway. The realistic two-call path is ≈ 21 s.
+    Lambda. The webhook's worst case is four *sequential* Stripe calls:
+    refetch the newcomer, the `Customer.retrieve` identity fallback, refetch
+    the recorded subscription, and the cancel. At 5 s each that is 20 s —
+    under API Gateway's 29 s REST integration cap and the 30 s Lambda
+    timeout. SDK-level retries are switched off deliberately: one retry per
+    call would make the same path ~42 s and blow both caps, and Stripe's own
+    webhook redelivery is the outer retry that matters (returning 5xx is
+    what we want when Stripe is down).
     """
     global _configured
     if _configured:
         return
     stripe.api_key = _get_param(os.environ["STRIPE_SECRET_KEY_PARAM"])
-    stripe.max_network_retries = 1
+    stripe.max_network_retries = 0
     stripe.default_http_client = stripe.RequestsClient(timeout=5)
     _configured = True
 

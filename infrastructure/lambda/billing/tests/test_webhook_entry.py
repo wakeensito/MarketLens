@@ -83,7 +83,9 @@ def test_signed_object_missing_id_or_type_is_400(ddb_table, stripe_stub, monkeyp
         code, _ = _post(body, sign(body))
         assert code == 400
 
-    assert "WebhookMalformedPayload" in seen
+    # One metric per malformed payload — a single emission would hide the
+    # second shape behind the first in the alarm.
+    assert seen.count("WebhookMalformedPayload") == 2
     assert called == []
 
 

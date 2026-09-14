@@ -306,3 +306,39 @@ def test_state_event_for_orphan_user(ddb_table, stripe_stub):
         webhook.handle_event(make_event("customer.subscription.updated", sub))
         == "orphan"
     )
+
+
+def test_incomplete_install_then_updated_activates(ddb_table, user_row, stripe_stub):
+    """Async payment method: the install lands `incomplete` (no entitlement),
+    then the later `.updated` flips it to `active`. Event ordering only works
+    because the state path refetches and the generation pin already matches."""
+    from plinths_auth.billing import effective_plan
+    import webhook
+
+    user_row(pending_intent_id="intent-1")
+    sub = make_subscription(status="incomplete")
+    stripe_stub["subscriptions"]["sub_1"] = sub
+    assert (
+        webhook.handle_event(
+            make_event("customer.subscription.created", sub, event_id="evt_install")
+        )
+        == "applied"
+    )
+    row = get_user(ddb_table)
+    assert row["subscription_status"] == "incomplete"
+    assert effective_plan(row) == "free"
+
+    stripe_stub["subscriptions"]["sub_1"]["status"] = "active"
+    out = webhook.handle_event(
+        make_event(
+            "customer.subscription.updated",
+            stripe_stub["subscriptions"]["sub_1"],
+            event_id="evt_update",
+            created=T0 + 10,
+        )
+    )
+    assert out == "applied"
+    row = get_user(ddb_table)
+    assert row["subscription_status"] == "active"
+    assert effective_plan(row) == "pro"
+    assert int(row["billing_revision"]) == 2

@@ -203,6 +203,46 @@ def _install_update(
     }
 
 
+def _duplicate_correlation_update(kept: str, intent_id: str | None) -> dict:
+    """Correlation-only update for a confirmed duplicate cancel.
+
+    Touches nothing but the checkout correlation, the terminal outcome and
+    the revision the frontend watches — never the plan fields, so it can
+    never install the subscription that was just cancelled.
+    """
+    sets = {
+        "last_checkout_outcome": "cancelled_duplicate",
+        "plan_updated_at": _now_iso(),
+    }
+    if intent_id:
+        sets["last_checkout_intent_id"] = intent_id
+    values = {f":s_{k}": store.serialize(v) for k, v in sets.items()}
+    values[":one"] = store.serialize(1)
+    values[":kept"] = store.serialize(kept)
+    set_expr = ", ".join(f"{k} = :s_{k}" for k in sets)
+    return {
+        "UpdateExpression": (
+            f"SET {set_expr} ADD billing_revision :one REMOVE pending_intent_id"
+        ),
+        "ConditionExpression": "stripe_subscription_id = :kept",
+        "ExpressionAttributeValues": values,
+    }
+
+
+def _cancel_confirmed(sub_id: str) -> bool:
+    """Did the cancel take despite the error? Only a refetch can say.
+
+    A repeat `cancel` on an already-cancelled subscription raises
+    `InvalidRequestError` — that is a confirmed cancel, not a failure. A
+    refetch that still reports the subscription live (or that fails itself)
+    is not confirmation, and must not be treated as one.
+    """
+    try:
+        return not stripe_client.is_live(stripe_client.retrieve_subscription(sub_id))
+    except stripe.StripeError:
+        return False
+
+
 def _cancel_newcomer(
     event: dict, user_id: str, sub: dict, kept: str, intent_id: str | None
 ) -> store.Outcome:
@@ -213,30 +253,43 @@ def _cancel_newcomer(
 
     The row write is what gives the activation poll a terminal answer. A
     marker-only apply leaves the poll spinning for its full 60 s and then
-    reporting a failure, when in fact the outcome is known and final. The
-    plan fields are untouched — only the checkout correlation, the outcome,
-    and the revision bump the frontend watches.
+    reporting a failure, when in fact the outcome is known and final.
 
-    The cancel is best effort. It is an irreversible side effect that has
-    already happened by the time the row write is attempted, so a failure
-    here must not abort the write (and a *repeat* call on an
-    already-cancelled subscription raises `InvalidRequestError`, which would
-    turn a recoverable state into a 500). The caller treats a STALE outcome
-    from this path as terminal for the same reason: the newcomer is gone,
-    and re-classifying against a fresh row snapshot while still holding the
-    original `sub` would install the subscription we just cancelled.
+    `cancelled_duplicate` is only ever recorded for a *confirmed* cancel. If
+    the cancel call raises we refetch the newcomer; anything still live
+    means the user may be billing twice, so the error is re-raised. The
+    marker is unwritten on that path, so Stripe's redelivery re-runs the
+    cancel — far better than a row that claims a cancel which never
+    happened.
+
+    The caller treats a STALE outcome from this path as terminal: the
+    newcomer is gone, and re-classifying against a fresh row snapshot while
+    still holding the original `sub` would install the subscription we just
+    cancelled. The correlation write alone gets exactly one fresh retry
+    below, because it is correlation-only and can install nothing.
     """
     try:
         stripe_client.cancel_subscription(sub["id"])
     except stripe.StripeError as e:
+        detail = {
+            "event_id": event["id"],
+            "event_type": event["type"],
+            "user_id": user_id,
+            "subscription_id": sub["id"],
+            "kept": kept,
+        }
+        if not _cancel_confirmed(sub["id"]):
+            metrics.add_metric(
+                name="DoubleSubscriptionCancelFailed", unit=MetricUnit.Count, value=1
+            )
+            logger.error(
+                "Could not cancel duplicate subscription; it may still be billing",
+                extra={**detail, "error": str(e)},
+            )
+            raise
         logger.warning(
-            "Could not cancel duplicate subscription",
-            extra={
-                "event_id": event["id"],
-                "user_id": user_id,
-                "subscription_id": sub["id"],
-                "error": str(e),
-            },
+            "Duplicate subscription cancel errored but the subscription is already gone",
+            extra={**detail, "error": str(e)},
         )
     metrics.add_metric(
         name="DoubleSubscriptionCancelled", unit=MetricUnit.Count, value=1
@@ -251,24 +304,22 @@ def _cancel_newcomer(
             "kept": kept,
         },
     )
-    sets = {
-        "last_checkout_outcome": "cancelled_duplicate",
-        "plan_updated_at": _now_iso(),
-    }
-    if intent_id:
-        sets["last_checkout_intent_id"] = intent_id
-    values = {f":s_{k}": store.serialize(v) for k, v in sets.items()}
-    values[":one"] = store.serialize(1)
-    values[":kept"] = store.serialize(kept)
-    set_expr = ", ".join(f"{k} = :s_{k}" for k in sets)
-    update = {
-        "UpdateExpression": (
-            f"SET {set_expr} ADD billing_revision :one REMOVE pending_intent_id"
-        ),
-        "ConditionExpression": "stripe_subscription_id = :kept",
-        "ExpressionAttributeValues": values,
-    }
-    return store.apply_event(event["id"], user_id, update)
+    outcome = store.apply_event(
+        event["id"], user_id, _duplicate_correlation_update(kept, intent_id)
+    )
+    if outcome is not store.Outcome.STALE:
+        return outcome
+    # The recorded subscription moved between the classification read and
+    # this write. Re-read once and re-aim the same correlation-only update at
+    # whatever is recorded now, so the activation poll still gets its
+    # terminal answer. Exactly one retry: a second loss is genuinely stale.
+    row = store.get_user(user_id) or {}
+    fresh_kept = row.get("stripe_subscription_id")
+    if not fresh_kept:
+        return store.Outcome.STALE
+    return store.apply_event(
+        event["id"], user_id, _duplicate_correlation_update(fresh_kept, intent_id)
+    )
 
 
 def _recorded_blocks_install(event: dict, user_id: str, recorded_id: str) -> bool:

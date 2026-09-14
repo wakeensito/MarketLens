@@ -68,6 +68,24 @@ def test_is_billing_live_excludes_incomplete():
     )
 
 
+def test_is_billing_live_denylist_semantics():
+    """`NOT_BILLING_STATUSES` is a denylist on purpose. Anything Stripe adds
+    later — or any status we fail to read — must count as billing, so the
+    second checkout is refused (409 → portal) instead of creating a second
+    subscription. Only the three statuses that provably never charge are
+    excluded."""
+    import stripe_client
+
+    for status in ("unpaid", "paused", "some_future_status"):
+        assert stripe_client.is_billing_live(make_subscription(status=status)), status
+    assert stripe_client.is_billing_live({})  # status absent entirely
+
+    for status in ("canceled", "incomplete_expired", "incomplete"):
+        assert not stripe_client.is_billing_live(make_subscription(status=status)), (
+            status
+        )
+
+
 def test_subscription_id_from_invoice_both_api_shapes():
     import stripe_client
 
@@ -99,5 +117,7 @@ def test_configure_sets_timeouts(monkeypatch):
     stripe_client._configured = False
     stripe_client.configure()
     assert stripe.api_key == "sk_test_x"
-    assert stripe.max_network_retries == 1
+    # Zero SDK retries: four sequential calls x 5 s = 20 s worst case, under
+    # the 29 s API Gateway cap. Stripe's webhook redelivery is the outer retry.
+    assert stripe.max_network_retries == 0
     assert stripe.default_http_client._timeout == 5
