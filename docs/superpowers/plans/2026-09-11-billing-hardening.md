@@ -466,6 +466,7 @@ git push
 
 **Interfaces:**
 - Produces: `stripe_client.configure() -> None` (idempotent: api key from SSM, `max_network_retries=2`, 10 s timeout); `webhook_secret() -> str`; `plan_from_subscription(sub: dict) -> str` (`"free"` + metric `UnknownPriceId` on unknown price); `retrieve_subscription(sub_id: str) -> dict`; `user_id_from_customer(customer_id: str) -> str | None`; `subscription_id_from_invoice(invoice: dict) -> str | None`; `is_live(sub: dict) -> bool`.
+  - *(superseded: 0 retries / 5 s, see spec)*
 - Produces (conftest fixtures): `env` (all billing env vars set, autouse), `ddb_table` (moto table `marketlens-reports-test` with pk/sk), `user_row(user_id="u1", **attrs)` factory that puts a USER# row, `stripe_stub` (monkeypatched `stripe.Subscription.retrieve` etc. backed by dicts), `signed_event(payload: dict) -> tuple[str, str]` returning `(body, stripe-signature header)`.
 
 - [ ] **Step 1: dev requirements + install**
@@ -755,6 +756,7 @@ def test_configure_sets_timeouts(monkeypatch):
     stripe_client.configure()
     assert stripe.api_key == "sk_test_x"
     assert stripe.max_network_retries == 2
+    # superseded: 0 retries / 5 s, see spec
     assert stripe.default_http_client._timeout == 10
 ```
 
@@ -817,6 +819,7 @@ def configure() -> None:
     stripe.api_key = _get_param(os.environ["STRIPE_SECRET_KEY_PARAM"])
     stripe.max_network_retries = 2
     stripe.default_http_client = stripe.http_client.RequestsClient(timeout=10)
+    # superseded: 0 retries / 5 s, see spec
     _configured = True
 
 

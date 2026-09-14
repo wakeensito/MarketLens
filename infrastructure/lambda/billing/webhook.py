@@ -317,6 +317,12 @@ def _cancel_newcomer(
     fresh_kept = row.get("stripe_subscription_id")
     if not fresh_kept:
         return store.Outcome.STALE
+    if fresh_kept == sub["id"]:
+        # A concurrent path installed the very subscription we just
+        # cancelled. Retrying the correlation write here would re-record
+        # a subscription that no longer exists; Stripe's `.deleted` event
+        # for it will correct the row on its own.
+        return store.Outcome.STALE
     return store.apply_event(
         event["id"], user_id, _duplicate_correlation_update(fresh_kept, intent_id)
     )

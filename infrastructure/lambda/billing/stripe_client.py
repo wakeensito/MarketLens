@@ -56,12 +56,13 @@ def configure() -> None:
     """Idempotent. API key from SSM; a timeout that fits the Lambda budget.
 
     The SDK default is 80 s per request with no cap that fits in a 30 s
-    Lambda. The webhook's worst case is four *sequential* Stripe calls:
+    Lambda. The webhook's worst case is five *sequential* Stripe calls:
     refetch the newcomer, the `Customer.retrieve` identity fallback, refetch
-    the recorded subscription, and the cancel. At 5 s each that is 20 s —
-    under API Gateway's 29 s REST integration cap and the 30 s Lambda
-    timeout. SDK-level retries are switched off deliberately: one retry per
-    call would make the same path ~42 s and blow both caps, and Stripe's own
+    the recorded subscription, the cancel, and — on a failed cancel — the
+    confirmation refetch that decides whether the cancel actually took. At
+    5 s each that is 25 s — under API Gateway's 29 s REST integration cap
+    and the 30 s Lambda timeout. SDK-level retries are switched off
+    deliberately: one retry per call would blow both caps, and Stripe's own
     webhook redelivery is the outer retry that matters (returning 5xx is
     what we want when Stripe is down).
     """

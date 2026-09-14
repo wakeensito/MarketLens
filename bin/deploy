@@ -58,10 +58,10 @@ STRIPE_SECRET_KEY=$(aws ssm get-parameter \
     --output text \
     --region "${AWS_REGION}")
 case "${STRIPE_SECRET_KEY}" in
-    sk_live_*) DERIVED_LIVEMODE="true" ;;
-    sk_test_*) DERIVED_LIVEMODE="false" ;;
+    sk_live_*|rk_live_*) DERIVED_LIVEMODE="true" ;;
+    sk_test_*|rk_test_*) DERIVED_LIVEMODE="false" ;;
     *)
-        echo "✗ ${SSM_PREFIX}/stripe-secret-key is neither sk_live_* nor sk_test_* — refusing to deploy." >&2
+        echo "✗ ${SSM_PREFIX}/stripe-secret-key is neither a live nor a test key (sk_live_*/rk_live_*/sk_test_*/rk_test_*) — refusing to deploy." >&2
         exit 1
         ;;
 esac

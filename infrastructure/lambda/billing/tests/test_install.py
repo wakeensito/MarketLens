@@ -594,3 +594,59 @@ def test_cancel_newcomer_stale_retries_correlation_write_once(
     assert "pending_intent_id" not in row
     # Exactly one retry — a second loss is genuinely stale.
     assert len(calls) == 2
+
+
+def test_cancel_newcomer_stale_skips_retry_when_row_holds_newcomer(
+    ddb_table, user_row, stripe_stub, monkeypatch
+):
+    """The post-cancel correlation write loses a race, and the row it lost to
+    now holds the newcomer we just cancelled (`sub_2`) — a concurrent path
+    installed it before the cancel and our write landed. Re-aiming the
+    correlation write at that row would re-record a subscription that no
+    longer exists on Stripe, so the retry is skipped entirely and the
+    outcome is reported stale; Stripe's `.deleted` event for `sub_2` will
+    correct the row on its own."""
+    import store
+    import webhook
+
+    user_row(
+        stripe_subscription_id="sub_1",
+        subscription_status="active",
+        plan="pro",
+        pending_intent_id="intent-2",
+    )
+    for sid in ("sub_1", "sub_2"):
+        stripe_stub["subscriptions"][sid] = make_subscription(
+            sub_id=sid, status="active"
+        )
+
+    real_apply_event = store.apply_event
+    calls = []
+
+    def fake_apply_event(event_id, user_id, update):
+        calls.append(update)
+        if len(calls) == 1:
+            ddb_table.update_item(
+                Key={"pk": "USER#u1", "sk": "USER#u1"},
+                UpdateExpression=(
+                    "SET stripe_subscription_id = :s, subscription_status = :st"
+                ),
+                ExpressionAttributeValues={":s": "sub_2", ":st": "active"},
+            )
+            return store.Outcome.STALE
+        return real_apply_event(event_id, user_id, update)
+
+    monkeypatch.setattr(store, "apply_event", fake_apply_event)
+
+    out = webhook.handle_event(
+        make_event(
+            "checkout.session.completed", _session(sub_id="sub_2", intent="intent-2")
+        )
+    )
+    assert out == "stale"
+    assert stripe_stub["cancelled"] == ["sub_2"]
+    row = get_user(ddb_table)
+    assert row["stripe_subscription_id"] == "sub_2"
+    assert "last_checkout_outcome" not in row
+    # No retry — a fresh read that shows the newcomer must not be re-aimed at.
+    assert len(calls) == 1
