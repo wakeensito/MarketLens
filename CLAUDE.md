@@ -216,7 +216,7 @@ Conversational agent that lets authenticated users ask questions about a generat
 - **Auth on the stream:** Function URLs bypass the API GW authorizer, so `stream.py` verifies the `ml_access` cookie itself via the `plinths_auth` layer (`PlinthsAuthLayer`) at request time.
 - **Sync routes** (`MuseSyncFunction`, normal API GW + authorizer, `infrastructure/lambda/muse/sync.py`): list / delete a thread and post per-message feedback.
 - **DynamoDB key schema** (`MuseConversationsTable`, `infrastructure/lambda/muse/persistence.py`): `pk=REPORT#{report_id}`, `sk=MSG#{iso_ts}#{message_id}` (lexicographic time order); `gsi1pk=ORG#{org_id}`, `gsi1sk={iso_ts}#{report_id}` — the GSI is reserved for Max cross-report memory.
-- **Model:** Pro uses `BedrockModelIdMuseChat` (default `amazon.nova-2-lite-v1:0`) via `InvokeModelWithResponseStream`. Caps via env: `MUSE_FREE_DAILY_LIMIT` (3), `MUSE_PRO_MESSAGE_CAP` (~30/report), `MUSE_HISTORY_TURN_LIMIT` (12). Free-tier daily counter writes to `USER#{user_id}` rows on the Reports table (scoped `UpdateItem` on `USER#*` leading keys only).
+- **Model:** Pro uses `BedrockModelIdMuseChat` (default `us.amazon.nova-2-lite-v1:0` inference profile) via `InvokeModelWithResponseStream`. Caps via env: `MUSE_FREE_DAILY_LIMIT` (3), `MUSE_PRO_MESSAGE_CAP` (~30/report), `MUSE_HISTORY_TURN_LIMIT` (12). Free-tier daily counter writes to `USER#{user_id}` rows on the Reports table (scoped `UpdateItem` on `USER#*` leading keys only).
 
 **UI direction (locked):**
 - **Inline conversation** lives in the workspace once a report exists — chat thread renders below the report on submit.

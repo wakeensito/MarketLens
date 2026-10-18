@@ -26,7 +26,11 @@ capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
 #   bin/deploy
 # which fetches the current SSM values and passes them via
 # `--parameter-overrides`.
-parameter_overrides = "Stage=\"dev\" CognitoCallbackDomain=\"plinths.net\""
+# Bedrock model IDs are pinned here, not left to template defaults: a bare
+# `sam deploy` reuses each parameter's PREVIOUS stack value, so changing a
+# template Default never reaches a live stack. (That's how the dev stack sat on
+# Claude 3 Haiku after the defaults moved to Nova/DeepSeek — then Haiku hit EOL.)
+parameter_overrides = "Stage=\"dev\" CognitoCallbackDomain=\"plinths.net\" BedrockModelIdParse=\"amazon.nova-micro-v1:0\" BedrockModelIdAnalyse=\"deepseek.v3.2\" BedrockModelIdSummarise=\"us.amazon.nova-2-lite-v1:0\" BedrockModelIdBuildBrief=\"us.amazon.nova-2-lite-v1:0\" BedrockModelIdMuseChat=\"us.amazon.nova-2-lite-v1:0\""
 image_repositories = []
 
 [default.global.parameters]
