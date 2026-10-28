@@ -28,6 +28,8 @@ from botocore.exceptions import BotoCoreError, ClientError
 import scoring as _scoring
 from scoring import _safe_number, score, _top_sources
 from assembly import assemble_v2
+from market_evidence import grounded_market
+from model_output import parse_object, validate_analysis, validate_summary
 
 logger = Logger()
 tracer = Tracer()
@@ -525,6 +527,7 @@ def call_llm(
     max_tokens: int = 1024,
     temperature: float = 0.2,
     stage: str = "unknown",
+    require_competitors: bool = False,
 ) -> str:
     """Call a Bedrock model and return the text response. Handles retries with backoff.
 
@@ -567,7 +570,15 @@ def call_llm(
             if _token_tracker is not None:
                 _token_tracker.record(stage, model_id, input_tokens, output_tokens)
 
-            return _extract_text(model_id, parsed)
+            text = _extract_text(model_id, parsed)
+            # Malformed/truncated stage output must retry, never become empty panels.
+            if stage in {"parse", "search", "analyse", "summarise"}:
+                value = parse_object(text)
+                if stage == "analyse":
+                    validate_analysis(value, has_competitors=require_competitors)
+                elif stage == "summarise":
+                    validate_summary(value)
+            return text
 
         except (ClientError, BotoCoreError, ValueError) as e:
             last_err = e
@@ -644,7 +655,7 @@ Business idea: <<<{cleaned_idea}>>>"""
         prompt, model_id=MODEL_ID_PARSE, max_tokens=512, temperature=0.1, stage="parse"
     )
     try:
-        return json.loads(response)
+        return parse_object(response)
     except json.JSONDecodeError:
         return {
             "industry": "Technology",
@@ -783,7 +794,7 @@ def search(parsed: dict) -> dict:
         f"- {r['title']}: {r['description']} ({r['url']})" for r in all_competitors[:25]
     )
     market_snippets = "\n".join(
-        f"- {r['title']}: {r['description']}" for r in market_size[:10]
+        f"- {r['title']}: {r['description']} ({r['url']})" for r in market_size[:10]
     )
     funding_snippets = "\n".join(
         f"- {r['title']}: {r['description']}" for r in funding_trends[:10]
@@ -829,6 +840,7 @@ Based on these REAL search results, extract structured data. Return ONLY valid J
       "pricing_tier": "free | low | mid | high | enterprise | unknown"
     }}
   ],
+  "market_evidence": {{"url": "exact market result URL", "quote": "verbatim excerpt including USD amount and year", "scope": "market category and geography", "year": "2026"}},
   "market_size_tam_usd": null or number,
   "market_growth_rate_pct": null or number,
   "market_age_years": number,
@@ -840,19 +852,19 @@ RULES:
 - Extract 10-15 REAL companies from the search results. Use actual names and URLs.
 - Do NOT invent companies that aren't in the search results.
 - Use the STRUCTURED COMPANY DATA (Wikipedia/Wikidata) for accurate founding years, employee counts, and revenue. Prefer these over guesses.
-- For market size and growth, extract actual numbers from the research report snippets.
+- For market size and growth, extract actual USD numbers from the research report snippets. Include market_evidence with an exact verbatim excerpt containing the amount and year. Match the target category and geography; do not substitute an unrelated broad market or company revenue. Set figures to null when no matching evidence exists.
 - For user pain points, extract real complaints from the community/review results.
 - If a data point isn't in the search results or structured data, set it to null — do not guess."""
 
     response = call_llm(
         prompt,
         model_id=MODEL_ID_PARSE,
-        max_tokens=2048,
+        max_tokens=4096,
         temperature=0.1,
         stage="search",
     )
     try:
-        result = json.loads(response)
+        result = parse_object(response)
         competitors = result.get("competitors", [])
         if not isinstance(competitors, list):
             competitors = []
@@ -866,7 +878,7 @@ RULES:
             "trends": result.get("trends", []),
             "user_pain_points": result.get("user_pain_points", []),
             "wiki_enrichment": wiki_enrichment,
-            "market_sources": _top_sources(market_size, n=2),
+            **grounded_market(result, market_size),
             "trend_sources": _top_sources(trend_results, n=1),
             "pain_sources": _top_sources(pain_points, n=4),
         }
@@ -915,27 +927,24 @@ RULES:
 - List 10-15 REAL competitors. Do NOT invent companies.
 - Include a mix of direct competitors and adjacent players.
 - Be specific about funding stages and target segments when known.
-- For market size, use your best estimate. Set to null if truly unknown.
-- For growth rate, estimate based on industry knowledge. Set to null if unknown."""
+- No live sources are available. Set market_size_tam_usd and market_growth_rate_pct to null. Never guess market figures."""
 
     response = call_llm(
         prompt,
         model_id=MODEL_ID_PARSE,
-        max_tokens=2048,
+        max_tokens=4096,
         temperature=0.2,
         stage="search",
     )
     try:
-        result = json.loads(response)
+        result = parse_object(response)
         competitors = result.get("competitors", [])
         if not isinstance(competitors, list):
             competitors = []
         return {
             "competitors": competitors,
-            "market_size_tam_usd": _safe_number(result.get("market_size_tam_usd")),
-            "market_growth_rate_pct": _safe_number(
-                result.get("market_growth_rate_pct")
-            ),
+            "market_size_tam_usd": None,
+            "market_growth_rate_pct": None,
             "market_age_years": _safe_number(result.get("market_age_years"), default=5),
             "trends": result.get("trends", []),
             "market_sources": [],
@@ -1001,8 +1010,8 @@ Return ONLY valid JSON with this exact structure:
   "switching_cost": 1-10 integer. 1=trivial to switch (commodity), 5=moderate friction, 10=extreme lock-in (data, integrations, contracts),
   "cac_pressure": 1-10 integer. 1=organic/cheap acquisition channels available, 5=moderate paid acquisition needed, 10=extremely expensive to acquire customers (saturated ad channels, long sales cycles),
   "innovation_velocity": 1-10 integer. 1=stagnant market (incumbents not shipping), 5=moderate pace, 10=rapid innovation (hard to keep up),
-  "estimated_tam_usd": number or null (total addressable market in USD, best estimate from competitor data),
-  "estimated_growth_pct": number or null (estimated YoY market growth percentage)
+  "estimated_tam_usd": null (market size requires search evidence),
+  "estimated_growth_pct": null (market growth requires search evidence)
 }}
 
 RULES:
@@ -1012,31 +1021,17 @@ RULES:
 - For each gap: severity reflects how underserved the need is and how clearly incumbents miss it. Use all three levels across the gaps; don't mark everything "high".
 - Mark uncertainty explicitly — if you don't know a funding stage, say "unknown".
 - For the 1-10 scores: use the FULL range. A 3 and a 7 should feel meaningfully different. Don't default to 5.
-- estimated_tam_usd and estimated_growth_pct: infer from competitor scale, funding levels, and market context. Set to null ONLY if you truly cannot estimate."""
+- Set estimated_tam_usd and estimated_growth_pct to null. Competitor scale and funding do not establish market size or growth."""
 
     response = call_llm(
         prompt,
         model_id=MODEL_ID_ANALYSE,
-        max_tokens=2048,
+        max_tokens=4096,
         temperature=0.3,
         stage="analyse",
+        require_competitors=bool(competitors),
     )
-    try:
-        return json.loads(response)
-    except json.JSONDecodeError:
-        return {
-            "competitor_analysis": [],
-            "market_gaps": [],
-            "positioning": "Differentiation opportunity exists.",
-            "dominant_segment": "mixed",
-            "funding_maturity": 5,
-            "market_consolidation": 5,
-            "switching_cost": 5,
-            "cac_pressure": 5,
-            "innovation_velocity": 5,
-            "estimated_tam_usd": None,
-            "estimated_growth_pct": None,
-        }
+    return validate_analysis(parse_object(response), bool(competitors))
 
 
 # ---------------------------------------------------------------------------
@@ -1122,27 +1117,11 @@ Include 2-4 gaps and 3-4 roadmap phases. quote_indexes must only use indexes sho
     response = call_llm(
         prompt,
         model_id=MODEL_ID_SUMMARISE,
-        max_tokens=1500,
+        max_tokens=4096,
         temperature=0.6,
         stage="summarise",
     )
-    try:
-        return json.loads(response)
-    except json.JSONDecodeError:
-        return {
-            "oneliner": "Analysis complete. Review the scores above for market positioning.",
-            "trend_signal": "Market data analyzed.",
-            "recommendation": "Review the competitor analysis for entry opportunities.",
-            "roadmap": [],
-            "why_now": "",
-            "gaps": [],
-            "entry_cost": [],
-            "read": {
-                "synthesis": "",
-                "recommendation": "",
-                "limit": "This is an AI-generated read of public information, not advice. Figures are estimates.",
-            },
-        }
+    return validate_summary(parse_object(response))
 
 
 # ---------------------------------------------------------------------------

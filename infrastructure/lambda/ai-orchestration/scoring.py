@@ -183,14 +183,9 @@ def score(parsed: dict, analysis: dict, search_results: dict) -> dict:
         else _safe_number(parsed.get("estimated_market_age_years"), default=5)
     )
 
-    # TAM/growth: prefer search data, fall back to analyse estimates (preserve 0)
-    _tam_search = _safe_number(search_results.get("market_size_tam_usd"))
-    _tam_analysis = _safe_number(analysis.get("estimated_tam_usd"))
-    tam_usd = _tam_search if _tam_search is not None else _tam_analysis
-
-    _growth_search = _safe_number(search_results.get("market_growth_rate_pct"))
-    _growth_analysis = _safe_number(analysis.get("estimated_growth_pct"))
-    growth_pct = _growth_search if _growth_search is not None else _growth_analysis
+    # Never substitute model guesses for missing market research.
+    tam_usd = _safe_number(search_results.get("market_size_tam_usd"))
+    growth_pct = _safe_number(search_results.get("market_growth_rate_pct"))
 
     complexity = parsed.get("estimated_complexity", "medium")
     business_model = parsed.get("business_model", "other")
