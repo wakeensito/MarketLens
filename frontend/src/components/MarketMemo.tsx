@@ -239,6 +239,10 @@ function CompetitiveLandscape({ competitors }: { competitors: MemoCompetitor[] }
       .map(({ c }) => c);
   }, [competitors]);
 
+  if (sorted.length === 0) {
+    return <p className="memo-note">Competitor analysis is unavailable for this report. Run a new analysis to try again.</p>;
+  }
+
   const total = sorted.length;
   const visibleCount = showAll ? total : Math.min(TOP_CONTENDERS, total);
   const visible = sorted.slice(0, visibleCount);
@@ -413,7 +417,7 @@ export default function MarketMemo({ memo }: Props) {
       {/* ── 03 · Why Now ── */}
       <motion.section className="section" variants={fadeUp} initial="hidden" whileInView="show" viewport={VIEWPORT}>
         <SectionHead num="03" name="Why Now" question="Why is this a good time to start?" />
-        <p className="memo-prose">{memo.whyNow.shift}</p>
+        <p className="memo-prose">{memo.whyNow.shift || 'Timing analysis is unavailable for this report. Run a new analysis to try again.'}</p>
         <div className="memo-prose-foot">
           <TierTag tier={memo.whyNow.tier} />
           <SourcesRow sources={memo.whyNow.sources} />
@@ -426,6 +430,7 @@ export default function MarketMemo({ memo }: Props) {
       <motion.section className="section" variants={fadeUp} initial="hidden" whileInView="show" viewport={VIEWPORT}>
         <SectionHead num="04" name="Market Gaps" question="What are people missing that you could offer?" />
         <motion.div className="memo-gaps" variants={stagger} initial="hidden" whileInView="show" viewport={VIEWPORT}>
+          {memo.gaps.length === 0 && <p className="memo-note">Market gaps are unavailable for this report. Run a new analysis to try again.</p>}
           {memo.gaps.map((g, i) => <GapBlock key={g.title} gap={g} index={i} />)}
         </motion.div>
       </motion.section>
@@ -436,6 +441,7 @@ export default function MarketMemo({ memo }: Props) {
       <motion.section className="section" variants={fadeUp} initial="hidden" whileInView="show" viewport={VIEWPORT}>
         <SectionHead num="05" name="What It Takes to Start" question="What will you need to get going?" />
         <div className="memo-cost-list">
+          {memo.entryCost.length === 0 && <p className="memo-note">Entry requirements are unavailable for this report. Run a new analysis to try again.</p>}
           {memo.entryCost.map(f => (
             <div className="memo-cost" key={f.label}>
               <div className="memo-cost-head">
@@ -471,13 +477,13 @@ export default function MarketMemo({ memo }: Props) {
           <h2 className="memo-read-eyebrow">The Bottom Line</h2>
           <TierTag tier="analysis" />
         </div>
-        <p className="memo-read-synthesis">{memo.read.synthesis}</p>
+        <p className="memo-read-synthesis">{memo.read.synthesis || memo.oneliner || 'The summary is unavailable for this report. Run a new analysis to try again.'}</p>
 
         <div className="reco-block memo-reco">
           <div className="reco-eyebrow">
             <ArrowUpRight size={11} strokeWidth={2.5} aria-hidden /> What we&apos;d do
           </div>
-          <p className="reco-text">{memo.read.recommendation}</p>
+          <p className="reco-text">{memo.read.recommendation || 'A recommendation could not be generated. Run a new analysis to try again.'}</p>
         </div>
 
         <div className="memo-limit">

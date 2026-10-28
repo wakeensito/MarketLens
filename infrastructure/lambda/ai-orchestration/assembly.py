@@ -104,7 +104,7 @@ def assemble_v2(
     market = {
         "tam": _fmt_tam(search_results.get("market_size_tam_usd")),
         "growth": _fmt_growth(search_results.get("market_growth_rate_pct")),
-        "note": "",
+        "note": search_results.get("market_note", ""),
         "tier": "estimate",
         "sources": search_results.get("market_sources", []),
     }
